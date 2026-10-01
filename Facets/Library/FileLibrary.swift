@@ -10,6 +10,8 @@ struct LibraryItem: Identifiable, Hashable {
     let modified: Date?
     /// Models and subfolders inside a folder.
     let childCount: Int?
+    /// False for an iCloud file that's only a placeholder on this device.
+    var isDownloaded = true
 
     var id: URL { url }
     var name: String { isFolder ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent }
@@ -54,20 +56,35 @@ final class FileLibrary {
     }
 
     func items(in folder: URL, sort: LibrarySort) -> [LibraryItem] {
-        let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey, .isHiddenKey]
-        guard let urls = try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else {
+        let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey, .ubiquitousItemDownloadingStatusKey]
+        // Hidden files aren't skipped by the enumerator, because an iCloud file that
+        // isn't downloaded can appear as a hidden ".Name.stl.icloud" placeholder.
+        guard let urls = try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys) else {
             return []
         }
-        let items = urls.compactMap { url -> LibraryItem? in
-            let values = try? url.resourceValues(forKeys: Set(keys))
-            let isFolder = values?.isDirectory ?? false
-            if isFolder {
-                // iOS manages Inbox; it's never a place to browse.
-                if folder == root, url.lastPathComponent == "Inbox" { return nil }
-                return LibraryItem(url: url, isFolder: true, size: nil, modified: values?.contentModificationDate, childCount: childCount(of: url))
+        var seen = Set<String>()
+        var items: [LibraryItem] = []
+        for url in urls {
+            var name = url.lastPathComponent
+            var isPlaceholder = false
+            if name.hasPrefix(".") {
+                guard name.hasSuffix(".icloud") else { continue }
+                name = String(name.dropFirst().dropLast(".icloud".count))
+                isPlaceholder = true
             }
-            guard ModelLoader.isSupported(url) else { return nil }
-            return LibraryItem(url: url, isFolder: false, size: values?.fileSize.map(Int64.init), modified: values?.contentModificationDate, childCount: nil)
+            let realURL = isPlaceholder ? folder.appending(path: name) : url
+            guard seen.insert(name).inserted else { continue }
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            if values?.isDirectory == true {
+                // iOS manages Inbox; it's never a place to browse.
+                if folder == root, name == "Inbox" { continue }
+                items.append(LibraryItem(url: realURL, isFolder: true, size: nil, modified: values?.contentModificationDate, childCount: childCount(of: realURL)))
+                continue
+            }
+            guard ModelLoader.isSupported(realURL) else { continue }
+            let status = values?.ubiquitousItemDownloadingStatus
+            let downloaded = !isPlaceholder && (status == nil || status == .current || status == .downloaded)
+            items.append(LibraryItem(url: realURL, isFolder: false, size: isPlaceholder ? nil : values?.fileSize.map(Int64.init), modified: values?.contentModificationDate, childCount: nil, isDownloaded: downloaded))
         }
         return items.sorted { a, b in
             if a.isFolder != b.isFolder { return a.isFolder }
@@ -83,9 +100,14 @@ final class FileLibrary {
     }
 
     private func childCount(of folder: URL) -> Int {
-        let urls = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? []
+        let urls = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
         return urls.filter { url in
-            (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true || ModelLoader.isSupported(url)
+            let name = url.lastPathComponent
+            if name.hasPrefix(".") {
+                // Count iCloud placeholders for models; skip other hidden files.
+                return name.hasSuffix(".icloud") && ModelLoader.isSupported(url.deletingPathExtension())
+            }
+            return (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true || ModelLoader.isSupported(url)
         }.count
     }
 

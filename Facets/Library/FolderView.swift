@@ -5,10 +5,14 @@ enum LibraryLayout: String {
     case grid, list
 }
 
-/// One library folder: models and subfolders as a grid of rendered cards or a list.
+/// One folder: models and subfolders as a grid of rendered cards or a list. In the
+/// library it can be changed; while browsing a folder elsewhere it's look-and-save.
 struct FolderView: View {
     let folder: URL
     let title: String
+    /// Outside the library (Browse): no renaming, moving or deleting someone else's
+    /// files, and models open with Save to Library.
+    var isBrowsing = false
 
     @Environment(FileLibrary.self) private var library
     @Environment(\.zoomNamespace) private var zoom
@@ -25,6 +29,7 @@ struct FolderView: View {
     @State private var errorMessage: String?
     @State private var watcher: FolderWatcher?
     @State private var dropTargeted = false
+    @State private var savedName: String?
 
     var body: some View {
         content
@@ -37,7 +42,7 @@ struct FolderView: View {
                 }
             }
             .onDrop(of: UTType.models, isTargeted: $dropTargeted) { providers in
-                acceptDrop(providers)
+                !isBrowsing && acceptDrop(providers)
             }
             .overlay {
                 if dropTargeted {
@@ -79,6 +84,11 @@ struct FolderView: View {
                     perform { try library.move([item], to: destination) }
                 }
             }
+            .overlay(alignment: .bottom) {
+                if let savedName {
+                    SavedToast(name: savedName)
+                }
+            }
             .alert("Something went wrong", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -88,7 +98,9 @@ struct FolderView: View {
 
     @ViewBuilder
     private var content: some View {
-        if items.isEmpty, loaded {
+        if items.isEmpty, loaded, isBrowsing {
+            ContentUnavailableView("No Models Here", systemImage: "cube.transparent", description: Text("This folder has no STL or 3MF files. Subfolders show up here too."))
+        } else if items.isEmpty, loaded {
             ScrollView {
                 ContentUnavailableView {
                     Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: "cube.transparent")
@@ -130,8 +142,15 @@ struct FolderView: View {
                     .zoomSource(id: item.url, in: zoom)
                     .contextMenu { actions(for: item) }
                     .swipeActions(edge: .trailing) {
-                        Button("Delete", systemImage: "trash", role: .destructive) { deleting = item }
-                        Button("Rename", systemImage: "pencil") { beginRename(item) }
+                        if isBrowsing {
+                            if !item.isFolder {
+                                Button("Save to Library", systemImage: "plus") { save(item) }
+                                    .tint(.accentColor)
+                            }
+                        } else {
+                            Button("Delete", systemImage: "trash", role: .destructive) { deleting = item }
+                            Button("Rename", systemImage: "pencil") { beginRename(item) }
+                        }
                     }
                 }
             }
@@ -153,6 +172,7 @@ struct FolderView: View {
                 Label("View Options", systemImage: "ellipsis")
             }
         }
+        if !isBrowsing {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Button("Import Files…", systemImage: "square.and.arrow.down") { importing = true }
@@ -166,6 +186,7 @@ struct FolderView: View {
                 Label("Add", systemImage: "plus")
             }
         }
+        }
     }
 
     @ViewBuilder
@@ -175,6 +196,17 @@ struct FolderView: View {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
         }
+        if isBrowsing {
+            if !item.isFolder {
+                Button("Save to Library", systemImage: "plus") { save(item) }
+            }
+        } else {
+            libraryActions(for: item)
+        }
+    }
+
+    @ViewBuilder
+    private func libraryActions(for item: LibraryItem) -> some View {
         Button("Rename", systemImage: "pencil") { beginRename(item) }
         Button("Duplicate", systemImage: "plus.square.on.square") { perform { try library.duplicate(item) } }
         Button("Move…", systemImage: "folder") { moving = item }
@@ -191,7 +223,21 @@ struct FolderView: View {
     }
 
     private func route(for item: LibraryItem) -> LibraryRoute {
-        item.isFolder ? .folder(item.url) : .model(ModelFileRef(url: item.url, isExternal: false))
+        if item.isFolder {
+            return isBrowsing ? .browse(item.url, title: item.url.lastPathComponent) : .folder(item.url)
+        }
+        return .model(ModelFileRef(url: item.url, isExternal: isBrowsing))
+    }
+
+    private func save(_ item: LibraryItem) {
+        perform {
+            guard let copy = try library.importFiles([item.url], into: library.root).first else { return }
+            withAnimation(.snappy) { savedName = copy.deletingPathExtension().lastPathComponent }
+            Task {
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.snappy) { savedName = nil }
+            }
+        }
     }
 
     private func beginRename(_ item: LibraryItem) {
@@ -251,6 +297,8 @@ struct LibraryCard: View {
             Group {
                 if item.isFolder {
                     FolderTile(count: item.childCount)
+                } else if !item.isDownloaded {
+                    CloudTile()
                 } else {
                     ModelThumbnail(url: item.url, size: item.size, modified: item.modified)
                 }
@@ -291,6 +339,35 @@ struct FolderTile: View {
     }
 }
 
+/// A model in iCloud that isn't on the device yet; it downloads when opened.
+struct CloudTile: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 14)
+            .fill(.thumbnailBackground)
+            .overlay {
+                Image(systemName: "icloud.and.arrow.down")
+                    .font(.system(size: 28, weight: .light))
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityLabel("In iCloud, downloads when opened")
+    }
+}
+
+/// "Saved to Library" confirmation that floats above the content for a moment.
+struct SavedToast: View {
+    let name: String
+
+    var body: some View {
+        Label("Saved to Library as \(name)", systemImage: "checkmark.circle.fill")
+            .font(.subheadline.weight(.medium))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .glassEffect(.regular, in: .capsule)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+}
+
 struct LibraryRow: View {
     let item: LibraryItem
 
@@ -299,6 +376,8 @@ struct LibraryRow: View {
             Group {
                 if item.isFolder {
                     FolderTile(count: item.childCount)
+                } else if !item.isDownloaded {
+                    CloudTile()
                 } else {
                     ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 10)
                 }

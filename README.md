@@ -9,6 +9,7 @@ Free and open source (MIT). No accounts, no network access, no tracking.
 - **Viewer**: orbit, pan, pinch and twist; double tap to fit; front, back, side, top, bottom and isometric views; wireframe; a millimetre build-plate grid; size readout in mm or inches.
 - **3MF projects**: Bambu Studio and Orca plates (pick one or show all), filament colours, multi-part objects, modifiers hidden, per-object visibility, and 3MF base material colours.
 - **Library**: a folder of models with rendered thumbnails, subfolders, import, rename, duplicate, move, delete, drag and drop on iPad, and search across every folder.
+- **Browse**: next to Library, add any folder from iCloud Drive, On My iPhone or a storage app in Files and look through it without importing. Folders are kept as security-scoped bookmarks (iOS only lets an app see what the user picks), iCloud files that aren't downloaded yet show a cloud and download when opened, and a plus beside Share saves a copy to the library.
 - **Recents**: models opened from other apps are remembered with security-scoped bookmarks, so they reopen without picking them again.
 - **iOS integration**:
   - STL and 3MF open in Facets from Files, Mail, Messages, Safari downloads and share sheets, in place where possible.

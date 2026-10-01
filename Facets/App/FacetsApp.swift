@@ -4,6 +4,7 @@ import SwiftUI
 struct FacetsApp: App {
     @State private var library = FileLibrary()
     @State private var recents = RecentsStore()
+    @State private var locations = LocationsStore()
     @State private var settings = ViewerSettings()
     @State private var router = Router()
 
@@ -12,6 +13,7 @@ struct FacetsApp: App {
             RootView()
                 .environment(library)
                 .environment(recents)
+                .environment(locations)
                 .environment(settings)
                 .environment(router)
                 // Files, Mail, Messages and the share sheet hand files over here.

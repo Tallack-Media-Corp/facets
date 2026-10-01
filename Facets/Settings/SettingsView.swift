@@ -126,6 +126,7 @@ private struct AboutView: View {
             Section("Opening Files") {
                 Label("Tap an STL or 3MF in Files, Mail or Messages and choose Facets.", systemImage: "doc")
                 Label("In the Files app, Facets keeps its library under On My iPhone › Facets.", systemImage: "folder")
+                Label("To look through a folder without importing, add it under Library › Browse.", systemImage: "folder.badge.plus")
                 Label("Long-press a model in Files for a 3D Quick Look preview.", systemImage: "eye")
             }
             Section("Gestures") {

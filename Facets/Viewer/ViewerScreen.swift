@@ -26,6 +26,7 @@ struct ViewerScreen: View {
     @State private var fileSize: Int64?
     @State private var isAccessing = false
     @State private var savedName: String?
+    @State private var isSaved = false
     @State private var saveError: String?
 
     var body: some View {
@@ -53,13 +54,7 @@ struct ViewerScreen: View {
         }
         .overlay(alignment: .bottom) {
             if let savedName {
-                Label("Saved to Library as \(savedName)", systemImage: "checkmark.circle.fill")
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .glassEffect(.regular, in: .capsule)
-                    .padding(.bottom, 12)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                SavedToast(name: savedName)
             }
         }
         .navigationTitle(file.name)
@@ -95,14 +90,20 @@ struct ViewerScreen: View {
                 Button("Close", systemImage: "xmark") { dismiss() }
             }
         }
+        // A file from Browse or another app gets a plus beside Share to keep a copy.
+        // It stays as a tick once saved, so the bar doesn't jump.
+        if file.isExternal {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(isSaved ? "Saved to Library" : "Save to Library", systemImage: isSaved ? "checkmark" : "plus") {
+                    saveToLibrary()
+                }
+                .contentTransition(.symbolEffect(.replace))
+                .disabled(isSaved)
+            }
+        }
         ToolbarItem(placement: .topBarTrailing) {
             ShareLink(item: file.url) {
                 Label("Share", systemImage: "square.and.arrow.up")
-            }
-        }
-        if file.isExternal, savedName == nil {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Save to Library", systemImage: "square.and.arrow.down") { saveToLibrary() }
             }
         }
 
@@ -200,7 +201,10 @@ struct ViewerScreen: View {
         do {
             let copies = try library.importFiles([file.url], into: library.root)
             guard let copy = copies.first else { return }
-            withAnimation(.snappy) { savedName = copy.deletingPathExtension().lastPathComponent }
+            withAnimation(.snappy) {
+                isSaved = true
+                savedName = copy.deletingPathExtension().lastPathComponent
+            }
             Task {
                 try? await Task.sleep(for: .seconds(3))
                 withAnimation(.snappy) { savedName = nil }
