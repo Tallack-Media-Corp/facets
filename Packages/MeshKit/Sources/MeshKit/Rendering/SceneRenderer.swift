@@ -122,11 +122,13 @@ public final class SceneRenderer {
     }
 
     /// `pixelsPerPoint` keeps the grid lines the same thickness on every screen.
-    public func encode(into encoder: MTLRenderCommandEncoder, camera: OrbitCamera, aspect: Float, pixelsPerPoint: Float = 1) {
+    /// `verticalShift` (the fraction of the view a sheet covers from the bottom) fits
+    /// the picture into the part left uncovered.
+    public func encode(into encoder: MTLRenderCommandEncoder, camera: OrbitCamera, aspect: Float, pixelsPerPoint: Float = 1, verticalShift: Float = 0) {
         guard model != nil else { return }
         var frame = FrameUniforms(
             view: camera.viewMatrix,
-            projection: camera.projectionMatrix(aspect: aspect, sceneRadius: sceneRadius + simd_distance(camera.target, focusBounds.center)),
+            projection: Self.shift(verticalShift) * camera.projectionMatrix(aspect: aspect, sceneRadius: sceneRadius + simd_distance(camera.target, focusBounds.center)),
             gridColor: appearance.gridColor
         )
 
@@ -166,6 +168,18 @@ public final class SceneRenderer {
             encoder.setFragmentBytes(&uniforms, length: MemoryLayout<GridUniforms>.stride, index: 3)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
         }
+    }
+
+    /// Fits the picture into the top `1 - amount` of the view: scaled down by the
+    /// covered fraction and moved up, sitting slightly low so the chips at the top
+    /// stay clear.
+    private static func shift(_ amount: Float) -> simd_float4x4 {
+        var m = matrix_identity_float4x4
+        let scale = 1 - amount
+        m.columns.0.x = scale
+        m.columns.1.y = scale
+        m.columns.3.y = amount * 0.85
+        return m
     }
 
     /// A millimetre grid on a soft plate under the model, sized to it. The lines are

@@ -204,6 +204,8 @@ Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt co
 - A capsule of regular glass at the bottom edge with a filled checkmark and Card Title text ("Saved to Library as …"); slides up with a snappy spring and leaves after about 2.5 to 3 seconds.
 
 ### Model Stage (signature)
+On iPhone, when the info sheet sits at its medium height, the model scales down and glides up to stay whole between the chips and the sheet.
+
 The viewer and every thumbnail are the same object at two scales: a Stage or Tile gradient, the model lit by the studio rig in Filament Orange (or its file colours), and in the viewer a fading millimetre grid at the model's base. Thumbnails render on a transparent background and sit on the Tile gradient, framed tightly on the model's real silhouette from the isometric view.
 
 ### Errors

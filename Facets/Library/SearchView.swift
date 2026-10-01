@@ -26,6 +26,7 @@ struct SearchView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .padding(.leading, 64)
+                                .lineLimit(2)
                         }
                     }
                 }

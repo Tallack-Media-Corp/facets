@@ -9,6 +9,7 @@ struct ModelInfoSheet: View {
     let fileSize: Int64?
     let units: MeasurementUnits
     @Binding var appearance: RenderAppearance
+    @Binding var detent: PresentationDetent
 
     @Environment(\.dismiss) private var dismiss
 
@@ -79,7 +80,7 @@ struct ModelInfoSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationBackgroundInteraction(.enabled(upThrough: .medium))
     }
 

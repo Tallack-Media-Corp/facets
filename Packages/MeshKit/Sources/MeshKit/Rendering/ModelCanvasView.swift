@@ -25,6 +25,21 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
     /// Called while the user moves the camera, for hiding chrome or dismissing hints.
     public var onInteraction: (() -> Void)?
 
+    /// How much of the view's height a sheet covers from the bottom (0 to 1). The
+    /// model glides up to stay centred in what's left.
+    public var bottomObscured: CGFloat = 0 {
+        didSet {
+            guard bottomObscured != oldValue else { return }
+            if UIAccessibility.isReduceMotionEnabled || window == nil {
+                verticalShift = Float(bottomObscured)
+                setNeedsDisplay()
+            } else {
+                startDisplayLink()
+            }
+        }
+    }
+    private var verticalShift: Float = 0
+
     private var needsFit = true
     private var displayLink: CADisplayLink?
     private var velocity = SIMD2<Float>.zero
@@ -123,7 +138,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
               let commands = renderer.context.queue.makeCommandBuffer(),
               let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
         let size = drawableSize
-        renderer.encode(into: encoder, camera: camera, aspect: Float(size.width / max(size.height, 1)), pixelsPerPoint: Float(contentScaleFactor))
+        renderer.encode(into: encoder, camera: camera, aspect: Float(size.width / max(size.height, 1)), pixelsPerPoint: Float(contentScaleFactor), verticalShift: verticalShift)
         encoder.endEncoding()
         commands.present(drawable)
         commands.commit()
@@ -236,6 +251,12 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
     }
 
     @objc private func step(_ link: CADisplayLink) {
+        let targetShift = Float(bottomObscured)
+        if abs(verticalShift - targetShift) > 0.001 {
+            verticalShift += (targetShift - verticalShift) * 0.2
+        } else {
+            verticalShift = targetShift
+        }
         if let animation {
             let t = min((link.timestamp - animation.start) / animation.duration, 1)
             let eased = Float(1 - pow(1 - t, 3))
@@ -252,7 +273,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
             velocity = .zero
         }
         setNeedsDisplay()
-        if animation == nil, velocity == .zero { stopDisplayLink() }
+        if animation == nil, velocity == .zero, verticalShift == targetShift { stopDisplayLink() }
     }
 
     public override func willMove(toWindow newWindow: UIWindow?) {
@@ -279,11 +300,13 @@ public struct ModelCanvas: UIViewRepresentable {
     let appearance: RenderAppearance
     let controller: ModelCanvasController?
     let onInteraction: (() -> Void)?
+    let bottomObscured: CGFloat
 
-    public init(model: Model3D?, appearance: RenderAppearance, controller: ModelCanvasController? = nil, onInteraction: (() -> Void)? = nil) {
+    public init(model: Model3D?, appearance: RenderAppearance, controller: ModelCanvasController? = nil, bottomObscured: CGFloat = 0, onInteraction: (() -> Void)? = nil) {
         self.model = model
         self.appearance = appearance
         self.controller = controller
+        self.bottomObscured = bottomObscured
         self.onInteraction = onInteraction
     }
 
@@ -313,6 +336,7 @@ public struct ModelCanvas: UIViewRepresentable {
         }
         controller?.view = view
         view.onInteraction = onInteraction
+        view.bottomObscured = bottomObscured
     }
 }
 #endif

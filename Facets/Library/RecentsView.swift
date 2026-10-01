@@ -69,6 +69,9 @@ private struct RecentRow: View {
     let url: URL?
     let isAvailable: Bool
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .headline) private var thumbnailSize: CGFloat = 52
+
     var body: some View {
         HStack(spacing: 12) {
             Group {
@@ -85,12 +88,12 @@ private struct RecentRow: View {
                     RoundedRectangle(cornerRadius: 10).fill(.thumbnailBackground)
                 }
             }
-            .frame(width: 52, height: 52)
+            .frame(width: min(thumbnailSize, 88), height: min(thumbnailSize, 88))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.name)
                     .font(.headline)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                 HStack(spacing: 4) {
                     if !isAvailable {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -107,7 +110,7 @@ private struct RecentRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
             }
             Spacer(minLength: 0)
         }

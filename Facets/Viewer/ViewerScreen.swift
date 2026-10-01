@@ -24,6 +24,8 @@ struct ViewerScreen: View {
     @State private var appearance = RenderAppearance()
     @State private var controller = ModelCanvasController()
     @State private var showingInfo = false
+    @State private var infoDetent = PresentationDetent.medium
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var fileSize: Int64?
     @State private var isAccessing = false
     @State private var isSaved = false
@@ -53,7 +55,7 @@ struct ViewerScreen: View {
                     }
                 }
             case .loaded(let model):
-                ModelCanvas(model: model, appearance: appearance, controller: controller)
+                ModelCanvas(model: model, appearance: appearance, controller: controller, bottomObscured: obscuredBySheet)
                     .ignoresSafeArea()
                     .accessibilityLabel("\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))")
                     .accessibilityHint("Drag to turn, pinch to zoom, double tap to fit.")
@@ -76,7 +78,7 @@ struct ViewerScreen: View {
         .toolbar { toolbar }
         .sheet(isPresented: $showingInfo) {
             if case .loaded(let model) = phase {
-                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, appearance: $appearance)
+                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, appearance: $appearance, detent: $infoDetent)
             }
         }
         .alert("Couldn't Save", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
@@ -135,7 +137,7 @@ struct ViewerScreen: View {
                         Button(preset.title, systemImage: symbol(for: preset)) { controller.show(preset) }
                     }
                 } label: {
-                    Label("Preset Views", systemImage: "cube")
+                    Label("Preset Views", systemImage: "rotate.3d")
                 }
             }
             ToolbarSpacer(.flexible, placement: .bottomBar)
@@ -181,6 +183,12 @@ struct ViewerScreen: View {
     }
 
     private var displayName: String { Format.title(fromFileName: file.name) }
+
+    /// On iPhone the info sheet's medium detent covers the lower half; keep the model
+    /// in view above it so hiding an object shows what changed.
+    private var obscuredBySheet: CGFloat {
+        showingInfo && infoDetent == .medium && sizeClass == .compact ? 0.5 : 0
+    }
 
     private var isLoaded: Bool {
         if case .loaded = phase { return true }

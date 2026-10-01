@@ -106,6 +106,7 @@ struct FolderView: View {
                     Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: "cube.transparent")
                 } description: {
                     Text("Import STL and 3MF files, or save them to Facets from the Files app, Mail or any app's share sheet.")
+                        .frame(maxWidth: 480)
                 } actions: {
                     Button("Import Files") { importing = true }
                         .buttonStyle(.glassProminent)
@@ -421,6 +422,10 @@ struct CloudTile: View {
 struct LibraryRow: View {
     let item: LibraryItem
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Grows with the text, up to a point, so the picture still reads beside big type.
+    @ScaledMetric(relativeTo: .headline) private var thumbnailSize: CGFloat = 52
+
     var body: some View {
         HStack(spacing: 12) {
             Group {
@@ -432,17 +437,19 @@ struct LibraryRow: View {
                     ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 10)
                 }
             }
-            .frame(width: 52, height: 52)
+            .frame(width: min(thumbnailSize, 88), height: min(thumbnailSize, 88))
             .clipShape(.rect(cornerRadius: 10))
 
+            // At accessibility sizes names wrap rather than truncate; that's the point
+            // of showing rows there.
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
                     .font(.headline)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                 Text(Self.subtitle(for: item))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
             }
         }
         .accessibilityElement(children: .combine)
