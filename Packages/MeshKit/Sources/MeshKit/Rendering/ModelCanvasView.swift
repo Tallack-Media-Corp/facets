@@ -64,6 +64,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
         isAccessibilityElement = true
         accessibilityTraits = [.image, .allowsDirectInteraction]
         accessibilityLabel = "3D model"
+        installAccessibilityActions()
     }
 
     @available(*, unavailable)
@@ -116,6 +117,37 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
             camera = next
             setNeedsDisplay()
         }
+    }
+
+    // MARK: VoiceOver
+
+    /// VoiceOver users can't drag or pinch, so the camera moves by action instead:
+    /// swipe up or down on the model to pick one.
+    private func installAccessibilityActions() {
+        func action(_ name: String, _ perform: @escaping @MainActor (ModelCanvasView) -> Void) -> UIAccessibilityCustomAction {
+            UIAccessibilityCustomAction(name: name) { [weak self] _ in
+                guard let self else { return false }
+                perform(self)
+                return true
+            }
+        }
+        let step = Float.pi / 6
+        accessibilityCustomActions = [
+            action("Turn left") { $0.nudge(yaw: step, pitch: 0) },
+            action("Turn right") { $0.nudge(yaw: -step, pitch: 0) },
+            action("Tilt up") { $0.nudge(yaw: 0, pitch: step / 2) },
+            action("Tilt down") { $0.nudge(yaw: 0, pitch: -step / 2) },
+            action("Front view") { $0.show(.front) },
+            action("Top view") { $0.show(.top) },
+            action("Isometric view") { $0.show(.isometric) },
+            action("Fit to screen") { $0.frameModel(animated: true) },
+        ]
+    }
+
+    private func nudge(yaw: Float, pitch: Float) {
+        var next = camera
+        next.orbit(dx: yaw, dy: pitch)
+        move(to: next, animated: true)
     }
 
     // MARK: Drawing

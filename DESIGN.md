@@ -218,7 +218,7 @@ The viewer and every thumbnail are the same object at two scales: a Stage or Til
 - Slicer projects keep their real plate positions; anything else centres the bed under the model. Hidden when all plates show at once.
 
 ### Gesture Hint
-- The first times a model opens, a regular-glass capsule above the bottom toolbar reads "Drag to turn · Pinch to zoom" (hand.draw symbol, Card Title type). It fades on the first touch or after 6 seconds, stops for good after two interactions, and never shows with VoiceOver on (the canvas has its own spoken hint). One line on the smallest iPhone; no tours, no coach marks elsewhere.
+- Two short beats, one per model opened: first "Drag to turn · Pinch to zoom" (hand.draw), then "Double-tap to fit the model" (hand.tap), the way back when a model is lost off-screen. Each is a regular-glass capsule above the bottom toolbar in Card Title type, fades on the first touch or after 6 seconds, and advances only once the model has been moved while it showed. Never shown with VoiceOver on; there the canvas offers custom actions instead (turn, tilt, front, top, isometric, fit). One line on the smallest iPhone; no tours or coach marks elsewhere.
 
 ### Errors
 - Never the system's error sentence. Say what happened and what to do, in a heading and one or two plain sentences ("File Not Found" / "It was moved, renamed or deleted since Facets last saw it."), with the next action as a button (Try Again, Remove from Recents). Alerts for failed actions name the action ("Couldn't Rename").

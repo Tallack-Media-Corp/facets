@@ -27,9 +27,13 @@ struct ViewerScreen: View {
     @State private var controller = ModelCanvasController()
     @State private var showingInfo = false
     @State private var infoDetent = PresentationDetent.medium
-    /// How many times someone has moved a model; the gesture hint stops after that.
-    @AppStorage("viewer.interactions") private var interactions = 0
+    /// Which gesture hint is next: 0 the basics, 1 the recovery gesture, 2 none.
+    /// A stage is passed once the model has been moved while its hint was shown.
+    @AppStorage("viewer.hintStage") private var hintStage = 0
+    /// Earlier builds counted interactions; anyone past two has seen the basics.
+    @AppStorage("viewer.interactions") private var legacyInteractions = 0
     @State private var showingHint = false
+    @State private var shownHintStage: Int?
     @State private var findingFile = false
     @State private var choosingPrinter = false
     /// How many models have offered "Set printer…"; it retires after three.
@@ -99,7 +103,7 @@ struct ViewerScreen: View {
         }
         .overlay(alignment: .bottom) {
             if showingHint {
-                GestureHint()
+                GestureHint(stage: shownHintStage ?? 0)
                     .padding(.bottom, 12)
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
@@ -293,9 +297,12 @@ struct ViewerScreen: View {
         showingInfo && infoDetent == .medium && sizeClass == .compact ? 0.5 : 0
     }
 
-    /// The first few times a model opens, show how to move it, until it's been moved.
+    /// Teach the gestures in two short beats across the first models opened: drag and
+    /// pinch, then double-tap to fit (the way back when the model's lost off-screen).
     private func offerGestureHint() {
-        guard interactions < 2, !UIAccessibility.isVoiceOverRunning else { return }
+        if hintStage == 0, legacyInteractions >= 2 { hintStage = 1 }
+        guard hintStage < 2, !UIAccessibility.isVoiceOverRunning else { return }
+        shownHintStage = hintStage
         Task {
             try? await Task.sleep(for: .seconds(0.6))
             withAnimation(.easeOut(duration: 0.3)) { showingHint = true }
@@ -308,7 +315,11 @@ struct ViewerScreen: View {
         if showingHint {
             withAnimation(.easeIn(duration: 0.25)) { showingHint = false }
         }
-        if interactions < 2 { interactions += 1 }
+        // One stage per model opened: the next hint waits for the next model.
+        if let shown = shownHintStage {
+            hintStage = max(hintStage, shown + 1)
+            shownHintStage = nil
+        }
     }
 
     private var isLoaded: Bool {
@@ -483,8 +494,10 @@ struct ViewerBackground: View {
 
 /// How to move a model, shown the first few times one opens.
 private struct GestureHint: View {
+    let stage: Int
+
     var body: some View {
-        Label("Drag to turn · Pinch to zoom", systemImage: "hand.draw")
+        Label(stage == 0 ? "Drag to turn · Pinch to zoom" : "Double-tap to fit the model", systemImage: stage == 0 ? "hand.draw" : "hand.tap")
             .font(.subheadline.weight(.medium))
             .multilineTextAlignment(.center)
             .padding(.horizontal, 16)
