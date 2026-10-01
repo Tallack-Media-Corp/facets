@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-01T22:05:00Z",
+  "title": "Design System: Facets",
+  "extensions": {
+    "colorMeta": {
+      "filament-orange": {
+        "role": "primary",
+        "displayName": "Filament Orange",
+        "canonical": "#F2782E",
+        "tonalRamp": ["#3D1A06", "#66300F", "#8F4618", "#B85A1A", "#E2681F", "#F2782E", "#F7A06A", "#FBD2B5"]
+      },
+      "stage-light-top": { "role": "neutral", "displayName": "Stage (light, top)", "canonical": "#F6F7F9", "tonalRamp": ["#111214", "#2C2E33", "#4A4D54", "#6E727A", "#9A9EA6", "#C3C7CD", "#D9DCE1", "#F6F7F9"] },
+      "stage-light-bottom": { "role": "neutral", "displayName": "Stage (light, floor)", "canonical": "#D9DCE1" },
+      "stage-dark-top": { "role": "neutral", "displayName": "Stage (dark, top)", "canonical": "#2C2E33" },
+      "stage-dark-bottom": { "role": "neutral", "displayName": "Stage (dark, floor)", "canonical": "#111214" },
+      "tile-light-top": { "role": "neutral", "displayName": "Tile (light, top)", "canonical": "#F7F8FA" },
+      "tile-light-bottom": { "role": "neutral", "displayName": "Tile (light, floor)", "canonical": "#E4E7EB" },
+      "tile-dark-top": { "role": "neutral", "displayName": "Tile (dark, top)", "canonical": "#303237" },
+      "tile-dark-bottom": { "role": "neutral", "displayName": "Tile (dark, floor)", "canonical": "#1C1D21" },
+      "grid-ink-light": { "role": "neutral", "displayName": "Grid Ink (light)", "canonical": "rgba(80, 84, 94, 0.26)" },
+      "grid-ink-dark": { "role": "neutral", "displayName": "Grid Ink (dark)", "canonical": "rgba(231, 235, 243, 0.15)" },
+      "icon-cream-top": { "role": "neutral", "displayName": "Icon Cream (top)", "canonical": "#FFF7EF" },
+      "icon-cream-bottom": { "role": "neutral", "displayName": "Icon Cream (bottom)", "canonical": "#F6DCC6" },
+      "icon-charcoal-top": { "role": "neutral", "displayName": "Icon Charcoal (top)", "canonical": "#2A2C31" },
+      "icon-charcoal-bottom": { "role": "neutral", "displayName": "Icon Charcoal (bottom)", "canonical": "#0C0D10" },
+      "icon-navy-top": { "role": "neutral", "displayName": "Icon Navy (top)", "canonical": "#222C45" },
+      "icon-navy-bottom": { "role": "neutral", "displayName": "Icon Navy (bottom)", "canonical": "#0B1020" }
+    },
+    "typographyMeta": {
+      "large-title": { "displayName": "Large Title", "purpose": "Top-level screen titles; collapses inline on scroll." },
+      "headline": { "displayName": "Headline", "purpose": "Row titles in lists." },
+      "card-title": { "displayName": "Card Title", "purpose": "Names under library grid cards and toast text." },
+      "chip-label": { "displayName": "Chip Label", "purpose": "Plate picker over the model." },
+      "readout": { "displayName": "Readout", "purpose": "Dimensions chip; tabular figures." },
+      "caption": { "displayName": "Caption", "purpose": "Metadata lines joined with middle dots." },
+      "caption-small": { "displayName": "Caption Small", "purpose": "Secondary context such as a folder path." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "camera-move", "value": "0.4s ease-out cubic", "purpose": "Fit, preset views and plate changes move the camera; snaps under Reduce Motion." },
+      { "name": "orbit-inertia", "value": "velocity decays to 2% per second", "purpose": "A flicked orbit coasts to a stop; off under Reduce Motion." },
+      { "name": "zoom-push", "value": "navigationTransition(.zoom)", "purpose": "A library card zooms into the viewer." },
+      { "name": "toast", "value": "snappy spring, move from bottom + fade", "purpose": "Saved to Library confirmation." },
+      { "name": "symbol-swap", "value": "contentTransition(.symbolEffect(.replace))", "purpose": "A control confirms by swapping its symbol." }
+    ],
+    "breakpoints": [
+      { "name": "grid-column-min", "value": "150pt" },
+      { "name": "grid-column-max", "value": "220pt" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Readout Chip",
+      "kind": "chip",
+      "refersTo": "readout-chip",
+      "description": "Dimensions over the model, on regular Liquid Glass.",
+      "html": "<span class=\"ds-readout-chip\">50.0 × 29.8 × 65.0 mm</span>",
+      "css": ".ds-readout-chip { display: inline-block; font: 500 13px/1.3 -apple-system, system-ui, sans-serif; font-variant-numeric: tabular-nums; color: #1d1d1f; padding: 6px 12px; border-radius: 9999px; background: rgba(255,255,255,0.55); backdrop-filter: blur(20px) saturate(1.6); border: 0.5px solid rgba(255,255,255,0.7); }"
+    },
+    {
+      "name": "Plate Picker Chip",
+      "kind": "chip",
+      "refersTo": "plate-picker-chip",
+      "description": "Interactive glass capsule that opens the plate menu.",
+      "html": "<button class=\"ds-plate-chip\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><path d=\"M8 2 14 5 8 8 2 5Z\"/><path d=\"M2 8l6 3 6-3\"/><path d=\"M2 11l6 3 6-3\"/></svg>Plate 1: V2 - CENTER<svg width=\"10\" height=\"10\" viewBox=\"0 0 10 10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"><path d=\"M2 3.5 5 6.5 8 3.5\"/></svg></button>",
+      "css": ".ds-plate-chip { display: inline-flex; align-items: center; gap: 6px; font: 600 15px/1.2 -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 8px 14px; border-radius: 9999px; border: 0.5px solid rgba(255,255,255,0.7); background: rgba(255,255,255,0.55); backdrop-filter: blur(20px) saturate(1.6); cursor: pointer; transition: transform 0.15s, background 0.15s; } .ds-plate-chip:hover { background: rgba(255,255,255,0.75); } .ds-plate-chip:active { transform: scale(0.97); } .ds-plate-chip:focus-visible { outline: 2px solid #F2782E; outline-offset: 2px; }"
+    },
+    {
+      "name": "Library Card",
+      "kind": "card",
+      "refersTo": "library-card-tile",
+      "description": "Square Tile-gradient thumbnail with name and metadata beneath; no card background.",
+      "html": "<a class=\"ds-card\" href=\"#\"><div class=\"ds-card-tile\"><svg viewBox=\"0 0 100 100\" width=\"72%\"><polygon points=\"20,40 50,25 80,40 50,55\" fill=\"#F7A06A\"/><polygon points=\"20,40 50,55 50,82 20,67\" fill=\"#F2782E\"/><polygon points=\"50,55 80,40 80,67 50,82\" fill=\"#B85A1A\"/></svg></div><div class=\"ds-card-name\">Kennel Hinge-4</div><div class=\"ds-card-meta\">STL · 116 KB · 1:59 PM</div></a>",
+      "css": ".ds-card { display: block; width: 170px; text-decoration: none; font-family: -apple-system, system-ui, sans-serif; } .ds-card-tile { aspect-ratio: 1; border-radius: 14px; background: linear-gradient(#F7F8FA, #E4E7EB); display: grid; place-items: center; transition: transform 0.2s; } .ds-card:hover .ds-card-tile { transform: scale(1.02); } .ds-card:focus-visible .ds-card-tile { outline: 2px solid #F2782E; outline-offset: 3px; } .ds-card-name { margin-top: 8px; font: 500 15px/1.25 inherit; color: #1d1d1f; } .ds-card-meta { font: 400 12px/1.3 inherit; color: #86868b; }"
+    },
+    {
+      "name": "List Row",
+      "kind": "custom",
+      "refersTo": "list-row-thumbnail",
+      "description": "52pt Tile thumbnail, headline title and caption metadata.",
+      "html": "<div class=\"ds-row\"><div class=\"ds-row-thumb\"></div><div><div class=\"ds-row-title\">funnel</div><div class=\"ds-row-meta\">STL · 217 KB · 1:59 PM</div></div></div>",
+      "css": ".ds-row { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: #fff; font-family: -apple-system, system-ui, sans-serif; } .ds-row-thumb { width: 52px; height: 52px; border-radius: 10px; background: linear-gradient(#F7F8FA, #E4E7EB); } .ds-row-title { font: 600 17px/1.25 inherit; color: #1d1d1f; } .ds-row-meta { font: 400 12px/1.3 inherit; color: #86868b; }"
+    },
+    {
+      "name": "Prominent Button",
+      "kind": "button",
+      "refersTo": "button-prominent",
+      "description": "Glass prominent action tinted Filament Orange; one per screen at most.",
+      "html": "<button class=\"ds-btn-prominent\">Import Files</button>",
+      "css": ".ds-btn-prominent { font: 600 17px/1 -apple-system, system-ui, sans-serif; color: #fff; background: #F2782E; border: none; border-radius: 9999px; padding: 14px 22px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.35); cursor: pointer; transition: transform 0.15s, filter 0.15s; } .ds-btn-prominent:hover { filter: brightness(1.05); } .ds-btn-prominent:active { transform: scale(0.97); } .ds-btn-prominent:focus-visible { outline: 2px solid #F2782E; outline-offset: 3px; }"
+    },
+    {
+      "name": "Saved Toast",
+      "kind": "custom",
+      "refersTo": "saved-toast",
+      "description": "Bottom-edge glass capsule confirming Save to Library.",
+      "html": "<div class=\"ds-toast\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\"><circle cx=\"8\" cy=\"8\" r=\"8\" fill=\"#1d1d1f\"/><path d=\"M4.5 8.2 7 10.5 11.5 5.8\" stroke=\"#fff\" stroke-width=\"1.6\" fill=\"none\"/></svg>Saved to Library as Dishwasher_Part</div>",
+      "css": ".ds-toast { display: inline-flex; align-items: center; gap: 8px; font: 500 15px/1.2 -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 10px 16px; border-radius: 9999px; background: rgba(255,255,255,0.6); backdrop-filter: blur(20px) saturate(1.6); border: 0.5px solid rgba(255,255,255,0.7); }"
+    },
+    {
+      "name": "Library | Browse Switch",
+      "kind": "nav",
+      "description": "Segmented control in the Library tab's principal toolbar slot.",
+      "html": "<div class=\"ds-seg\" role=\"tablist\"><button class=\"ds-seg-item ds-seg-on\" role=\"tab\" aria-selected=\"true\">Library</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">Browse</button></div>",
+      "css": ".ds-seg { display: inline-flex; padding: 4px; border-radius: 9999px; background: rgba(255,255,255,0.55); backdrop-filter: blur(20px); border: 0.5px solid rgba(255,255,255,0.7); font-family: -apple-system, system-ui, sans-serif; } .ds-seg-item { font: 500 15px/1 inherit; color: #1d1d1f; background: none; border: none; padding: 9px 14px; border-radius: 9999px; cursor: pointer; } .ds-seg-item:hover { background: rgba(0,0,0,0.04); } .ds-seg-on { background: rgba(0,0,0,0.08); } .ds-seg-item:focus-visible { outline: 2px solid #F2782E; }"
+    },
+    {
+      "name": "Colour Swatch",
+      "kind": "custom",
+      "refersTo": "colour-swatch",
+      "description": "Filament preset circle; the selected one gets a Filament Orange ring.",
+      "html": "<div class=\"ds-swatches\"><button class=\"ds-swatch ds-swatch-on\" style=\"--c:#F2782E\" aria-label=\"Orange\"></button><button class=\"ds-swatch\" style=\"--c:#F2F2EE\" aria-label=\"White\"></button><button class=\"ds-swatch\" style=\"--c:#2F6FD8\" aria-label=\"Blue\"></button></div>",
+      "css": ".ds-swatches { display: flex; gap: 12px; } .ds-swatch { width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); background: var(--c); cursor: pointer; } .ds-swatch-on { box-shadow: 0 0 0 4px #fff, 0 0 0 6.5px #F2782E; } .ds-swatch:focus-visible { outline: 2px solid #F2782E; outline-offset: 4px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Print Bed",
+    "overview": "Every screen is a print bed. A calm, neutral stage holds one thing worth looking at, the model, in filament colour, with a millimetre grid underfoot. The interface is the printer's enclosure glass: present, clear, out of the way. Nothing competes with the part.\n\nFacets is a native iOS tool in Operate mode, so it is quiet by design. Structure, navigation and controls are stock SwiftUI and Liquid Glass; brand lives in exactly three places: the filament orange tint, the soft studio gradient behind models, and the rendered models themselves. Density is moderate: generous grids of thumbnails in the library, inset grouped lists for settings and details, and a full-bleed stage in the viewer.\n\nConfirmed rejections: no custom fonts, no heavy decoration (gradient washes, illustrations, ornament beyond the model itself), and no dark-only \"pro CAD\" look. Light and dark are equal citizens.",
+    "keyCharacteristics": [
+      "One brand colour, Filament Orange, used as the system tint and the default model colour.",
+      "Neutral studio gradients stage every model, in the viewer and in every thumbnail.",
+      "Liquid Glass is the only thing that floats; content is flat.",
+      "San Francisco and Dynamic Type everywhere.",
+      "Rendered models are the only imagery."
+    ],
+    "rules": [
+      { "name": "The One Orange Rule", "body": "The UI tint and the default model colour are the same Filament Orange (#F2782E). Any orange that isn't this value is drift.", "section": "colors" },
+      { "name": "The Content Is Colour Rule", "body": "Filament colours from files and presets paint models only. Interface elements take Filament Orange or system semantics, nothing else.", "section": "colors" },
+      { "name": "The San Francisco Rule", "body": "No custom fonts, no hard-coded point sizes: every text style is a system style that scales with Dynamic Type.", "section": "typography" },
+      { "name": "The Tabular Measure Rule", "body": "Any number the user compares (dimensions, volume, counts) uses monospaced digits.", "section": "typography" },
+      { "name": "The Glass Over Stage Rule", "body": "If it floats, it's system glass (glassEffect, glass button styles, sheets). Never hand-roll blur or add a shadow to make something feel lifted.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use Filament Orange (#F2782E) as the only tint and as the default model colour in the app, Quick Look and thumbnails.",
+      "Do stage every model on the Stage or Tile gradient, in both light and dark appearance.",
+      "Do use system text styles with Dynamic Type, and tabular figures for measurements.",
+      "Do let Liquid Glass carry anything that floats, and group related glass controls in one capsule or container.",
+      "Do keep thumbnails at 14pt corners in grids and 10pt in list rows.",
+      "Do swap a symbol in place to confirm an action (plus to checkmark) instead of removing the control.",
+      "Do honour Reduce Motion: camera moves and inertia snap instead of animating."
+    ],
+    "donts": [
+      "Don't introduce custom fonts or hard-coded text sizes.",
+      "Don't add gradient washes, illustrations or ornament; the model is the only imagery.",
+      "Don't add drop shadows or hand-made blur to cards, tiles or panels.",
+      "Don't build a dark-only, CAD-style interface; light and dark are both first-class.",
+      "Don't let file or preset filament colours tint interface elements.",
+      "Don't use a different orange anywhere (the earlier #F2802E model default and the renderer's #F19545 fallback are drift to remove)."
+    ]
+  }
+}

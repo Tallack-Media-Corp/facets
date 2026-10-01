@@ -1,0 +1,229 @@
+---
+name: Facets
+description: A small, fast STL and 3MF viewer for iPhone and iPad, staged like a part on a clean print bed.
+colors:
+  filament-orange: "#F2782E"
+  stage-light-top: "#F6F7F9"
+  stage-light-bottom: "#D9DCE1"
+  stage-dark-top: "#2C2E33"
+  stage-dark-bottom: "#111214"
+  tile-light-top: "#F7F8FA"
+  tile-light-bottom: "#E4E7EB"
+  tile-dark-top: "#303237"
+  tile-dark-bottom: "#1C1D21"
+  grid-ink-light: "rgba(80, 84, 94, 0.26)"
+  grid-ink-dark: "rgba(231, 235, 243, 0.15)"
+  icon-cream-top: "#FFF7EF"
+  icon-cream-bottom: "#F6DCC6"
+  icon-charcoal-top: "#2A2C31"
+  icon-charcoal-bottom: "#0C0D10"
+  icon-navy-top: "#222C45"
+  icon-navy-bottom: "#0B1020"
+typography:
+  large-title:
+    fontFamily: "SF Pro, system-ui"
+    fontSize: "34pt"
+    fontWeight: 700
+  headline:
+    fontFamily: "SF Pro, system-ui"
+    fontSize: "17pt"
+    fontWeight: 600
+  card-title:
+    fontFamily: "SF Pro, system-ui"
+    fontSize: "15pt"
+    fontWeight: 500
+  chip-label:
+    fontFamily: "SF Pro, system-ui"
+    fontSize: "15pt"
+    fontWeight: 600
+  readout:
+    fontFamily: "SF Pro, system-ui"
+    fontSize: "13pt"
+    fontWeight: 500
+    fontFeature: "tnum"
+  caption:
+    fontFamily: "SF Pro, system-ui"
+    fontSize: "12pt"
+    fontWeight: 400
+  caption-small:
+    fontFamily: "SF Pro, system-ui"
+    fontSize: "11pt"
+    fontWeight: 400
+rounded:
+  row-thumb: "10px"
+  tile: "14px"
+  overlay: "20px"
+  drop-target: "24px"
+  capsule: "9999px"
+spacing:
+  hair: "2px"
+  xs: "4px"
+  sm: "8px"
+  md: "12px"
+  lg: "16px"
+  xl: "20px"
+  xxl: "24px"
+components:
+  library-card-tile:
+    rounded: "{rounded.tile}"
+    width: "150-220px"
+  list-row-thumbnail:
+    rounded: "{rounded.row-thumb}"
+    size: "52px"
+  readout-chip:
+    typography: "{typography.readout}"
+    rounded: "{rounded.capsule}"
+    padding: "6px 12px"
+  plate-picker-chip:
+    typography: "{typography.chip-label}"
+    rounded: "{rounded.capsule}"
+    padding: "8px 14px"
+  saved-toast:
+    typography: "{typography.card-title}"
+    rounded: "{rounded.capsule}"
+    padding: "10px 16px"
+  button-prominent:
+    backgroundColor: "{colors.filament-orange}"
+    rounded: "{rounded.capsule}"
+  colour-swatch:
+    rounded: "{rounded.capsule}"
+    size: "36px"
+  icon-picker-preview:
+    size: "64px"
+---
+
+# Design System: Facets
+
+## Overview
+
+**Creative North Star: "The Print Bed"**
+
+Every screen is a print bed. A calm, neutral stage holds one thing worth looking at, the model, in filament colour, with a millimetre grid underfoot. The interface is the printer's enclosure glass: present, clear, out of the way. Nothing competes with the part.
+
+Facets is a native iOS tool in Operate mode, so it is quiet by design. Structure, navigation and controls are stock SwiftUI and Liquid Glass; brand lives in exactly three places: the filament orange tint, the soft studio gradient behind models, and the rendered models themselves. Density is moderate: generous grids of thumbnails in the library, inset grouped lists for settings and details, and a full-bleed stage in the viewer.
+
+Confirmed rejections: no custom fonts, no heavy decoration (gradient washes, illustrations, ornament beyond the model itself), and no dark-only "pro CAD" look. Light and dark are equal citizens.
+
+**Key Characteristics:**
+- One brand colour, Filament Orange, used as the system tint and the default model colour.
+- Neutral studio gradients stage every model, in the viewer and in every thumbnail.
+- Liquid Glass is the only thing that floats; content is flat.
+- San Francisco and Dynamic Type everywhere.
+- Rendered models are the only imagery.
+
+## Colors
+
+A single warm accent over cool, quiet neutrals: the orange of a fresh spool against a grey enclosure.
+
+### Primary
+- **Filament Orange** (#F2782E): the app tint (selected tab, buttons, toggles, prominent glass buttons, selection rings, folder glyphs) and the default colour every model renders in, in the app, in Quick Look and in thumbnails. One value, everywhere.
+
+### Neutral
+- **Stage** (light #F6F7F9 to #D9DCE1, dark #2C2E33 to #111214, top to bottom): the viewer's backdrop behind the transparent 3D canvas. Cool, desaturated, darker at the floor like a studio sweep.
+- **Tile** (light #F7F8FA to #E4E7EB, dark #303237 to #1C1D21): the same sweep in miniature behind every thumbnail, folder tile and cloud tile, so white and grey models still read.
+- **Grid Ink** (light rgba(80, 84, 94, 0.26), dark rgba(231, 235, 243, 0.15)): the build-plate grid under a model. Minor lines at 40% of this, every fifth line at 80%, fading out toward the plate edge.
+- **System semantics**: page backgrounds (systemGroupedBackground), text (label, secondaryLabel, tertiaryLabel) and separators come from iOS, never hex.
+- **Icon fills** (cream #FFF7EF to #F6DCC6, charcoal #2A2C31 to #0C0D10, navy #222C45 to #0B1020): app icon backgrounds only. They never appear in the interface.
+
+Filament presets (Orange, White, Grey, Black, Red, Yellow, Green, Blue, Purple) and colours read from 3MF files are content: they colour models, never interface.
+
+### Named Rules
+**The One Orange Rule.** The UI tint and the default model colour are the same Filament Orange (#F2782E). Any orange that isn't this value is drift.
+
+**The Content Is Colour Rule.** Filament colours from files and presets paint models only. Interface elements take Filament Orange or system semantics, nothing else.
+
+## Typography
+
+**Display Font:** San Francisco (SF Pro), via system text styles
+**Body Font:** San Francisco (SF Pro), via system text styles
+**Label/Mono Font:** San Francisco with tabular figures for measurements
+
+**Character:** Entirely the system's voice. Hierarchy comes from Apple's text styles and weight, never from a brand face, so everything follows the user's reading size.
+
+### Hierarchy
+- **Large Title** (bold, 34pt at default size): top-level screens (Library, Recents, Search, Settings), collapsing inline on scroll.
+- **Headline** (semibold, 17pt): row titles in lists (library list, recents, search results).
+- **Card Title** (medium, 15pt, subheadline): names under library grid cards, toast text; up to two lines.
+- **Chip Label** (semibold, 15pt, subheadline): the plate picker over the model.
+- **Readout** (medium, 13pt, footnote, tabular figures): the dimensions chip. Measurements always use tabular figures so they don't jitter as values change.
+- **Caption** (regular, 12pt): metadata lines ("STL · 217 KB · 1:59 PM"), joined with middle dots.
+- **Caption Small** (regular, 11pt, caption2): secondary context such as a search hit's folder path.
+
+### Named Rules
+**The San Francisco Rule.** No custom fonts, no hard-coded point sizes: every text style is a system style that scales with Dynamic Type.
+
+**The Tabular Measure Rule.** Any number the user compares (dimensions, volume, counts) uses monospaced digits.
+
+## Layout
+
+The library is an adaptive grid: columns from 150 to 220pt wide with 16pt between columns and 20pt between rows, top-aligned so cards with two-line names don't misalign their thumbnails, inside the standard 16pt side margins. Each card is a square thumbnail, 8pt, then a name and a caption line. The same content switches to a list (52pt thumbnails, 12pt gap to text) from the view options menu.
+
+Settings, info sheets, Browse and Recents are inset grouped lists. The viewer is full-bleed: the 3D canvas ignores the safe area, chips sit at the top below the navigation bar (8pt apart, stacked and centred), and tools live in the bottom toolbar, which replaces the tab bar there.
+
+On iPad the tab bar moves to the top and the grid simply gains columns; no separate iPad layout exists. Spacing steps are 2, 4, 8, 12, 16, 20 and 24pt.
+
+## Elevation & Depth
+
+Flat content, floating glass. Nothing in the interface casts a drop shadow. The only things above the content plane are system Liquid Glass: navigation and bottom toolbars, the tab bar, glass chips, the loading panel, toasts, sheets and menus. The only rendered depth is the model's own studio lighting (key, fill, sky and a little rim) and the soft gradient sweep behind it.
+
+### Named Rules
+**The Glass Over Stage Rule.** If it floats, it's system glass (`glassEffect`, glass button styles, sheets). Never hand-roll blur or add a shadow to make something feel lifted.
+
+## Shapes
+
+Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt corner, list thumbnails 10pt, the loading panel 20pt and the drag-and-drop target outline 24pt (dashed, 3pt, in Filament Orange). Floating chips and toasts are capsules. Swatches and icon-picker selection marks are circles. App icons use Icon Composer's own shape.
+
+## Components
+
+### Buttons
+- **Shape:** system shapes: capsule glass for prominent actions, plain for toolbar and list actions.
+- **Primary:** `.glassProminent` tinted Filament Orange, used sparingly (the "Import Files" call to action on an empty library).
+- **Toolbar:** icon-only SF Symbols in system glass groups; related actions share a capsule (Fit + Views, Wireframe + Grid; Save to Library + Share).
+- **States:** toggles in the toolbar fill with the tint when on. A completed action swaps its symbol in place (plus becomes a checkmark) rather than disappearing.
+
+### Chips
+- **Readout chip:** Readout type on a regular glass capsule (6pt by 12pt padding); shows "W × D × H mm".
+- **Plate picker chip:** Chip Label type on an interactive glass capsule (8pt by 14pt), a stacked-layers glyph, the plate title and a small chevron; opens a menu.
+- **Grouping:** chips sit in one `GlassEffectContainer` so neighbouring glass merges correctly.
+
+### Cards / Containers
+- **Library card:** a square tile (14pt corners) with the Tile gradient and the rendered model inset 8%; name and caption beneath, no card background behind the text.
+- **Folder tile:** the same tile with a large filled folder glyph in Filament Orange at 85%.
+- **Cloud tile:** the same tile with an `icloud.and.arrow.down` glyph in secondary label colour for files not yet downloaded.
+- **Shadow Strategy:** none (see Elevation & Depth).
+
+### Inputs / Fields
+- System only: search fields from `.searchable`, alerts with text fields for renaming, standard pickers and toggles. No custom fields.
+
+### Navigation
+- Tab bar with Library, Recents, Settings and a search-role tab; it minimises on scroll and hides inside the viewer.
+- Library and Browse are a segmented control in the Library tab's principal toolbar slot.
+- Pushes use the zoom transition from a card into the viewer; files opened from other apps present the viewer full-screen with a Close button.
+
+### Toast
+- A capsule of regular glass at the bottom edge with a filled checkmark and Card Title text ("Saved to Library as …"); slides up with a snappy spring and leaves after about 2.5 to 3 seconds.
+
+### Model Stage (signature)
+The viewer and every thumbnail are the same object at two scales: a Stage or Tile gradient, the model lit by the studio rig in Filament Orange (or its file colours), and in the viewer a fading millimetre grid at the model's base. Thumbnails render on a transparent background and sit on the Tile gradient, framed tightly on the model's real silhouette from the isometric view.
+
+### Empty States
+- System `ContentUnavailableView` with an SF Symbol (`cube.transparent`, `clock`, `magnifyingglass`), a one-line title and a short practical description; at most one prominent action.
+
+## Do's and Don'ts
+
+### Do:
+- **Do** use Filament Orange (#F2782E) as the only tint and as the default model colour in the app, Quick Look and thumbnails.
+- **Do** stage every model on the Stage or Tile gradient, in both light and dark appearance.
+- **Do** use system text styles with Dynamic Type, and tabular figures for measurements.
+- **Do** let Liquid Glass carry anything that floats, and group related glass controls in one capsule or container.
+- **Do** keep thumbnails at 14pt corners in grids and 10pt in list rows.
+- **Do** swap a symbol in place to confirm an action (plus to checkmark) instead of removing the control.
+- **Do** honour Reduce Motion: camera moves and inertia snap instead of animating.
+
+### Don't:
+- **Don't** introduce custom fonts or hard-coded text sizes.
+- **Don't** add gradient washes, illustrations or ornament; the model is the only imagery.
+- **Don't** add drop shadows or hand-made blur to cards, tiles or panels.
+- **Don't** build a dark-only, CAD-style interface; light and dark are both first-class.
+- **Don't** let file or preset filament colours tint interface elements.
+- **Don't** use a different orange anywhere (the earlier #F2802E model default and the renderer's #F19545 fallback are drift to remove).
