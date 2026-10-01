@@ -93,7 +93,7 @@ struct FolderView: View {
                 ContentUnavailableView {
                     Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: "cube.transparent")
                 } description: {
-                    Text("Import STL and 3MF files, or save them to Facet from the Files app, Mail or any app's share sheet.")
+                    Text("Import STL and 3MF files, or save them to Facets from the Files app, Mail or any app's share sheet.")
                 } actions: {
                     Button("Import Files") { importing = true }
                         .buttonStyle(.glassProminent)

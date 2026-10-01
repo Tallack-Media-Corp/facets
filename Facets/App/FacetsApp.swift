@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct FacetApp: App {
+struct FacetsApp: App {
     @State private var library = FileLibrary()
     @State private var recents = RecentsStore()
     @State private var settings = ViewerSettings()
@@ -25,10 +25,10 @@ struct FacetApp: App {
     }
 
     #if DEBUG
-    /// `FACET_OPEN=<path below Documents>` opens a library file at launch, for
+    /// `FACETS_OPEN=<path below Documents>` opens a library file at launch, for
     /// screenshots and quick checks.
     private func openFromLaunchEnvironment() {
-        guard let path = ProcessInfo.processInfo.environment["FACET_OPEN"], !path.isEmpty else { return }
+        guard let path = ProcessInfo.processInfo.environment["FACETS_OPEN"], !path.isEmpty else { return }
         router.open(library.root.appending(path: path), library: library)
     }
     #endif

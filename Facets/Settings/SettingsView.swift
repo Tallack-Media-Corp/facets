@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum AppInfo {
-    static let sourceURL = URL(string: "https://github.com/BTallack/facet")!
+    static let sourceURL = URL(string: "https://github.com/BTallack/facets")!
 
     static var version: String {
         let info = Bundle.main.infoDictionary
@@ -58,12 +58,12 @@ struct SettingsView: View {
                     NavigationLink {
                         AboutView()
                     } label: {
-                        Label("About Facet", systemImage: "info.circle")
+                        Label("About Facets", systemImage: "info.circle")
                     }
                 } header: {
                     Text("About")
                 } footer: {
-                    Text("Facet is free and open source. It has no network access and collects nothing.")
+                    Text("Facets is free and open source. It has no network access and collects nothing.")
                 }
             }
             .navigationTitle("Settings")
@@ -116,7 +116,7 @@ private struct AboutView: View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Facet")
+                    Text("Facets")
                         .font(.title2.bold())
                     Text("A small, fast viewer for 3D printing files. Open STL and 3MF models from anywhere on your iPhone or iPad, keep a library of them, and preview them right in the Files app.")
                         .foregroundStyle(.secondary)
@@ -124,8 +124,8 @@ private struct AboutView: View {
                 .padding(.vertical, 4)
             }
             Section("Opening Files") {
-                Label("Tap an STL or 3MF in Files, Mail or Messages and choose Facet.", systemImage: "doc")
-                Label("In the Files app, Facet's library is under On My iPhone › Facet.", systemImage: "folder")
+                Label("Tap an STL or 3MF in Files, Mail or Messages and choose Facets.", systemImage: "doc")
+                Label("In the Files app, Facets keeps its library under On My iPhone › Facets.", systemImage: "folder")
                 Label("Long-press a model in Files for a 3D Quick Look preview.", systemImage: "eye")
             }
             Section("Gestures") {
@@ -136,7 +136,7 @@ private struct AboutView: View {
             }
             Section("Licence") {
                 Text("MIT Licence. The source code, issues and releases are on GitHub.")
-                Link("github.com/BTallack/facet", destination: AppInfo.sourceURL)
+                Link("github.com/BTallack/facets", destination: AppInfo.sourceURL)
             }
         }
         .navigationTitle("About")

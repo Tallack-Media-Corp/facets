@@ -7,10 +7,10 @@ import simd
 @testable import MeshKit
 
 /// Draws the app icon with the app's own renderer: a faceted icosahedron in the
-/// default model colour. Runs only when `FACET_ICON_OUT` names a folder.
+/// default model colour. Runs only when `FACETS_ICON_OUT` names a folder.
 @Suite struct IconTests {
     @Test func drawsIcon() throws {
-        guard let out = ProcessInfo.processInfo.environment["FACET_ICON_OUT"] else { return }
+        guard let out = ProcessInfo.processInfo.environment["FACETS_ICON_OUT"] else { return }
         let model = Self.icosahedron()
         let snapshotter = try #require(ModelSnapshotter())
         let gem = try #require(snapshotter.image(of: model, pixelSize: 1024))

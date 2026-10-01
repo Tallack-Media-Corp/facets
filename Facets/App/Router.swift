@@ -25,7 +25,7 @@ final class Router {
 
     func open(_ url: URL, library: FileLibrary) {
         guard url.isFileURL else { return }
-        // "Copy to Facet" from a share sheet lands in Documents/Inbox, which iOS owns
+        // "Copy to Facets" from a share sheet lands in Documents/Inbox, which iOS owns
         // and empties. Move it into the library proper so it stays.
         if library.isInInbox(url), let moved = try? library.adoptFromInbox(url) {
             presented = ModelFileRef(url: moved, isExternal: false)

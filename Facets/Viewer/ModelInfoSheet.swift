@@ -68,7 +68,7 @@ struct ModelInfoSheet: View {
                     if let application = model.application {
                         LabeledContent("Made With", value: application.replacingOccurrences(of: "-", with: " "))
                     }
-                    LabeledContent("Location", value: file.isExternal ? "Another app" : "Facet library")
+                    LabeledContent("Location", value: file.isExternal ? "Another app" : "Facets library")
                 }
             }
             .navigationTitle(file.name)
