@@ -85,6 +85,11 @@ struct ViewerScreen: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
+        // Small confirmations for changes that happen out of the finger's sight.
+        .sensoryFeedback(.selection, trigger: appearance.plateID)
+        .sensoryFeedback(.selection, trigger: appearance.wireframe)
+        .sensoryFeedback(.selection, trigger: appearance.showsGrid)
+        .sensoryFeedback(.selection, trigger: settings.bedID)
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)

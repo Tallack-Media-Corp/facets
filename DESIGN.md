@@ -180,6 +180,8 @@ Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt co
 - **Primary:** `.glassProminent` tinted Filament Orange, used sparingly (the "Import Files" call to action on an empty library).
 - **Toolbar:** icon-only SF Symbols in system glass groups; related actions share a capsule (Fit + Views, Wireframe + Grid; Save to Library + Share).
 - **States:** toggles in the toolbar fill with the tint when on. A completed action swaps its symbol in place (plus becomes a checkmark) rather than disappearing.
+- **Switches** in lists and sheets stay system green: on iOS green means "on", and tinting them orange would make them read as brand decoration. Filament Orange drives every other interactive element.
+- **Haptics:** a selection tap for plate, wireframe, grid and printer-bed changes; success or warning feedback with each toast. Nothing else buzzes.
 
 ### Chips
 - **Readout chip:** Readout type on a regular glass capsule (6pt by 12pt padding); shows "W 156.5 · D 176.0 · H 79.6 mm".

@@ -78,16 +78,22 @@ private struct ToastHost: ViewModifier {
     @Environment(ToastCenter.self) private var toasts
 
     func body(content: Content) -> some View {
-        content.overlay(alignment: .bottom) {
-            if let toast = toasts.current {
-                ToastView(toast: toast) {
-                    toast.action?()
-                    toasts.dismiss(toast.id)
-                }
-                .padding(.bottom, clearance)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .id(toast.id)
+        content
+            // A warning toast taps like a warning; everything else like a success.
+            .sensoryFeedback(trigger: toasts.current?.id) { _, _ in
+                guard let toast = toasts.current else { return nil }
+                return toast.symbol.contains("exclamationmark") ? .warning : .success
             }
-        }
+            .overlay(alignment: .bottom) {
+                if let toast = toasts.current {
+                    ToastView(toast: toast) {
+                        toast.action?()
+                        toasts.dismiss(toast.id)
+                    }
+                    .padding(.bottom, clearance)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .id(toast.id)
+                }
+            }
     }
 }
