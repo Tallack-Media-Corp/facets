@@ -8,14 +8,15 @@ struct ModelThumbnail: View {
     var cornerRadius: CGFloat = 14
 
     @Environment(\.displayScale) private var displayScale
-    @Environment(ViewerSettings.self) private var settings
+    /// Optional: a context-menu preview is drawn outside the app's environment.
+    @Environment(ViewerSettings.self) private var settings: ViewerSettings?
     @State private var image: UIImage?
     @State private var failed = false
 
     var body: some View {
         GeometryReader { geometry in
             let pixels = Self.pixelSize(for: geometry.size, scale: displayScale)
-            let look = ThumbnailStore.Look(colorHex: settings.colorHex, usesFileColors: settings.usesFileColors)
+            let look = ThumbnailStore.Look(colorHex: settings?.colorHex ?? Palette.filamentOrange, usesFileColors: settings?.usesFileColors ?? true)
             let key = ThumbnailStore.key(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
             ZStack {
                 Rectangle().fill(.thumbnailBackground)

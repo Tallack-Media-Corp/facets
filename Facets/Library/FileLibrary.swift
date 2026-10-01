@@ -173,11 +173,93 @@ final class FileLibrary {
         return destination
     }
 
-    func delete(_ items: [LibraryItem]) throws {
+    // MARK: Recently Deleted
+
+    /// A deleted file or folder, kept for 30 days so it can come back.
+    struct DeletedItem: Identifiable, Hashable {
+        /// Where it lives in the trash.
+        let stored: URL
+        /// Where it was in the library.
+        let original: URL
+        let deletedAt: Date
+        let isFolder: Bool
+
+        var id: URL { stored }
+        var name: String { isFolder ? original.lastPathComponent : original.deletingPathExtension().lastPathComponent }
+    }
+
+    /// Outside Documents, so the Files app never shows it.
+    private var trash: URL { URL.applicationSupportDirectory.appending(path: "Recently Deleted", directoryHint: .isDirectory) }
+    static let keepDeletedFor: TimeInterval = 30 * 24 * 60 * 60
+
+    /// Moves items to Recently Deleted. Returns what's needed to put them back.
+    @discardableResult
+    func delete(_ items: [LibraryItem]) throws -> [DeletedItem] {
+        var deleted: [DeletedItem] = []
         for item in items {
-            try fileManager.removeItem(at: item.url)
+            // Each in its own folder, with a note of where it came from, so two files
+            // of the same name never collide and a restore knows where to go.
+            let slot = trash.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+            try fileManager.createDirectory(at: slot, withIntermediateDirectories: true)
+            let stored = slot.appending(path: item.url.lastPathComponent)
+            try fileManager.moveItem(at: item.url, to: stored)
+            try Data(item.url.path.utf8).write(to: slot.appending(path: ".origin"))
+            deleted.append(DeletedItem(stored: stored, original: item.url, deletedAt: .now, isFolder: item.isFolder))
         }
         revision += 1
+        return deleted
+    }
+
+    /// Puts deleted items back where they were, or under a new name if that spot is
+    /// taken now, or at the library root if their folder is gone.
+    @discardableResult
+    func restore(_ items: [DeletedItem]) throws -> [URL] {
+        var restored: [URL] = []
+        for item in items where fileManager.fileExists(atPath: item.stored.path) {
+            var folder = item.original.deletingLastPathComponent()
+            if !fileManager.fileExists(atPath: folder.path) { folder = root }
+            let destination = uniqueURL(for: item.original.lastPathComponent, in: folder)
+            try fileManager.moveItem(at: item.stored, to: destination)
+            try? fileManager.removeItem(at: item.stored.deletingLastPathComponent())
+            restored.append(destination)
+        }
+        revision += 1
+        return restored
+    }
+
+    func recentlyDeleted() -> [DeletedItem] {
+        let slots = (try? fileManager.contentsOfDirectory(at: trash, includingPropertiesForKeys: [.creationDateKey])) ?? []
+        return slots.compactMap { slot -> DeletedItem? in
+            guard let originPath = try? String(contentsOf: slot.appending(path: ".origin"), encoding: .utf8),
+                  let stored = (try? fileManager.contentsOfDirectory(at: slot, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]))?.first else { return nil }
+            let date = (try? slot.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .now
+            let isFolder = (try? stored.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            return DeletedItem(stored: stored, original: URL(fileURLWithPath: originPath), deletedAt: date, isFolder: isFolder)
+        }
+        .sorted { $0.deletedAt > $1.deletedAt }
+    }
+
+    /// Deletes for good.
+    func purge(_ items: [DeletedItem]) {
+        for item in items {
+            try? fileManager.removeItem(at: item.stored.deletingLastPathComponent())
+        }
+        revision += 1
+    }
+
+    /// Clears anything kept longer than 30 days. Called at launch.
+    func purgeExpired() {
+        let cutoff = Date.now.addingTimeInterval(-Self.keepDeletedFor)
+        purge(recentlyDeleted().filter { $0.deletedAt < cutoff })
+    }
+
+    /// True if the library root already has a file with this name and size, so a
+    /// browsed model shows as saved.
+    func hasCopy(of url: URL) -> Bool {
+        let candidate = root.appending(path: url.lastPathComponent)
+        guard let mine = try? candidate.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              let theirs = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return false }
+        return mine == theirs
     }
 
     @discardableResult

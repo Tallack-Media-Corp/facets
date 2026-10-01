@@ -16,6 +16,7 @@ struct ViewerScreen: View {
     @Environment(ViewerSettings.self) private var settings
     @Environment(RecentsStore.self) private var recents
     @Environment(FileLibrary.self) private var library
+    @Environment(ToastCenter.self) private var toasts
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
@@ -25,7 +26,6 @@ struct ViewerScreen: View {
     @State private var showingInfo = false
     @State private var fileSize: Int64?
     @State private var isAccessing = false
-    @State private var savedName: String?
     @State private var isSaved = false
     @State private var saveError: String?
 
@@ -50,11 +50,6 @@ struct ViewerScreen: View {
             if case .loaded(let model) = phase {
                 ViewerChips(model: model, plateID: $appearance.plateID, dimensions: Format.dimensions(visibleBounds(model).size, units: settings.units))
                     .padding(.top, 8)
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if let savedName {
-                SavedToast(name: savedName)
             }
         }
         .navigationTitle(file.name)
@@ -204,18 +199,13 @@ struct ViewerScreen: View {
         do {
             let copies = try library.importFiles([file.url], into: library.root)
             guard let copy = copies.first else { return }
-            withAnimation(.snappy) {
-                isSaved = true
-                savedName = copy.deletingPathExtension().lastPathComponent
-            }
-            Task {
-                try? await Task.sleep(for: .seconds(3))
-                withAnimation(.snappy) { savedName = nil }
-            }
+            withAnimation(.snappy) { isSaved = true }
+            toasts.show("Saved to Library as \(copy.deletingPathExtension().lastPathComponent)")
         } catch {
             saveError = error.localizedDescription
         }
     }
+
 }
 
 /// Size, and the plate picker for multi-plate projects, floating over the model.

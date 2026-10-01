@@ -40,6 +40,11 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink {
+                        RecentlyDeletedView()
+                    } label: {
+                        Label("Recently Deleted", systemImage: "trash")
+                    }
                     Button("Clear Thumbnail Cache") {
                         Task {
                             await ThumbnailStore.shared.clear()

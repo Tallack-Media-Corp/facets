@@ -15,6 +15,9 @@ struct FolderView: View {
     var isBrowsing = false
 
     @Environment(FileLibrary.self) private var library
+    @Environment(ToastCenter.self) private var toasts
+    @Environment(ViewerSettings.self) private var settings
+    @Environment(\.undoManager) private var undoManager
     @Environment(\.zoomNamespace) private var zoom
     @AppStorage("library.layout") private var layout: LibraryLayout = .grid
     @AppStorage("library.sort") private var sort: LibrarySort = .name
@@ -30,7 +33,8 @@ struct FolderView: View {
     @State private var errorMessage: String?
     @State private var watcher: FolderWatcher?
     @State private var dropTargeted = false
-    @State private var savedName: String?
+    /// Browsed models copied to the library this visit, on top of `hasCopy`.
+    @State private var saved: Set<URL> = []
 
     var body: some View {
         content
@@ -75,19 +79,14 @@ struct FolderView: View {
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive) {
-                    if let item = deleting { perform { try library.delete([item]) } }
+                    if let item = deleting { delete(item) }
                 }
             } message: {
-                Text("This can't be undone.")
+                Text("You can undo this, or restore it from Settings › Recently Deleted for 30 days.")
             }
             .sheet(item: $moving) { item in
                 MoveSheet(item: item) { destination in
                     perform { try library.move([item], to: destination) }
-                }
-            }
-            .overlay(alignment: .bottom) {
-                if let savedName {
-                    SavedToast(name: savedName)
                 }
             }
             .alert("Something went wrong", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
@@ -128,6 +127,8 @@ struct FolderView: View {
                             if !item.isFolder {
                                 ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0)
                                     .frame(width: 300, height: 300)
+                                    // Previews render outside this view's environment.
+                                    .environment(settings)
                             }
                         }
                     }
@@ -146,12 +147,12 @@ struct FolderView: View {
                     .contextMenu { actions(for: item) }
                     .swipeActions(edge: .trailing) {
                         if isBrowsing {
-                            if !item.isFolder {
+                            if !item.isFolder, !isSaved(item) {
                                 Button("Save to Library", systemImage: "plus") { save(item) }
                                     .tint(.accentColor)
                             }
                         } else {
-                            Button("Delete", systemImage: "trash", role: .destructive) { deleting = item }
+                            Button("Delete", systemImage: "trash", role: .destructive) { requestDelete(item) }
                             Button("Rename", systemImage: "pencil") { beginRename(item) }
                         }
                     }
@@ -201,7 +202,12 @@ struct FolderView: View {
         }
         if isBrowsing {
             if !item.isFolder {
-                Button("Save to Library", systemImage: "plus") { save(item) }
+                if isSaved(item) {
+                    Button("Saved to Library", systemImage: "checkmark") {}
+                        .disabled(true)
+                } else {
+                    Button("Save to Library", systemImage: "plus") { save(item) }
+                }
             }
         } else {
             libraryActions(for: item)
@@ -214,7 +220,7 @@ struct FolderView: View {
         Button("Duplicate", systemImage: "plus.square.on.square") { perform { try library.duplicate(item) } }
         Button("Move…", systemImage: "folder") { moving = item }
         Divider()
-        Button("Delete", systemImage: "trash", role: .destructive) { deleting = item }
+        Button("Delete", systemImage: "trash", role: .destructive) { requestDelete(item) }
     }
 
     private var deleteTitle: String {
@@ -232,14 +238,43 @@ struct FolderView: View {
         return .model(ModelFileRef(url: item.url, isExternal: isBrowsing))
     }
 
+    private func isSaved(_ item: LibraryItem) -> Bool {
+        saved.contains(item.url) || library.hasCopy(of: item.url)
+    }
+
     private func save(_ item: LibraryItem) {
         perform {
             guard let copy = try library.importFiles([item.url], into: library.root).first else { return }
-            withAnimation(.snappy) { savedName = copy.deletingPathExtension().lastPathComponent }
-            Task {
-                try? await Task.sleep(for: .seconds(2.5))
-                withAnimation(.snappy) { savedName = nil }
+            saved.insert(item.url)
+            toasts.show("Saved to Library as \(copy.deletingPathExtension().lastPathComponent)")
+        }
+    }
+
+    /// A file goes straight away, with Undo; a folder asks first, because it may hold
+    /// a lot more than it shows.
+    private func requestDelete(_ item: LibraryItem) {
+        if item.isFolder {
+            deleting = item
+        } else {
+            delete(item)
+        }
+    }
+
+    private func delete(_ item: LibraryItem) {
+        perform {
+            let deleted = try library.delete([item])
+            let undo = { [library, toasts] in
+                do {
+                    try library.restore(deleted)
+                } catch {
+                    toasts.show("Couldn't put \(item.name) back. It's still in Settings › Recently Deleted.", symbol: "exclamationmark.triangle.fill")
+                }
             }
+            undoManager?.registerUndo(withTarget: library) { _ in
+                MainActor.assumeIsolated { undo() }
+            }
+            undoManager?.setActionName("Delete \(item.name)")
+            toasts.show("Deleted \(item.name)", symbol: "trash.fill", actionTitle: "Undo", action: undo)
         }
     }
 
@@ -262,32 +297,56 @@ struct FolderView: View {
     }
 
     /// Files dragged in from Files or another app (iPad). Each provider hands over a
-    /// temporary copy that only lives for the callback, so it's copied straight away.
+    /// temporary copy that only lives for its callback, so it's copied out straight
+    /// away; then everything is imported together and the result reported.
     private func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
+        let supported = providers.compactMap { provider -> (NSItemProvider, UTType)? in
+            UTType.models.first { provider.hasItemConformingToTypeIdentifier($0.identifier) }.map { (provider, $0) }
+        }
+        guard !supported.isEmpty else { return false }
         let destination = folder
-        var accepted = false
-        for provider in providers {
-            guard let type = UTType.models.first(where: { provider.hasItemConformingToTypeIdentifier($0.identifier) }) else { continue }
-            accepted = true
-            let suggested = provider.suggestedName
+        let total = providers.count
+        Task {
+            var staged: [URL] = []
+            for (provider, type) in supported {
+                if let url = await Self.stage(provider, type: type) { staged.append(url) }
+            }
+            var added = 0
+            if !staged.isEmpty, let copies = try? library.importFiles(staged, into: destination) {
+                added = copies.count
+            }
+            for url in staged { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+            let missed = total - added
+            switch (added, missed) {
+            case (0, _):
+                toasts.show(total == 1 ? "Couldn't add that file. Only STL and 3MF files can go in the library." : "Couldn't add those files. Only STL and 3MF files can go in the library.", symbol: "exclamationmark.triangle.fill")
+            case (_, 0):
+                toasts.show(added == 1 ? "Added 1 model" : "Added \(added) models")
+            default:
+                toasts.show("Added \(added) of \(total). The others aren't STL or 3MF files.", symbol: "exclamationmark.triangle.fill")
+            }
+        }
+        return true
+    }
+
+    /// Copies a dropped file somewhere it outlives the provider's callback.
+    private static func stage(_ provider: NSItemProvider, type: UTType) async -> URL? {
+        let suggested = provider.suggestedName
+        return await withCheckedContinuation { continuation in
             _ = provider.loadFileRepresentation(forTypeIdentifier: type.identifier) { url, _ in
-                guard let url else { return }
+                guard let url else { return continuation.resume(returning: nil) }
                 let staging = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
                 let name = suggested.map { $0.hasSuffix(".\(url.pathExtension)") ? $0 : "\($0).\(url.pathExtension)" } ?? url.lastPathComponent
                 let copy = staging.appending(path: name)
                 do {
                     try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
                     try FileManager.default.copyItem(at: url, to: copy)
+                    continuation.resume(returning: copy)
                 } catch {
-                    return
-                }
-                Task { @MainActor in
-                    _ = try? library.importFiles([copy], into: destination)
-                    try? FileManager.default.removeItem(at: staging)
+                    continuation.resume(returning: nil)
                 }
             }
         }
-        return accepted
     }
 }
 
@@ -358,21 +417,6 @@ struct CloudTile: View {
     }
 }
 
-/// "Saved to Library" confirmation that floats above the content for a moment.
-struct SavedToast: View {
-    let name: String
-
-    var body: some View {
-        Label("Saved to Library as \(name)", systemImage: "checkmark.circle.fill")
-            .font(.subheadline.weight(.medium))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .glassEffect(.regular, in: .capsule)
-            .padding(.bottom, 12)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-    }
-}
-
 struct LibraryRow: View {
     let item: LibraryItem
 
@@ -420,6 +464,8 @@ struct MoveSheet: View {
     let onMove: (URL) -> Void
 
     @Environment(FileLibrary.self) private var library
+    @Environment(ToastCenter.self) private var toasts
+    @Environment(\.undoManager) private var undoManager
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
