@@ -1,0 +1,4 @@
+// Copy to Config/Local.xcconfig (git-ignored) and fill in your own values to run
+// on a device. Nothing in this file is committed.
+DEVELOPMENT_TEAM = ABCDE12345
+FACET_BUNDLE_ID = com.yourname.facet

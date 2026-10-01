@@ -1,0 +1,10 @@
+// Shared build settings. Anything tied to an Apple developer account lives in
+// Local.xcconfig, which is git-ignored. Copy Local.example.xcconfig to start one.
+
+// Bundle id of the app; the extensions append .preview and .thumbnail.
+FACET_BUNDLE_ID = com.example.facet
+
+// Leave empty to build for the simulator without signing in.
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"
