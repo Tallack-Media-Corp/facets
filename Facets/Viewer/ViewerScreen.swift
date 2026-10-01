@@ -25,6 +25,9 @@ struct ViewerScreen: View {
     @State private var controller = ModelCanvasController()
     @State private var showingInfo = false
     @State private var infoDetent = PresentationDetent.medium
+    /// How many times someone has moved a model; the gesture hint stops after that.
+    @AppStorage("viewer.interactions") private var interactions = 0
+    @State private var showingHint = false
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var fileSize: Int64?
     @State private var isAccessing = false
@@ -55,7 +58,9 @@ struct ViewerScreen: View {
                     }
                 }
             case .loaded(let model):
-                ModelCanvas(model: model, appearance: appearance, controller: controller, bottomObscured: obscuredBySheet)
+                ModelCanvas(model: model, appearance: appearance, controller: controller, bottomObscured: obscuredBySheet) {
+                    noteInteraction()
+                }
                     .ignoresSafeArea()
                     .accessibilityLabel("\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))")
                     .accessibilityHint("Drag to turn, pinch to zoom, double tap to fit.")
@@ -70,6 +75,13 @@ struct ViewerScreen: View {
                     spokenDimensions: Format.spokenDimensions(visibleBounds(model).size, units: settings.units)
                 )
                     .padding(.top, 8)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if showingHint {
+                GestureHint()
+                    .padding(.bottom, 12)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
         .navigationTitle(displayName)
@@ -190,6 +202,24 @@ struct ViewerScreen: View {
         showingInfo && infoDetent == .medium && sizeClass == .compact ? 0.5 : 0
     }
 
+    /// The first few times a model opens, show how to move it, until it's been moved.
+    private func offerGestureHint() {
+        guard interactions < 2, !UIAccessibility.isVoiceOverRunning else { return }
+        Task {
+            try? await Task.sleep(for: .seconds(0.6))
+            withAnimation(.easeOut(duration: 0.3)) { showingHint = true }
+            try? await Task.sleep(for: .seconds(6))
+            withAnimation(.easeIn(duration: 0.3)) { showingHint = false }
+        }
+    }
+
+    private func noteInteraction() {
+        if showingHint {
+            withAnimation(.easeIn(duration: 0.25)) { showingHint = false }
+        }
+        if interactions < 2 { interactions += 1 }
+    }
+
     private var isLoaded: Bool {
         if case .loaded = phase { return true }
         return false
@@ -216,6 +246,7 @@ struct ViewerScreen: View {
             // A multi-plate project opens on its first plate, like the slicer.
             appearance.plateID = model.plates.first?.id
             phase = .loaded(model)
+            offerGestureHint()
             #if DEBUG
             if ProcessInfo.processInfo.environment["FACETS_INFO"] == "1" { showingInfo = true }
             #endif
@@ -306,3 +337,17 @@ struct ViewerBackground: View {
     }
 }
 
+/// How to move a model, shown the first few times one opens.
+private struct GestureHint: View {
+    var body: some View {
+        Label("Drag to turn · Pinch to zoom", systemImage: "hand.draw")
+            .font(.subheadline.weight(.medium))
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .glassEffect(.regular, in: .capsule)
+            .padding(.horizontal)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}

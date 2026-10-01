@@ -208,6 +208,9 @@ On iPhone, when the info sheet sits at its medium height, the model scales down 
 
 The viewer and every thumbnail are the same object at two scales: a Stage or Tile gradient, the model lit by the studio rig in Filament Orange (or its file colours), and in the viewer a fading millimetre grid at the model's base. Thumbnails render on a transparent background and sit on the Tile gradient, framed tightly on the model's real silhouette from the isometric view.
 
+### Gesture Hint
+- The first times a model opens, a regular-glass capsule above the bottom toolbar reads "Drag to turn · Pinch to zoom" (hand.draw symbol, Card Title type). It fades on the first touch or after 6 seconds, stops for good after two interactions, and never shows with VoiceOver on (the canvas has its own spoken hint). One line on the smallest iPhone; no tours, no coach marks elsewhere.
+
 ### Errors
 - Never the system's error sentence. Say what happened and what to do, in a heading and one or two plain sentences ("File Not Found" / "It was moved, renamed or deleted since Facets last saw it."), with the next action as a button (Try Again, Remove from Recents). Alerts for failed actions name the action ("Couldn't Rename").
 
