@@ -34,6 +34,11 @@ struct SettingsView: View {
 
                 Section("Viewer") {
                     Toggle("Show Build Plate Grid", isOn: $settings.showsGrid)
+                    NavigationLink {
+                        PrinterBedPicker()
+                    } label: {
+                        LabeledContent("Printer Bed", value: settings.bed?.title ?? "None")
+                    }
                     Picker("Units", selection: $settings.units) {
                         ForEach(MeasurementUnits.allCases) { Text($0.title).tag($0) }
                     }

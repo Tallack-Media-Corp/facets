@@ -13,6 +13,10 @@ public struct RenderAppearance: Sendable, Equatable {
     public var hiddenObjects: Set<Int> = []
     /// Show only one slicer plate; nil shows everything.
     public var plateID: Int?
+    /// A printer bed drawn on the grid, from `Model3D.bedFit`.
+    public var bed: BedFit?
+    /// Outline colour when the model is too big for the bed (linear).
+    public var warningColor = RenderAppearance.defaultColor
 
     public init(baseColor: SIMD4<Float> = RenderAppearance.defaultColor) {
         self.baseColor = baseColor
@@ -42,6 +46,8 @@ private struct GridUniforms {
     var color: SIMD4<Float>
     var params: SIMD4<Float>
     var rect: SIMD4<Float>
+    var bed: SIMD4<Float>
+    var bedColor: SIMD4<Float>
 }
 
 private struct PartUniforms {
@@ -64,7 +70,7 @@ public final class SceneRenderer {
     public private(set) var model: Model3D?
     public var appearance = RenderAppearance() {
         didSet {
-            if appearance.plateID != oldValue.plateID || appearance.hiddenObjects != oldValue.hiddenObjects {
+            if appearance.plateID != oldValue.plateID || appearance.hiddenObjects != oldValue.hiddenObjects || appearance.bed != oldValue.bed {
                 rebuildGrid()
             }
         }
@@ -157,10 +163,13 @@ public final class SceneRenderer {
 
         if appearance.showsGrid, let grid {
             let center = gridBounds.center, half = gridBounds.size / 2
+            let bed = appearance.bed
             var uniforms = GridUniforms(
                 color: appearance.gridColor,
-                params: SIMD4(grid.step, 0.9 * pixelsPerPoint, 0, 0),
-                rect: SIMD4(center.x, center.y, half.x, half.y)
+                params: SIMD4(grid.step, 0.9 * pixelsPerPoint, bed == nil ? 0 : (bed!.fits ? 1 : 2), 0),
+                rect: SIMD4(center.x, center.y, half.x, half.y),
+                bed: bed.map { SIMD4($0.min.x, $0.min.y, $0.max.x, $0.max.y) } ?? .zero,
+                bedColor: appearance.warningColor
             )
             encoder.setRenderPipelineState(context.gridPipeline)
             encoder.setDepthStencilState(context.depthReadOnly)
@@ -187,8 +196,12 @@ public final class SceneRenderer {
     private func rebuildGrid() {
         grid = nil
         gridBounds = .empty
-        let bounds = focusBounds
+        var bounds = focusBounds
         guard !bounds.isEmpty else { return }
+        // The plate has to reach past the bed outline, or the outline would fade out.
+        if let bed = appearance.bed {
+            bounds = bounds.union(Bounds(min: SIMD3(bed.min, bounds.min.z), max: SIMD3(bed.max, bounds.min.z)))
+        }
         let size = bounds.size
         let span = max(size.x, size.y, 1)
         let step: Float = [0.5, 1, 2, 5, 10, 20, 50, 100].first { span / $0 <= 16 } ?? 100

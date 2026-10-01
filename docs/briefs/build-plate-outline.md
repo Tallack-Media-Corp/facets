@@ -1,11 +1,13 @@
 # Brief: build-plate outline
 
-Confirmed with Brennan, 1 October 2026 (Impeccable shape). Build after the adapt and onboard passes.
+Confirmed with Brennan, 1 October 2026 (Impeccable shape). Built the same day.
+
+**As built:** the bed's size and fit go in a second line of the size chip ("Fits the Bambu Lab A1" / "Too big for the Bambu Lab A1 by 39.9 mm") rather than a label drawn on the 3D bed corner, which would need text rendering in Metal. The H2D is 350 × 320 (from its own project files), not the 325 × 320 first listed. Bambu/Orca plate origins: a grid ⌈√n⌉ plates wide, each step 1.2 × the project's bed, rows toward −Y; checked on four real projects.
 
 1. **Job.** A hobbyist who has just opened a model on their phone wants to know at a glance whether it fits their printer, instead of comparing "W 156.5 · D 176.0 · H 79.6 mm" against their bed in their head.
 2. **Outcome.** The viewer draws the user's bed as an outline on the grid, with its width and depth labelled at one corner. If the part's footprint is bigger than the bed, the outline turns Filament Orange and the size chip adds "Too big for A1 by 12 mm". A warning, never a block.
 3. **Bed choice.** Settings › Viewer gains "Printer bed": None (default), presets grouped by make, and Custom (width × depth, in the chosen units). The viewer's grid button becomes a menu (Grid on/off plus the bed list) so another printer can be tried without leaving the model.
-   - Bambu Lab: A1 mini 180×180; A1, P1S, P2S, X1C 256×256; H2D 325×320.
+   - Bambu Lab: A1 mini 180×180; A1, P1S, P2S, X1C 256×256; H2D 350×320.
    - Prusa: MINI+ 180×180; MK4S 250×210; Core One 250×220; XL 360×360.
    - Creality and others: Ender-3 V3 220×220; K1 220×220; K2 Plus 350×350; Elegoo Neptune 4 Pro 225×225; Voron 2.4 350×350.
    - **These sizes are from memory: verify each against the manufacturer's published spec before shipping.**

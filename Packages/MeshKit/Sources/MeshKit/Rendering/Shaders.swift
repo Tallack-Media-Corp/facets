@@ -67,8 +67,10 @@ enum ShaderSource {
 
     struct Grid {
         float4 color;
-        float4 params; // x: step (mm), y: line width (pixels)
-        float4 rect;   // centre xy, half size xy
+        float4 params;    // x: step (mm), y: line width (pixels), z: bed state (0 none, 1 fits, 2 too big)
+        float4 rect;      // centre xy, half size xy
+        float4 bed;       // bed min xy, max xy
+        float4 bedColor;  // outline colour when the part is too big
     };
 
     struct GridOut {
@@ -108,7 +110,26 @@ enum ShaderSource {
         float2 t = abs(in.world - grid.rect.xy) / grid.rect.zw;
         float edge = 1.0 - smoothstep(0.55, 1.0, max(t.x, t.y));
         float a = grid.color.a * (lines + 0.10) * edge;
-        return float4(grid.color.rgb * a, a);
+        float3 rgb = grid.color.rgb;
+
+        float state = grid.params.z;
+        if (state > 0.5) {
+            // The chosen printer's bed: a firm outline, a slightly brighter plate
+            // inside it, and the grid outside quieter, so the bed reads at a glance.
+            float2 lo = grid.bed.xy, hi = grid.bed.zw;
+            bool inside = all(in.world >= lo) && all(in.world <= hi);
+            float2 d = min(abs(in.world - lo), abs(in.world - hi));
+            float2 px = max(fwidth(in.world), float2(1e-5));
+            float distX = (in.world.y >= lo.y - px.y && in.world.y <= hi.y + px.y) ? d.x / px.x : 1e6;
+            float distY = (in.world.x >= lo.x - px.x && in.world.x <= hi.x + px.x) ? d.y / px.y : 1e6;
+            float outline = 1.0 - smoothstep(width * 1.2, width * 2.2, min(distX, distY));
+            a = inside ? a + grid.color.a * 0.10 : a * 0.45;
+            float3 outlineRGB = state > 1.5 ? grid.bedColor.rgb : grid.color.rgb;
+            float outlineA = state > 1.5 ? 0.95 : min(grid.color.a * 3.0, 0.8);
+            rgb = mix(rgb, outlineRGB, outline);
+            a = max(a, outline * outlineA);
+        }
+        return float4(rgb * a, a);
     }
     """
 }

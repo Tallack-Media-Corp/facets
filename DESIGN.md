@@ -208,6 +208,11 @@ On iPhone, when the info sheet sits at its medium height, the model scales down 
 
 The viewer and every thumbnail are the same object at two scales: a Stage or Tile gradient, the model lit by the studio rig in Filament Orange (or its file colours), and in the viewer a fading millimetre grid at the model's base. Thumbnails render on a transparent background and sit on the Tile gradient, framed tightly on the model's real silhouette from the isometric view.
 
+### Printer Bed Outline
+- When a printer bed is chosen (Settings › Viewer › Printer Bed, or the viewer's build-plate menu), the grid shader draws its outline under the model: Grid Ink at up to 80% when the part fits, Filament Orange at 95% when it doesn't. Inside the bed the plate brightens slightly; outside, the grid drops to 45% so the bed reads first.
+- The readout chip gains a second line in Caption: "Fits the Bambu Lab A1" (secondary, checkmark) or "Too big for the Bambu Lab A1 by 39.9 mm" (tint, warning triangle); the chip becomes a 16pt-corner rounded rectangle while it has two lines.
+- Slicer projects keep their real plate positions; anything else centres the bed under the model. Hidden when all plates show at once.
+
 ### Gesture Hint
 - The first times a model opens, a regular-glass capsule above the bottom toolbar reads "Drag to turn · Pinch to zoom" (hand.draw symbol, Card Title type). It fades on the first touch or after 6 seconds, stops for good after two interactions, and never shows with VoiceOver on (the canvas has its own spoken hint). One line on the smallest iPhone; no tours, no coach marks elsewhere.
 

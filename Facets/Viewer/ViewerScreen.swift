@@ -58,11 +58,11 @@ struct ViewerScreen: View {
                     }
                 }
             case .loaded(let model):
-                ModelCanvas(model: model, appearance: appearance, controller: controller, bottomObscured: obscuredBySheet) {
+                ModelCanvas(model: model, appearance: staged(appearance, for: model), controller: controller, bottomObscured: obscuredBySheet) {
                     noteInteraction()
                 }
                     .ignoresSafeArea()
-                    .accessibilityLabel("\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))")
+                    .accessibilityLabel("\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))\(fitNote(for: model).map { ". \($0.text)" } ?? "")")
                     .accessibilityHint("Drag to turn, pinch to zoom, double tap to fit.")
             }
         }
@@ -72,7 +72,8 @@ struct ViewerScreen: View {
                     model: model,
                     plateID: $appearance.plateID,
                     dimensions: Format.dimensions(visibleBounds(model).size, units: settings.units),
-                    spokenDimensions: Format.spokenDimensions(visibleBounds(model).size, units: settings.units)
+                    spokenDimensions: Format.spokenDimensions(visibleBounds(model).size, units: settings.units),
+                    fitNote: fitNote(for: model)
                 )
                     .padding(.top, 8)
             }
@@ -159,9 +160,7 @@ struct ViewerScreen: View {
                 }
             }
             ToolbarItem(placement: .bottomBar) {
-                Toggle(isOn: $appearance.showsGrid) {
-                    Label("Build Plate Grid", systemImage: "grid")
-                }
+                buildPlateMenu
             }
             ToolbarSpacer(.flexible, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) {
@@ -195,6 +194,52 @@ struct ViewerScreen: View {
     }
 
     private var displayName: String { Format.title(fromFileName: file.name) }
+
+    /// The grid and printer bed, together in one menu: try another printer without
+    /// leaving the model. A chosen bed is remembered, like in Settings.
+    private var buildPlateMenu: some View {
+        Menu {
+            Toggle("Show Grid", isOn: $appearance.showsGrid)
+            Picker("Printer Bed", selection: Binding(
+                get: { settings.bedID },
+                set: { id in
+                    settings.bedID = id
+                    if id != nil { appearance.showsGrid = true }
+                }
+            )) {
+                Text("No Printer Bed").tag(String?.none)
+                ForEach(PrinterBed.byMake, id: \.make) { group in
+                    Section(group.make) {
+                        ForEach(group.beds) { bed in
+                            Text(bed.name).tag(Optional(bed.id))
+                        }
+                    }
+                }
+                if settings.customBedWidth > 0 {
+                    Text("Custom (\(Format.dimension(settings.customBedWidth, units: settings.units)) × \(Format.dimension(settings.customBedDepth, units: settings.units)))").tag(Optional(PrinterBed.customID))
+                }
+            }
+        } label: {
+            Label("Build Plate", systemImage: appearance.showsGrid ? "grid" : "square.dashed")
+        }
+    }
+
+    /// The appearance with the chosen bed placed under what's showing.
+    private func staged(_ appearance: RenderAppearance, for model: Model3D) -> RenderAppearance {
+        var staged = appearance
+        if let bed = settings.bed {
+            staged.bed = model.bedFit(width: bed.width, depth: bed.depth, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
+        }
+        return staged
+    }
+
+    /// "Fits the Bambu Lab A1" or "Too big for the Bambu Lab A1 by 12.0 mm".
+    private func fitNote(for model: Model3D) -> (text: String, tooBig: Bool)? {
+        guard let bed = settings.bed,
+              let fit = model.bedFit(width: bed.width, depth: bed.depth, plateID: appearance.plateID, hidden: appearance.hiddenObjects) else { return nil }
+        if fit.fits { return ("Fits the \(bed.title)", false) }
+        return ("Too big for the \(bed.title) by \(Format.dimension(fit.overhang, units: settings.units))", true)
+    }
 
     /// On iPhone the info sheet's medium detent covers the lower half; keep the model
     /// in view above it so hiding an object shows what changed.
@@ -285,6 +330,7 @@ private struct ViewerChips: View {
     @Binding var plateID: Int?
     let dimensions: String
     let spokenDimensions: String
+    let fitNote: (text: String, tooBig: Bool)?
 
     var body: some View {
         GlassEffectContainer(spacing: 8) {
@@ -314,12 +360,21 @@ private struct ViewerChips: View {
                     .glassEffect(.regular.interactive(), in: .capsule)
                     .accessibilityLabel("Plate: \(plateTitle)")
                 }
-                Text(dimensions)
-                    .font(.footnote.weight(.medium).monospacedDigit())
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .glassEffect(.regular, in: .capsule)
-                    .accessibilityLabel("Size: \(spokenDimensions)")
+                VStack(spacing: 2) {
+                    Text(dimensions)
+                        .font(.footnote.weight(.medium).monospacedDigit())
+                    if let fitNote {
+                        Label(fitNote.text, systemImage: fitNote.tooBig ? "exclamationmark.triangle.fill" : "checkmark.circle")
+                            .font(.caption.weight(.medium).monospacedDigit())
+                            .foregroundStyle(fitNote.tooBig ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .glassEffect(.regular, in: fitNote == nil ? AnyShape(.capsule) : AnyShape(.rect(cornerRadius: 16)))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Size: \(spokenDimensions)\(fitNote.map { ". \($0.text)" } ?? "")")
             }
         }
     }

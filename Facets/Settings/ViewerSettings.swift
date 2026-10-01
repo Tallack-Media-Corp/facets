@@ -51,12 +51,38 @@ final class ViewerSettings {
         didSet { defaults.set(units.rawValue, forKey: "viewer.units") }
     }
 
+    /// The printer bed drawn in the viewer: a preset id, "custom", or nil for none.
+    var bedID: String? {
+        didSet { defaults.set(bedID, forKey: "viewer.bed") }
+    }
+
+    /// The custom bed, in millimetres.
+    var customBedWidth: Float {
+        didSet { defaults.set(customBedWidth, forKey: "viewer.bed.width") }
+    }
+
+    var customBedDepth: Float {
+        didSet { defaults.set(customBedDepth, forKey: "viewer.bed.depth") }
+    }
+
+    var bed: PrinterBed? {
+        guard let bedID else { return nil }
+        if bedID == PrinterBed.customID {
+            guard customBedWidth > 0, customBedDepth > 0 else { return nil }
+            return PrinterBed(id: PrinterBed.customID, make: "Custom", name: "bed", width: customBedWidth, depth: customBedDepth)
+        }
+        return PrinterBed.presets.first { $0.id == bedID }
+    }
+
     init() {
         let saved = defaults.string(forKey: "viewer.color")
         // The Orange preset was #F2802E before the design system settled on one orange.
         colorHex = (saved == nil || saved == "#F2802E") ? Palette.filamentOrange : saved!
         usesFileColors = defaults.object(forKey: "viewer.fileColors") as? Bool ?? true
         showsGrid = defaults.object(forKey: "viewer.grid") as? Bool ?? true
+        bedID = defaults.string(forKey: "viewer.bed")
+        customBedWidth = defaults.object(forKey: "viewer.bed.width") as? Float ?? 256
+        customBedDepth = defaults.object(forKey: "viewer.bed.depth") as? Float ?? 256
         units = MeasurementUnits(rawValue: defaults.string(forKey: "viewer.units") ?? "")
             ?? (Locale.current.measurementSystem == .us ? .inches : .millimetres)
     }

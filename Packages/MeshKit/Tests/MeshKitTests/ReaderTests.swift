@@ -321,3 +321,46 @@ private let rels = """
         #expect(camera.eye.z > 9.9)
     }
 }
+
+// MARK: - Printer bed
+
+@Suite struct BedFitTests {
+    private func cube(at offset: SIMD3<Float>, size: Float, objectID: Int) -> ModelPart {
+        let geometry = MeshGeometry(positions: [0, 0, 0, size, 0, 0, 0, size, 0, 0, 0, size])
+        return ModelPart(id: objectID, name: "c", geometry: geometry, transform: simd_float4x4(translation: offset), objectID: objectID)
+    }
+
+    @Test func centresUnderPlainModels() throws {
+        let model = Model3D(format: .stl, parts: [cube(at: [10, 20, 0], size: 100, objectID: 0)], objects: [ModelObject(id: 0, name: "c")])
+        let fit = try #require(model.bedFit(width: 256, depth: 256, plateID: nil, hidden: []))
+        #expect(fit.fits)
+        #expect(fit.min == SIMD2<Float>(60 - 128, 70 - 128), "min was \(fit.min)")
+        let small = try #require(model.bedFit(width: 80, depth: 256, plateID: nil, hidden: []))
+        #expect(!small.fits)
+        #expect(abs(small.overhang - 20) < 0.001)
+    }
+
+    @Test func slicerProjectsKeepTheirPlates() throws {
+        // Plate 2 of a two-plate 256 mm project sits one stride (307.2 mm) along X.
+        let parts = [cube(at: [50, 50, 0], size: 60, objectID: 0), cube(at: [357.2, 50, 0], size: 60, objectID: 1)]
+        let plates = [Plate(id: 1, name: nil, objectIDs: [0]), Plate(id: 2, name: nil, objectIDs: [1])]
+        let model = Model3D(format: .threeMF, parts: parts, objects: [], plates: plates, slicerBed: SlicerBed(width: 256, depth: 256, printer: nil, plateCount: 2))
+        let second = try #require(model.bedFit(width: 256, depth: 256, plateID: 2, hidden: []))
+        #expect(abs(second.min.x - 307.2) < 0.01)
+        #expect(second.min.y == 0)
+        #expect(model.bedFit(width: 256, depth: 256, plateID: nil, hidden: []) == nil)
+    }
+
+    @Test func plateGridWrapsRows() {
+        let bed = SlicerBed(width: 256, depth: 256, printer: nil, plateCount: 5)
+        #expect(bed.origin(ofPlate: 4) == SIMD2(0, -307.2))
+        #expect(bed.origin(ofPlate: 3).x == 614.4)
+    }
+}
+
+private extension simd_float4x4 {
+    init(translation t: SIMD3<Float>) {
+        self = matrix_identity_float4x4
+        columns.3 = SIMD4(t, 1)
+    }
+}

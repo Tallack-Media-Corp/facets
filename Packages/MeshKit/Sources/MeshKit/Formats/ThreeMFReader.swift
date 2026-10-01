@@ -187,7 +187,8 @@ private struct Reader {
             objects: objects,
             plates: modelPlates.count > 1 ? modelPlates : [],
             title: root.metadata["Title"].flatMap { $0.isEmpty ? nil : $0 },
-            application: root.metadata["Application"]
+            application: root.metadata["Application"],
+            slicerBed: slicerBed(plateCount: plates.count)
         )
     }
 
@@ -409,6 +410,36 @@ private struct Reader {
             }
             return (objects, plates)
         }
+    }
+
+    /// The bed the project was arranged on. Bambu Studio and Orca store it as a
+    /// `printable_area` polygon in project settings; PrusaSlicer as `bed_shape` in its
+    /// config.
+    private func slicerBed(plateCount: Int) -> SlicerBed? {
+        func box(_ points: [String]) -> SIMD2<Float>? {
+            let xy = points.compactMap { point -> SIMD2<Float>? in
+                let parts = point.split(separator: "x").compactMap { Float($0.trimmingCharacters(in: .whitespaces)) }
+                return parts.count == 2 ? SIMD2(parts[0], parts[1]) : nil
+            }
+            guard xy.count >= 3 else { return nil }
+            let lo = xy.reduce(SIMD2<Float>(repeating: .infinity)) { simd_min($0, $1) }
+            let hi = xy.reduce(SIMD2<Float>(repeating: -.infinity)) { simd_max($0, $1) }
+            let size = hi - lo
+            return size.x > 0 && size.y > 0 ? size : nil
+        }
+        if let data = try? archive.data(for: "Metadata/project_settings.config"),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let area = json["printable_area"] as? [String], let size = box(area) {
+            return SlicerBed(width: size.x, depth: size.y, printer: json["printer_model"] as? String, plateCount: plateCount)
+        }
+        if let data = try? archive.data(for: "Metadata/Slic3r_PE.config"),
+           let text = String(data: data, encoding: .utf8),
+           let line = text.split(separator: "\n").first(where: { $0.contains("bed_shape =") }),
+           let value = line.split(separator: "=").last,
+           let size = box(value.split(separator: ",").map(String.init)) {
+            return SlicerBed(width: size.x, depth: size.y, printer: nil, plateCount: 1)
+        }
+        return nil
     }
 
     /// Filament colours from Bambu Studio / Orca project settings, indexed by extruder.

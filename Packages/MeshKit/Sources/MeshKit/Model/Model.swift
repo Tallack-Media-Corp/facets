@@ -159,6 +159,45 @@ public enum ModelFormat: String, Sendable {
     case threeMF = "3MF"
 }
 
+/// The printer bed a slicer project was laid out on, read from the project's own
+/// settings (Bambu Studio and Orca `printable_area`, PrusaSlicer `bed_shape`).
+public struct SlicerBed: Sendable, Equatable {
+    public let width: Float
+    public let depth: Float
+    /// "Bambu Lab X1 Carbon", when the project says.
+    public let printer: String?
+    /// Plates in the project, including empty ones; the layout depends on it.
+    public let plateCount: Int
+
+    public init(width: Float, depth: Float, printer: String?, plateCount: Int) {
+        self.width = width
+        self.depth = depth
+        self.printer = printer
+        self.plateCount = max(plateCount, 1)
+    }
+
+    /// Bambu Studio and Orca lay plates out in a grid ⌈√n⌉ wide, rows running toward
+    /// −Y, each step 1.2 bed-widths (the slicers' 1/5 plate gap). Checked against real
+    /// multi-plate projects on 256 and 350 × 320 mm beds.
+    public func origin(ofPlate plateID: Int) -> SIMD2<Float> {
+        let index = max(plateID - 1, 0)
+        let columns = Int(Float(plateCount).squareRoot().rounded(.up))
+        let column = index % max(columns, 1), row = index / max(columns, 1)
+        return SIMD2(Float(column) * width * 1.2, -Float(row) * depth * 1.2)
+    }
+}
+
+/// Where a chosen printer bed sits under the model, and whether the model fits.
+public struct BedFit: Sendable, Equatable {
+    /// The bed's corners in model coordinates (millimetres).
+    public let min: SIMD2<Float>
+    public let max: SIMD2<Float>
+    /// How far the footprint is bigger than the bed, in mm; zero when it fits.
+    public let overhang: Float
+
+    public var fits: Bool { overhang <= 0.05 }
+}
+
 /// Everything read from one file.
 public struct Model3D: Sendable, Identifiable {
     public let id = UUID()
@@ -169,14 +208,40 @@ public struct Model3D: Sendable, Identifiable {
     /// Title or application from the file's metadata, when it has one.
     public let title: String?
     public let application: String?
+    /// The bed a slicer project was arranged on; nil for STL and plain 3MF.
+    public let slicerBed: SlicerBed?
 
-    public init(format: ModelFormat, parts: [ModelPart], objects: [ModelObject], plates: [Plate] = [], title: String? = nil, application: String? = nil) {
+    public init(format: ModelFormat, parts: [ModelPart], objects: [ModelObject], plates: [Plate] = [], title: String? = nil, application: String? = nil, slicerBed: SlicerBed? = nil) {
         self.format = format
         self.parts = parts
         self.objects = objects
         self.plates = plates
         self.title = title
         self.application = application
+        self.slicerBed = slicerBed
+    }
+
+    /// Places a `width` × `depth` bed under what's visible and checks the footprint.
+    /// A slicer project keeps its real layout: the bed is centred on the plate the
+    /// project used (identical to the slicer when the beds match). Anything else
+    /// centres the bed under the model. Nil when several plates are showing at once,
+    /// since they can't share one bed.
+    public func bedFit(width: Float, depth: Float, plateID: Int?, hidden: Set<Int>) -> BedFit? {
+        guard width > 0, depth > 0 else { return nil }
+        if !plates.isEmpty, plateID == nil { return nil }
+        let footprint = bounds(of: visibleParts(plateID: plateID, hidden: hidden))
+        guard !footprint.isEmpty else { return nil }
+
+        let centre: SIMD2<Float>
+        if let slicerBed {
+            let origin = slicerBed.origin(ofPlate: plateID ?? 1)
+            centre = origin + SIMD2(slicerBed.width, slicerBed.depth) / 2
+        } else {
+            centre = SIMD2(footprint.center.x, footprint.center.y)
+        }
+        let half = SIMD2(width, depth) / 2
+        let overhang = Swift.max(footprint.size.x - width, footprint.size.y - depth, 0)
+        return BedFit(min: centre - half, max: centre + half, overhang: overhang)
     }
 
     public var bounds: Bounds { bounds(of: parts) }
