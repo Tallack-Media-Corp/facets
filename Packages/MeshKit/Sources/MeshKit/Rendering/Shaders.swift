@@ -123,6 +123,12 @@ enum ShaderSource {
             float distX = (in.world.y >= lo.y - px.y && in.world.y <= hi.y + px.y) ? d.x / px.x : 1e6;
             float distY = (in.world.x >= lo.x - px.x && in.world.x <= hi.x + px.x) ? d.y / px.y : 1e6;
             float outline = 1.0 - smoothstep(width * 1.2, width * 2.2, min(distX, distY));
+            if (state > 1.5) {
+                // Doesn't fit: the outline breaks into dashes, so the warning reads
+                // without relying on colour (the model is often the same orange).
+                float along = distX < distY ? in.world.y / px.y : in.world.x / px.x;
+                outline *= metal::step(0.42, fract(along / (width * 9.0)));
+            }
             a = inside ? a + grid.color.a * 0.10 : a * 0.45;
             float3 outlineRGB = state > 1.5 ? grid.bedColor.rgb : grid.color.rgb;
             float outlineA = state > 1.5 ? 0.95 : min(grid.color.a * 3.0, 0.8);
