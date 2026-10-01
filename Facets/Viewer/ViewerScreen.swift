@@ -233,17 +233,38 @@ struct ViewerScreen: View {
     private func staged(_ appearance: RenderAppearance, for model: Model3D) -> RenderAppearance {
         var staged = appearance
         if let bed = settings.bed {
-            staged.bed = model.bedFit(width: bed.width, depth: bed.depth, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
+            staged.bed = model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
         }
         return staged
     }
 
-    /// "Fits the Bambu Lab A1" or "Too big for the Bambu Lab A1 by 12.0 mm".
+    /// What the chosen bed makes of the model, naming the side that's over:
+    /// "Fits the Bambu Lab A1", "Fits the Prusa MK4S turned 90°",
+    /// "Too tall for the Bambu Lab A1 by 12.0 mm", or for a slicer project laid out
+    /// partly off its plate, "Fits the Bambu Lab A1, but runs off the plate as arranged".
     private func fitNote(for model: Model3D) -> (text: String, tooBig: Bool)? {
         guard let bed = settings.bed,
-              let fit = model.bedFit(width: bed.width, depth: bed.depth, plateID: appearance.plateID, hidden: appearance.hiddenObjects) else { return nil }
-        if fit.fits { return ("Fits the \(bed.title)", false) }
-        return ("Too big for the \(bed.title) by \(Format.dimension(fit.overhang, units: settings.units))", true)
+              let fit = model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects) else { return nil }
+        let name = bed.id == PrinterBed.customID ? "your custom bed" : "the \(bed.title)"
+        let units = settings.units
+        switch fit.verdict {
+        case .fits:
+            return ("Fits \(name)", false)
+        case .fitsTurned:
+            return ("Fits \(name) turned 90°", false)
+        case .offPlate:
+            return ("Fits \(name), but runs off the plate as arranged", true)
+        case .tooBig(let over):
+            var sides: [(String, Float)] = []
+            if over.width > 0.05 { sides.append(("wide", over.width)) }
+            if over.depth > 0.05 { sides.append(("deep", over.depth)) }
+            if over.height > 0.05 { sides.append(("tall", over.height)) }
+            if sides.count == 1, let side = sides.first {
+                return ("Too \(side.0) for \(name) by \(Format.dimension(side.1, units: units))", true)
+            }
+            let detail = sides.map { "\(Format.dimension($0.1, units: units)) too \($0.0)" }.joined(separator: ", ")
+            return ("Too big for \(name): \(detail)", true)
+        }
     }
 
     /// On iPhone the info sheet's medium detent covers the lower half; keep the model

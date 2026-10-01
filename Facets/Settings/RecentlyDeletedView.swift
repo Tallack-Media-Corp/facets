@@ -6,6 +6,8 @@ struct RecentlyDeletedView: View {
     @Environment(ToastCenter.self) private var toasts
     @State private var items: [FileLibrary.DeletedItem] = []
     @State private var confirmingEmpty = false
+    /// Deleting for good can't be undone, so even one item asks first.
+    @State private var purging: FileLibrary.DeletedItem?
 
     var body: some View {
         List {
@@ -30,11 +32,11 @@ struct RecentlyDeletedView: View {
                         .tint(.accentColor)
                 }
                 .swipeActions(edge: .trailing) {
-                    Button("Delete Now", systemImage: "trash", role: .destructive) { purge([item]) }
+                    Button("Delete Now", systemImage: "trash", role: .destructive) { purging = item }
                 }
                 .contextMenu {
                     Button("Restore", systemImage: "arrow.uturn.backward") { restore([item]) }
-                    Button("Delete Now", systemImage: "trash", role: .destructive) { purge([item]) }
+                    Button("Delete Now", systemImage: "trash", role: .destructive) { purging = item }
                 }
             }
         }
@@ -61,6 +63,13 @@ struct RecentlyDeletedView: View {
             Button("Delete All", role: .destructive) { purge(items) }
         } message: {
             Text("They can't be restored after this.")
+        }
+        .confirmationDialog("Delete \"\(purging?.name ?? "")\" for good?", isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }), titleVisibility: .visible) {
+            Button("Delete Now", role: .destructive) {
+                if let purging { purge([purging]) }
+            }
+        } message: {
+            Text("It can't be restored after this.")
         }
         .onAppear(perform: reload)
         .onChange(of: library.revision) { reload() }

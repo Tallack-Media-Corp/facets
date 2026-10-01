@@ -65,11 +65,15 @@ final class ViewerSettings {
         didSet { defaults.set(customBedDepth, forKey: "viewer.bed.depth") }
     }
 
+    var customBedHeight: Float {
+        didSet { defaults.set(customBedHeight, forKey: "viewer.bed.height") }
+    }
+
     var bed: PrinterBed? {
         guard let bedID else { return nil }
         if bedID == PrinterBed.customID {
             guard customBedWidth > 0, customBedDepth > 0 else { return nil }
-            return PrinterBed(id: PrinterBed.customID, make: "Custom", name: "bed", width: customBedWidth, depth: customBedDepth)
+            return PrinterBed(id: PrinterBed.customID, make: "Custom", name: "bed", width: customBedWidth, depth: customBedDepth, height: customBedHeight)
         }
         return PrinterBed.presets.first { $0.id == bedID }
     }
@@ -83,6 +87,7 @@ final class ViewerSettings {
         bedID = defaults.string(forKey: "viewer.bed")
         customBedWidth = defaults.object(forKey: "viewer.bed.width") as? Float ?? 256
         customBedDepth = defaults.object(forKey: "viewer.bed.depth") as? Float ?? 256
+        customBedHeight = defaults.object(forKey: "viewer.bed.height") as? Float ?? 256
         units = MeasurementUnits(rawValue: defaults.string(forKey: "viewer.units") ?? "")
             ?? (Locale.current.measurementSystem == .us ? .inches : .millimetres)
     }

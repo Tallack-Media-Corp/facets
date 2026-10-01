@@ -430,7 +430,8 @@ private struct Reader {
         if let data = try? archive.data(for: "Metadata/project_settings.config"),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let area = json["printable_area"] as? [String], let size = box(area) {
-            return SlicerBed(width: size.x, depth: size.y, printer: json["printer_model"] as? String, plateCount: plateCount)
+            let height = (json["printable_height"] as? String).flatMap(Float.init) ?? (json["printable_height"] as? NSNumber)?.floatValue
+            return SlicerBed(width: size.x, depth: size.y, height: height, printer: json["printer_model"] as? String, plateCount: plateCount)
         }
         if let data = try? archive.data(for: "Metadata/Slic3r_PE.config"),
            let text = String(data: data, encoding: .utf8),

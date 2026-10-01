@@ -15,7 +15,7 @@ struct PrinterBedPicker: View {
             ForEach(PrinterBed.byMake, id: \.make) { group in
                 Section(group.make) {
                     ForEach(group.beds) { bed in
-                        row(title: bed.name, detail: size(bed.width, bed.depth), id: bed.id)
+                        row(title: bed.name, detail: size(bed.width, bed.depth, bed.height), id: bed.id)
                     }
                 }
             }
@@ -30,6 +30,12 @@ struct PrinterBedPicker: View {
                     }
                     LabeledContent("Depth") {
                         TextField("Depth", value: lengthBinding($settings.customBedDepth), format: .number.precision(.fractionLength(0...1)))
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad)
+                        Text(settings.units.symbol).foregroundStyle(.secondary)
+                    }
+                    LabeledContent("Height") {
+                        TextField("Height", value: lengthBinding($settings.customBedHeight), format: .number.precision(.fractionLength(0...1)))
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
                         Text(settings.units.symbol).foregroundStyle(.secondary)
@@ -62,8 +68,9 @@ struct PrinterBedPicker: View {
         .accessibilityAddTraits(settings.bedID == id ? .isSelected : [])
     }
 
-    private func size(_ width: Float, _ depth: Float) -> String {
-        "\(Format.dimension(width, units: settings.units)) × \(Format.dimension(depth, units: settings.units))"
+    /// "256 × 256 × 250 mm".
+    private func size(_ width: Float, _ depth: Float, _ height: Float) -> String {
+        "\(Format.dimension(width, units: settings.units)) × \(Format.dimension(depth, units: settings.units)) × \(Format.dimension(height, units: settings.units))"
             .replacingOccurrences(of: " \(settings.units.symbol) ×", with: " ×")
     }
 

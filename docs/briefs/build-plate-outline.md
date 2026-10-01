@@ -12,6 +12,6 @@ Confirmed with Brennan, 1 October 2026 (Impeccable shape). Built the same day.
    - Creality and others: Ender-3 V3 220×220; K1 220×220; K2 Plus 350×350; Elegoo Neptune 4 Pro 225×225; Voron 2.4 350×350.
    - **These sizes are from memory: verify each against the manufacturer's published spec before shipping.**
 4. **Placement.** STLs and plain 3MFs are centred on the bed. Bambu Studio and Orca projects keep their real plate positions, so the outline matches the slicer, one plate at a time.
-5. **Fit.** Footprint only (X and Y). Height is shown but not judged. With "All Plates" selected the outline hides, because several plates can't share one bed.
+5. **Fit.** Width, depth and height (revised after the second critique: a too-tall part was the likeliest false "Fits"). A loose model may be turned a quarter turn to fit; a slicer project's layout is fixed, and on its own bed parts that hang off the plate are reported. With "All Plates" selected the outline hides, because several plates can't share one bed.
 6. **States.** No bed (today's grid, unchanged); fits; too big; custom bed; all plates; light and dark; VoiceOver announces "Fits on the Bambu A1 bed" or "Too big for the Bambu A1 by 12 millimetres".
 7. **Constraints and open decisions.** Drawn by MeshKit's grid shader in 3D, not as a 2D overlay. Each Bambu plate's origin must be derived from real multi-plate files (plates are laid out side by side; don't assume a stride). Custom sizes follow the inches/millimetres setting.

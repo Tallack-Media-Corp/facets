@@ -212,7 +212,7 @@ The viewer and every thumbnail are the same object at two scales: a Stage or Til
 
 ### Printer Bed Outline
 - When a printer bed is chosen (Settings › Viewer › Printer Bed, or the viewer's build-plate menu), the grid shader draws its outline under the model: Grid Ink at up to 80% when the part fits, Filament Orange at 95% when it doesn't. Inside the bed the plate brightens slightly; outside, the grid drops to 45% so the bed reads first.
-- The readout chip gains a second line in Caption: "Fits the Bambu Lab A1" (secondary, checkmark) or "Too big for the Bambu Lab A1 by 39.9 mm" (tint, warning triangle); the chip becomes a 16pt-corner rounded rectangle while it has two lines.
+- The readout chip gains a second line in Caption that names the side that's over: "Fits the Bambu Lab A1", "Fits the Prusa MK4S turned 90°" (secondary, checkmark), or "Too wide for the Bambu Lab A1 by 39.9 mm", "Too tall …", "Fits …, but runs off the plate as arranged" (tint, warning triangle). The chip becomes a 16pt-corner rounded rectangle while it has two lines.
 - Slicer projects keep their real plate positions; anything else centres the bed under the model. Hidden when all plates show at once.
 
 ### Gesture Hint

@@ -333,11 +333,14 @@ private let rels = """
     @Test func centresUnderPlainModels() throws {
         let model = Model3D(format: .stl, parts: [cube(at: [10, 20, 0], size: 100, objectID: 0)], objects: [ModelObject(id: 0, name: "c")])
         let fit = try #require(model.bedFit(width: 256, depth: 256, plateID: nil, hidden: []))
-        #expect(fit.fits)
+        #expect(fit.verdict == .fits)
         #expect(fit.min == SIMD2<Float>(60 - 128, 70 - 128), "min was \(fit.min)")
-        let small = try #require(model.bedFit(width: 80, depth: 256, plateID: nil, hidden: []))
-        #expect(!small.fits)
-        #expect(abs(small.overhang - 20) < 0.001)
+        // 100 × 100 on an 80 × 90 bed: too big whichever way it's turned.
+        let small = try #require(model.bedFit(width: 80, depth: 90, plateID: nil, hidden: []))
+        #expect(small.verdict == .tooBig(.init(width: 10, depth: 20, height: 0)) || small.verdict == .tooBig(.init(width: 20, depth: 10, height: 0)))
+        // 100 tall on a 90 mm-high bed.
+        let short = try #require(model.bedFit(width: 256, depth: 256, height: 90, plateID: nil, hidden: []))
+        #expect(short.verdict == .tooBig(.init(width: 0, depth: 0, height: 10)))
     }
 
     @Test func slicerProjectsKeepTheirPlates() throws {
@@ -346,9 +349,27 @@ private let rels = """
         let plates = [Plate(id: 1, name: nil, objectIDs: [0]), Plate(id: 2, name: nil, objectIDs: [1])]
         let model = Model3D(format: .threeMF, parts: parts, objects: [], plates: plates, slicerBed: SlicerBed(width: 256, depth: 256, printer: nil, plateCount: 2))
         let second = try #require(model.bedFit(width: 256, depth: 256, plateID: 2, hidden: []))
+        #expect(second.verdict == .fits)
         #expect(abs(second.min.x - 307.2) < 0.01)
         #expect(second.min.y == 0)
         #expect(model.bedFit(width: 256, depth: 256, plateID: nil, hidden: []) == nil)
+    }
+
+    @Test func turnsAPartThatOnlyFitsSideways() throws {
+        // 205 wide, 245 deep on a 250 × 210 bed: fits turned a quarter turn.
+        let geometry = MeshGeometry(positions: [0, 0, 0, 205, 0, 0, 0, 245, 0, 0, 0, 10])
+        let model = Model3D(format: .stl, parts: [ModelPart(id: 0, name: "p", geometry: geometry)], objects: [])
+        let fit = try #require(model.bedFit(width: 250, depth: 210, height: 220, plateID: nil, hidden: []))
+        #expect(fit.verdict == .fitsTurned)
+        #expect(abs((fit.max.x - fit.min.x) - 210) < 0.01)
+    }
+
+    @Test func slicerPartsOffThePlateAreReported() throws {
+        // A part at x 230...290 on a 256 plate hangs off as arranged.
+        let parts = [cube(at: [230, 50, 0], size: 60, objectID: 0)]
+        let model = Model3D(format: .threeMF, parts: parts, objects: [], slicerBed: SlicerBed(width: 256, depth: 256, printer: nil, plateCount: 1))
+        let fit = try #require(model.bedFit(width: 256, depth: 256, plateID: nil, hidden: []))
+        #expect(fit.verdict == .offPlate)
     }
 
     @Test func plateGridWrapsRows() {

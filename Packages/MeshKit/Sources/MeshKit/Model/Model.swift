@@ -168,10 +168,13 @@ public struct SlicerBed: Sendable, Equatable {
     public let printer: String?
     /// Plates in the project, including empty ones; the layout depends on it.
     public let plateCount: Int
+    /// Printable height in mm, when the project says (Bambu `printable_height`).
+    public let height: Float?
 
-    public init(width: Float, depth: Float, printer: String?, plateCount: Int) {
+    public init(width: Float, depth: Float, height: Float? = nil, printer: String?, plateCount: Int) {
         self.width = width
         self.depth = depth
+        self.height = height
         self.printer = printer
         self.plateCount = max(plateCount, 1)
     }
@@ -189,13 +192,34 @@ public struct SlicerBed: Sendable, Equatable {
 
 /// Where a chosen printer bed sits under the model, and whether the model fits.
 public struct BedFit: Sendable, Equatable {
+    /// How far the model is over in each direction, in mm (zero where it's within).
+    public struct Overflow: Sendable, Equatable {
+        public let width: Float
+        public let depth: Float
+        public let height: Float
+
+        public init(width: Float, depth: Float, height: Float) {
+            self.width = width
+            self.depth = depth
+            self.height = height
+        }
+    }
+
+    public enum Verdict: Sendable, Equatable {
+        case fits
+        /// Fits only turned a quarter turn on the bed; the outline is drawn turned.
+        case fitsTurned
+        case tooBig(Overflow)
+        /// Small enough, but a slicer project's parts sit partly off its plate.
+        case offPlate
+    }
+
     /// The bed's corners in model coordinates (millimetres).
     public let min: SIMD2<Float>
     public let max: SIMD2<Float>
-    /// How far the footprint is bigger than the bed, in mm; zero when it fits.
-    public let overhang: Float
+    public let verdict: Verdict
 
-    public var fits: Bool { overhang <= 0.05 }
+    public var fits: Bool { verdict == .fits || verdict == .fitsTurned }
 }
 
 /// Everything read from one file.
@@ -221,16 +245,19 @@ public struct Model3D: Sendable, Identifiable {
         self.slicerBed = slicerBed
     }
 
-    /// Places a `width` × `depth` bed under what's visible and checks the footprint.
-    /// A slicer project keeps its real layout: the bed is centred on the plate the
-    /// project used (identical to the slicer when the beds match). Anything else
-    /// centres the bed under the model. Nil when several plates are showing at once,
-    /// since they can't share one bed.
-    public func bedFit(width: Float, depth: Float, plateID: Int?, hidden: Set<Int>) -> BedFit? {
+    /// Places a `width` × `depth` × `height` bed under what's visible and checks it
+    /// fits: straight, or failing that turned a quarter turn, and tall enough (a zero
+    /// height isn't checked). A slicer project keeps its real layout, the bed centred
+    /// on the plate the project used; when that bed matches the project's own, parts
+    /// hanging off the plate as arranged are reported too. Anything else centres the
+    /// bed under the model. Nil when several plates are showing at once.
+    public func bedFit(width: Float, depth: Float, height: Float = 0, plateID: Int?, hidden: Set<Int>) -> BedFit? {
         guard width > 0, depth > 0 else { return nil }
         if !plates.isEmpty, plateID == nil { return nil }
         let footprint = bounds(of: visibleParts(plateID: plateID, hidden: hidden))
         guard !footprint.isEmpty else { return nil }
+        let size = footprint.size
+        let tolerance: Float = 0.05
 
         let centre: SIMD2<Float>
         if let slicerBed {
@@ -239,9 +266,37 @@ public struct Model3D: Sendable, Identifiable {
         } else {
             centre = SIMD2(footprint.center.x, footprint.center.y)
         }
-        let half = SIMD2(width, depth) / 2
-        let overhang = Swift.max(footprint.size.x - width, footprint.size.y - depth, 0)
-        return BedFit(min: centre - half, max: centre + half, overhang: overhang)
+        func outline(_ w: Float, _ d: Float) -> (SIMD2<Float>, SIMD2<Float>) {
+            let half = SIMD2(w, d) / 2
+            return (centre - half, centre + half)
+        }
+
+        let straight = size.x <= width + tolerance && size.y <= depth + tolerance
+        // A loose part can be turned on the bed; a slicer project's layout can't.
+        let turned = slicerBed == nil && size.y <= width + tolerance && size.x <= depth + tolerance
+        let tallEnough = height <= 0 || size.z <= height + tolerance
+
+        if !tallEnough || (!straight && !turned) {
+            // Report whichever orientation is over by less.
+            let a = SIMD2(Swift.max(size.x - width, 0), Swift.max(size.y - depth, 0))
+            let b = SIMD2(Swift.max(size.x - depth, 0), Swift.max(size.y - width, 0))
+            let useTurned = slicerBed == nil && (b.x + b.y) < (a.x + a.y)
+            let over = useTurned ? b : a
+            let (lo, hi) = useTurned ? outline(depth, width) : outline(width, depth)
+            let overflow = BedFit.Overflow(width: over.x, depth: over.y, height: height > 0 ? Swift.max(size.z - height, 0) : 0)
+            return BedFit(min: lo, max: hi, verdict: .tooBig(overflow))
+        }
+        if !straight {
+            let (lo, hi) = outline(depth, width)
+            return BedFit(min: lo, max: hi, verdict: .fitsTurned)
+        }
+        let (lo, hi) = outline(width, depth)
+        if let slicerBed, abs(slicerBed.width - width) < 1, abs(slicerBed.depth - depth) < 1 {
+            let inside = footprint.min.x >= lo.x - 0.5 && footprint.min.y >= lo.y - 0.5
+                && footprint.max.x <= hi.x + 0.5 && footprint.max.y <= hi.y + 0.5
+            if !inside { return BedFit(min: lo, max: hi, verdict: .offPlate) }
+        }
+        return BedFit(min: lo, max: hi, verdict: .fits)
     }
 
     public var bounds: Bounds { bounds(of: parts) }
