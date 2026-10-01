@@ -145,7 +145,7 @@ Filament presets (Orange, White, Grey, Black, Red, Yellow, Green, Blue, Purple) 
 - **Headline** (semibold, 17pt): row titles in lists (library list, recents, search results).
 - **Card Title** (medium, 15pt, subheadline): names under library grid cards, toast text; up to two lines.
 - **Chip Label** (semibold, 15pt, subheadline): the plate picker over the model.
-- **Readout** (medium, 13pt, footnote, tabular figures): the dimensions chip. Measurements always use tabular figures and one decimal place (176.0, not 176) so they don't jitter or mix precision.
+- **Readout** (medium, 13pt, footnote, tabular figures): the dimensions chip, labelled "W 156.5 · D 176.0 · H 79.6 mm" and spoken as "156.5 millimetres wide, 176.0 deep, 79.6 high". Measurements always use tabular figures and one decimal place (176.0, not 176) so they don't jitter or mix precision.
 - **Caption** (regular, 12pt): metadata lines ("STL · 217 KB · 1:59 PM"), joined with middle dots.
 - **Caption Small** (regular, 11pt, caption2): secondary context such as a search hit's folder path.
 
@@ -182,7 +182,7 @@ Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt co
 - **States:** toggles in the toolbar fill with the tint when on. A completed action swaps its symbol in place (plus becomes a checkmark) rather than disappearing.
 
 ### Chips
-- **Readout chip:** Readout type on a regular glass capsule (6pt by 12pt padding); shows "W × D × H mm".
+- **Readout chip:** Readout type on a regular glass capsule (6pt by 12pt padding); shows "W 156.5 · D 176.0 · H 79.6 mm".
 - **Plate picker chip:** Chip Label type on an interactive glass capsule (8pt by 14pt), a stacked-layers glyph, the plate title and a small chevron; opens a menu.
 - **Grouping:** chips sit in one `GlassEffectContainer` so neighbouring glass merges correctly.
 
@@ -205,6 +205,9 @@ Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt co
 
 ### Model Stage (signature)
 The viewer and every thumbnail are the same object at two scales: a Stage or Tile gradient, the model lit by the studio rig in Filament Orange (or its file colours), and in the viewer a fading millimetre grid at the model's base. Thumbnails render on a transparent background and sit on the Tile gradient, framed tightly on the model's real silhouette from the isometric view.
+
+### Errors
+- Never the system's error sentence. Say what happened and what to do, in a heading and one or two plain sentences ("File Not Found" / "It was moved, renamed or deleted since Facets last saw it."), with the next action as a button (Try Again, Remove from Recents). Alerts for failed actions name the action ("Couldn't Rename").
 
 ### Empty States
 - System `ContentUnavailableView` with an SF Symbol (`cube.transparent`, `clock`, `magnifyingglass`), a one-line title and a short practical description; at most one prominent action.

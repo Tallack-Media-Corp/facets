@@ -5,6 +5,7 @@ struct RecentsView: View {
     @Environment(Router.self) private var router
     @Environment(FileLibrary.self) private var library
     @State private var confirmingClear = false
+    @State private var missing: RecentsStore.Entry?
 
     var body: some View {
         NavigationStack {
@@ -13,7 +14,7 @@ struct RecentsView: View {
                     Button {
                         open(entry)
                     } label: {
-                        RecentRow(entry: entry, url: recents.resolve(entry))
+                        RecentRow(entry: entry, url: recents.resolve(entry), isAvailable: recents.isAvailable(entry))
                     }
                     .buttonStyle(.plain)
                     .swipeActions {
@@ -33,7 +34,8 @@ struct RecentsView: View {
             .toolbar {
                 if !recents.entries.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Clear", systemImage: "trash") { confirmingClear = true }
+                        // Words, not a bin: clearing the list doesn't delete any files.
+                        Button("Clear") { confirmingClear = true }
                     }
                 }
             }
@@ -42,13 +44,20 @@ struct RecentsView: View {
             } message: {
                 Text("The files themselves aren't touched.")
             }
-            .onAppear { recents.prune() }
+            .alert("File Not Found", isPresented: Binding(get: { missing != nil }, set: { if !$0 { missing = nil } })) {
+                Button("Remove from Recents", role: .destructive) {
+                    if let missing { recents.remove(missing) }
+                }
+                Button("Keep", role: .cancel) {}
+            } message: {
+                Text("\(missing?.name ?? "This model") was moved, renamed or deleted, or Facets no longer has access to it.")
+            }
         }
     }
 
     private func open(_ entry: RecentsStore.Entry) {
-        guard let url = recents.resolve(entry) else {
-            recents.remove(entry)
+        guard let url = recents.resolve(entry), recents.isAvailable(entry) else {
+            missing = entry
             return
         }
         router.presented = ModelFileRef(url: url, isExternal: !library.contains(url))
@@ -58,12 +67,20 @@ struct RecentsView: View {
 private struct RecentRow: View {
     let entry: RecentsStore.Entry
     let url: URL?
+    let isAvailable: Bool
 
     var body: some View {
         HStack(spacing: 12) {
             Group {
-                if let url {
+                if let url, isAvailable {
                     ModelThumbnail(url: url, size: nil, modified: entry.lastOpened, cornerRadius: 10)
+                } else if !isAvailable {
+                    RoundedRectangle(cornerRadius: 10).fill(.thumbnailBackground)
+                        .overlay {
+                            Image(systemName: "questionmark.folder")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
                 } else {
                     RoundedRectangle(cornerRadius: 10).fill(.thumbnailBackground)
                 }
@@ -75,11 +92,18 @@ private struct RecentRow: View {
                     .font(.headline)
                     .lineLimit(1)
                 HStack(spacing: 4) {
-                    if entry.isExternal {
-                        Image(systemName: "arrow.up.forward.app")
-                            .accessibilityLabel("Opened from another app")
+                    if !isAvailable {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .accessibilityHidden(true)
+                        Text("File not found")
+                    } else {
+                        if entry.isExternal {
+                            Image(systemName: "arrow.up.forward.app")
+                                .accessibilityLabel("Opened from another app")
+                        }
+                        Text("\(entry.fileExtension) · \(entry.lastOpened.formatted(.relative(presentation: .named)))")
                     }
-                    Text("\(entry.fileExtension) · \(entry.lastOpened.formatted(.relative(presentation: .named)))")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)

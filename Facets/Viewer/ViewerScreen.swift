@@ -10,7 +10,7 @@ struct ViewerScreen: View {
     private enum Phase {
         case loading
         case loaded(Model3D)
-        case failed(String)
+        case failed(FriendlyError)
     }
 
     @Environment(ViewerSettings.self) private var settings
@@ -34,25 +34,43 @@ struct ViewerScreen: View {
             ViewerBackground()
             switch phase {
             case .loading:
-                ProgressView("Opening \(file.name)…")
+                ProgressView("Opening \(displayName)…")
                     .padding(20)
                     .glassEffect(.regular, in: .rect(cornerRadius: 20))
-            case .failed(let message):
-                ContentUnavailableView("Can't Open This Model", systemImage: "exclamationmark.triangle", description: Text(message))
+            case .failed(let error):
+                ContentUnavailableView {
+                    Label(error.title, systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error.message)
+                } actions: {
+                    Button("Try Again") { Task { await load(retrying: true) } }
+                        .buttonStyle(.glassProminent)
+                    if error.kind == .missing || error.kind == .noAccess, recents.contains(fileAt: file.url) {
+                        Button("Remove from Recents") {
+                            recents.remove(fileAt: file.url)
+                            dismiss()
+                        }
+                    }
+                }
             case .loaded(let model):
                 ModelCanvas(model: model, appearance: appearance, controller: controller)
                     .ignoresSafeArea()
-                    .accessibilityLabel("\(file.name), \(Format.dimensions(visibleBounds(model).size, units: settings.units))")
+                    .accessibilityLabel("\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))")
                     .accessibilityHint("Drag to turn, pinch to zoom, double tap to fit.")
             }
         }
         .overlay(alignment: .top) {
             if case .loaded(let model) = phase {
-                ViewerChips(model: model, plateID: $appearance.plateID, dimensions: Format.dimensions(visibleBounds(model).size, units: settings.units))
+                ViewerChips(
+                    model: model,
+                    plateID: $appearance.plateID,
+                    dimensions: Format.dimensions(visibleBounds(model).size, units: settings.units),
+                    spokenDimensions: Format.spokenDimensions(visibleBounds(model).size, units: settings.units)
+                )
                     .padding(.top, 8)
             }
         }
-        .navigationTitle(file.name)
+        .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar { toolbar }
@@ -86,8 +104,9 @@ struct ViewerScreen: View {
             }
         }
         // A file from Browse or another app gets a plus beside Share to keep a copy.
-        // It stays as a tick once saved, so the bar doesn't jump.
-        if file.isExternal {
+        // It stays as a tick once saved, so the bar doesn't jump. Neither shows for a
+        // file that didn't open.
+        if file.isExternal, isLoaded {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(isSaved ? "Saved to Library" : "Save to Library", systemImage: isSaved ? "checkmark" : "plus") {
                     saveToLibrary()
@@ -96,15 +115,17 @@ struct ViewerScreen: View {
                 .disabled(isSaved)
             }
         }
-        ToolbarItem(placement: .topBarTrailing) {
-            ShareLink(item: file.url) {
-                Label("Share", systemImage: "square.and.arrow.up")
+        if isLoaded {
+            ToolbarItem(placement: .topBarTrailing) {
+                ShareLink(item: file.url) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
             }
         }
 
         if case .loaded = phase {
             ToolbarItem(placement: .bottomBar) {
-                Button("Fit", systemImage: "arrow.down.left.and.arrow.up.right.rectangle") {
+                Button("Fit to Screen", systemImage: "arrow.down.left.and.arrow.up.right.rectangle") {
                     controller.frameModel()
                 }
             }
@@ -114,7 +135,7 @@ struct ViewerScreen: View {
                         Button(preset.title, systemImage: symbol(for: preset)) { controller.show(preset) }
                     }
                 } label: {
-                    Label("Views", systemImage: "cube")
+                    Label("Preset Views", systemImage: "cube")
                 }
             }
             ToolbarSpacer(.flexible, placement: .bottomBar)
@@ -159,8 +180,19 @@ struct ViewerScreen: View {
         appearance.gridColor = RenderAppearance.gridColor(dark: colorScheme == .dark)
     }
 
-    private func load() async {
-        guard case .loading = phase else { return }
+    private var displayName: String { Format.title(fromFileName: file.name) }
+
+    private var isLoaded: Bool {
+        if case .loaded = phase { return true }
+        return false
+    }
+
+    private func load(retrying: Bool = false) async {
+        if retrying {
+            phase = .loading
+        } else {
+            guard case .loading = phase else { return }
+        }
         appearance = settings.appearance
         syncSettings()
         let url = file.url
@@ -180,7 +212,7 @@ struct ViewerScreen: View {
             if ProcessInfo.processInfo.environment["FACETS_INFO"] == "1" { showingInfo = true }
             #endif
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(FriendlyError(opening: error))
         }
     }
 
@@ -202,7 +234,7 @@ struct ViewerScreen: View {
             withAnimation(.snappy) { isSaved = true }
             toasts.show("Saved to Library as \(copy.deletingPathExtension().lastPathComponent)")
         } catch {
-            saveError = error.localizedDescription
+            saveError = FriendlyError(file: error).message
         }
     }
 
@@ -213,6 +245,7 @@ private struct ViewerChips: View {
     let model: Model3D
     @Binding var plateID: Int?
     let dimensions: String
+    let spokenDimensions: String
 
     var body: some View {
         GlassEffectContainer(spacing: 8) {
@@ -247,7 +280,7 @@ private struct ViewerChips: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .glassEffect(.regular, in: .capsule)
-                    .accessibilityLabel("Size \(dimensions)")
+                    .accessibilityLabel("Size: \(spokenDimensions)")
             }
         }
     }

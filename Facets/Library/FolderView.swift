@@ -30,7 +30,7 @@ struct FolderView: View {
     @State private var renameText = ""
     @State private var deleting: LibraryItem?
     @State private var moving: LibraryItem?
-    @State private var errorMessage: String?
+    @State private var failure: (title: String, message: String)?
     @State private var watcher: FolderWatcher?
     @State private var dropTargeted = false
     /// Browsed models copied to the library this visit, on top of `hasCopy`.
@@ -42,8 +42,8 @@ struct FolderView: View {
             .toolbar { toolbar }
             .fileImporter(isPresented: $importing, allowedContentTypes: UTType.models, allowsMultipleSelection: true) { result in
                 switch result {
-                case .success(let urls): perform { try library.importFiles(urls, into: folder) }
-                case .failure(let error): errorMessage = error.localizedDescription
+                case .success(let urls): perform("Couldn't Import") { try library.importFiles(urls, into: folder) }
+                case .failure(let error): failure = ("Couldn't Import", FriendlyError(file: error).message)
                 }
             }
             .onDrop(of: UTType.models, isTargeted: $dropTargeted) { providers in
@@ -70,7 +70,7 @@ struct FolderView: View {
                 TextField("Name", text: $renameText)
                 Button("Cancel", role: .cancel) {}
                 Button("Rename") {
-                    if let item = renaming { perform { try library.rename(item, to: renameText) } }
+                    if let item = renaming { perform("Couldn't Rename") { try library.rename(item, to: renameText) } }
                 }
             }
             .confirmationDialog(
@@ -86,13 +86,13 @@ struct FolderView: View {
             }
             .sheet(item: $moving) { item in
                 MoveSheet(item: item) { destination in
-                    perform { try library.move([item], to: destination) }
+                    perform("Couldn't Move") { try library.move([item], to: destination) }
                 }
             }
-            .alert("Something went wrong", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            .alert(failure?.title ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text(errorMessage ?? "")
+                Text(failure?.message ?? "")
             }
     }
 
@@ -181,7 +181,7 @@ struct FolderView: View {
             Menu {
                 Button("Import Files…", systemImage: "square.and.arrow.down") { importing = true }
                 Button("New Folder", systemImage: "folder.badge.plus") {
-                    perform {
+                    perform("Couldn't Create Folder") {
                         let url = try library.createFolder(in: folder)
                         beginRename(LibraryItem(url: url, isFolder: true, size: nil, modified: nil, childCount: 0))
                     }
@@ -217,7 +217,7 @@ struct FolderView: View {
     @ViewBuilder
     private func libraryActions(for item: LibraryItem) -> some View {
         Button("Rename", systemImage: "pencil") { beginRename(item) }
-        Button("Duplicate", systemImage: "plus.square.on.square") { perform { try library.duplicate(item) } }
+        Button("Duplicate", systemImage: "plus.square.on.square") { perform("Couldn't Duplicate") { try library.duplicate(item) } }
         Button("Move…", systemImage: "folder") { moving = item }
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) { requestDelete(item) }
@@ -243,7 +243,7 @@ struct FolderView: View {
     }
 
     private func save(_ item: LibraryItem) {
-        perform {
+        perform("Couldn't Save to Library") {
             guard let copy = try library.importFiles([item.url], into: library.root).first else { return }
             saved.insert(item.url)
             toasts.show("Saved to Library as \(copy.deletingPathExtension().lastPathComponent)")
@@ -261,7 +261,7 @@ struct FolderView: View {
     }
 
     private func delete(_ item: LibraryItem) {
-        perform {
+        perform("Couldn't Delete") {
             let deleted = try library.delete([item])
             let undo = { [library, toasts] in
                 do {
@@ -288,11 +288,12 @@ struct FolderView: View {
         loaded = true
     }
 
-    private func perform(_ action: () throws -> Void) {
+    /// Runs a file operation; if it fails, says which one and why in plain words.
+    private func perform(_ title: String, _ action: () throws -> Void) {
         do {
             try action()
         } catch {
-            errorMessage = error.localizedDescription
+            failure = (title, FriendlyError(file: error).message)
         }
     }
 

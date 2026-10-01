@@ -49,6 +49,26 @@ final class RecentsStore {
         return url
     }
 
+    /// Whether the entry's file is still there and openable.
+    func isAvailable(_ entry: Entry) -> Bool {
+        guard let url = resolve(entry) else { return false }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    func contains(fileAt url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        return entries.contains { resolve($0)?.standardizedFileURL.path == path }
+    }
+
+    /// Removes whichever entry points at this file.
+    func remove(fileAt url: URL) {
+        let path = url.standardizedFileURL.path
+        entries.removeAll { resolve($0)?.standardizedFileURL.path == path }
+        save()
+    }
+
     func remove(_ entry: Entry) {
         entries.removeAll { $0.id == entry.id }
         save()

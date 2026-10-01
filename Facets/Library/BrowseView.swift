@@ -40,7 +40,7 @@ struct BrowseView: View {
             case .success(let url):
                 picked(url)
             case .failure(let error):
-                errorMessage = error.localizedDescription
+                errorMessage = FriendlyError(file: error).message
             }
         }
         .alert("Rename Location", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -50,7 +50,7 @@ struct BrowseView: View {
                 if let location = renaming { locations.rename(location, to: renameText) }
             }
         }
-        .alert("Something went wrong", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+        .alert("Couldn't Open That", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
@@ -71,7 +71,7 @@ struct BrowseView: View {
                     path.append(.browse(folder, title: location.name))
                 }
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = FriendlyError(file: error).message
             }
         case .file:
             path.append(.model(ModelFileRef(url: url, isExternal: true)))

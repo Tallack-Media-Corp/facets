@@ -29,9 +29,21 @@ enum Format {
         }
     }
 
-    /// "120.0 × 40.5 × 22.0 mm", width × depth × height.
+    /// "W 120.0 · D 40.5 · H 22.0 mm": labelled, so nobody has to guess which is height.
     static func dimensions(_ size: SIMD3<Float>, units: MeasurementUnits) -> String {
-        "\(length(size.x, units: units)) × \(length(size.y, units: units)) × \(length(size.z, units: units)) \(units.symbol)"
+        "W \(length(size.x, units: units)) · D \(length(size.y, units: units)) · H \(length(size.z, units: units)) \(units.symbol)"
+    }
+
+    /// The same, for VoiceOver: "120.0 millimetres wide, 40.5 deep, 22.0 high".
+    static func spokenDimensions(_ size: SIMD3<Float>, units: MeasurementUnits) -> String {
+        let unitName = units == .millimetres ? "millimetres" : "inches"
+        return "\(length(size.x, units: units)) \(unitName) wide, \(length(size.y, units: units)) deep, \(length(size.z, units: units)) high"
+    }
+
+    /// A file name for a title: "Eufy_S1_Case" reads as "Eufy S1 Case". The real
+    /// name still shows in the info sheet.
+    static func title(fromFileName name: String) -> String {
+        name.replacingOccurrences(of: "_", with: " ").trimmingCharacters(in: .whitespaces)
     }
 
     static func dimension(_ mm: Float, units: MeasurementUnits) -> String {

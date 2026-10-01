@@ -64,7 +64,7 @@ struct AppIconPicker: View {
                 try await UIApplication.shared.setAlternateIconName(option.iconName)
                 current = option.iconName
             } catch {
-                failure = error.localizedDescription
+                failure = "iOS didn't accept the change. Try again in a moment."
             }
         }
     }
