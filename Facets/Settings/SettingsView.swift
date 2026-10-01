@@ -141,7 +141,7 @@ private struct AboutView: View {
             }
             Section("Licence") {
                 Text("MIT Licence. The source code, issues and releases are on GitHub.")
-                Text("The Benchy icons are drawn from #3DBenchy by Creative Tools, a public domain (CC0) model. 3DBenchy.com")
+                Text("The Benchy icon is drawn from #3DBenchy by Creative Tools, a public domain (CC0) model. 3DBenchy.com")
                     .foregroundStyle(.secondary)
                 Link("github.com/Tallack-Media-Corp/facets", destination: AppInfo.sourceURL)
             }

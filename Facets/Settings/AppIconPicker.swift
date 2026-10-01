@@ -15,7 +15,6 @@ struct AppIconPicker: View {
 
     static let options: [Option] = [
         Option(iconName: nil, title: "Benchy", preview: "IconPreview-AppIcon"),
-        Option(iconName: "AppIcon-Wireframe", title: "Wireframe", preview: "IconPreview-AppIcon-Wireframe"),
         Option(iconName: "AppIcon-Mesh", title: "Mesh", preview: "IconPreview-AppIcon-Mesh"),
     ]
 

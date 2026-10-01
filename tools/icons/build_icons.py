@@ -68,7 +68,6 @@ def mesh_svg() -> str:
 # name: (title, layer file name, layer source, light fill, dark fill)
 DESIGNS = {
     "AppIcon": ("Benchy", "benchy.png", ART / "benchy.png", CREAM, CHARCOAL),
-    "AppIcon-Wireframe": ("Wireframe", "benchy-wire.svg", ART / "benchy-wire.svg", CREAM, CHARCOAL),
     "AppIcon-Mesh": ("Mesh", "mesh.svg", mesh_svg, CREAM, NAVY),
 }
 
