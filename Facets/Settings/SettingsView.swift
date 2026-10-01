@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum AppInfo {
-    static let sourceURL = URL(string: "https://github.com/BTallack/facets")!
+    static let sourceURL = URL(string: "https://github.com/Tallack-Media-Corp/facets")!
 
     static var version: String {
         let info = Bundle.main.infoDictionary
@@ -137,7 +137,7 @@ private struct AboutView: View {
             }
             Section("Licence") {
                 Text("MIT Licence. The source code, issues and releases are on GitHub.")
-                Link("github.com/BTallack/facets", destination: AppInfo.sourceURL)
+                Link("github.com/Tallack-Media-Corp/facets", destination: AppInfo.sourceURL)
             }
         }
         .navigationTitle("About")
