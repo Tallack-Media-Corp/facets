@@ -18,8 +18,13 @@ public struct RenderAppearance: Sendable, Equatable {
         self.baseColor = baseColor
     }
 
-    /// A warm filament orange, in linear light.
-    public static let defaultColor = SIMD4<Float>(0.88, 0.30, 0.06, 1)
+    /// Filament Orange (#F2782E), in linear light.
+    public static let defaultColor = parseColor("#F2782E") ?? SIMD4(0.89, 0.19, 0.03, 1)
+
+    /// An sRGB hex colour ("#RRGGBB") as linear RGBA, for `baseColor`.
+    public static func linearColor(hex: String) -> SIMD4<Float>? {
+        parseColor(hex)
+    }
 
     /// Grid colour for a light or dark backdrop.
     public static func gridColor(dark: Bool) -> SIMD4<Float> {

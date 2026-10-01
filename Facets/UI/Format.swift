@@ -22,7 +22,8 @@ enum Format {
     private static func length(_ mm: Float, units: MeasurementUnits) -> String {
         switch units {
         case .millimetres:
-            return mm.formatted(.number.precision(.fractionLength(mm >= 100 ? 0...1 : 1...1)))
+            // Always one decimal, so a readout never mixes "176" with "79.6".
+            return mm.formatted(.number.precision(.fractionLength(1)))
         case .inches:
             return (mm / 25.4).formatted(.number.precision(.fractionLength(2)))
         }

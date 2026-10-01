@@ -18,6 +18,7 @@ struct FolderView: View {
     @Environment(\.zoomNamespace) private var zoom
     @AppStorage("library.layout") private var layout: LibraryLayout = .grid
     @AppStorage("library.sort") private var sort: LibrarySort = .name
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var items: [LibraryItem] = []
     @State private var loaded = false
@@ -109,10 +110,12 @@ struct FolderView: View {
                 } actions: {
                     Button("Import Files") { importing = true }
                         .buttonStyle(.glassProminent)
+                        .controlSize(.large)
                 }
                 .padding(.top, 80)
             }
-        } else if layout == .grid {
+        } else if layout == .grid, !dynamicTypeSize.isAccessibilitySize {
+            // At accessibility text sizes two columns can't hold a name; rows can.
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 16, alignment: .top)], spacing: 20) {
                     ForEach(items) { item in
@@ -296,7 +299,7 @@ struct LibraryCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Group {
                 if item.isFolder {
-                    FolderTile(count: item.childCount)
+                    FolderTile()
                 } else if !item.isDownloaded {
                     CloudTile()
                 } else {
@@ -324,17 +327,19 @@ struct LibraryCard: View {
 }
 
 struct FolderTile: View {
-    let count: Int?
-
     var body: some View {
         RoundedRectangle(cornerRadius: 14)
             .fill(.thumbnailBackground)
             .overlay {
-                Image(systemName: "folder.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(.tint.opacity(0.85))
-                    .padding(36)
+                // Inset in proportion, so the glyph fills a 52pt row tile and a grid tile alike.
+                GeometryReader { geometry in
+                    Image(systemName: "folder.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(.tint.opacity(0.85))
+                        .padding(geometry.size.width * 0.2)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                }
             }
     }
 }
@@ -375,7 +380,7 @@ struct LibraryRow: View {
         HStack(spacing: 12) {
             Group {
                 if item.isFolder {
-                    FolderTile(count: item.childCount)
+                    FolderTile()
                 } else if !item.isDownloaded {
                     CloudTile()
                 } else {

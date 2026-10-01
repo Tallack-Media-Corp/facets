@@ -8,13 +8,15 @@ struct ModelThumbnail: View {
     var cornerRadius: CGFloat = 14
 
     @Environment(\.displayScale) private var displayScale
+    @Environment(ViewerSettings.self) private var settings
     @State private var image: UIImage?
     @State private var failed = false
 
     var body: some View {
         GeometryReader { geometry in
             let pixels = Self.pixelSize(for: geometry.size, scale: displayScale)
-            let key = ThumbnailStore.key(for: url, size: size, modified: modified, pixelSize: pixels)
+            let look = ThumbnailStore.Look(colorHex: settings.colorHex, usesFileColors: settings.usesFileColors)
+            let key = ThumbnailStore.key(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
             ZStack {
                 Rectangle().fill(.thumbnailBackground)
                 if let image = image ?? ThumbnailStore.shared.cached(key) {
@@ -32,7 +34,7 @@ struct ModelThumbnail: View {
             .task(id: key) {
                 image = nil
                 failed = false
-                let result = await ThumbnailStore.shared.thumbnail(for: url, size: size, modified: modified, pixelSize: pixels)
+                let result = await ThumbnailStore.shared.thumbnail(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
                 guard !Task.isCancelled else { return }
                 image = result
                 failed = result == nil
@@ -52,6 +54,6 @@ struct ModelThumbnail: View {
 extension ShapeStyle where Self == LinearGradient {
     /// The viewer's studio backdrop in miniature, so white and grey models still read.
     static var thumbnailBackground: LinearGradient {
-        LinearGradient(colors: [Color(light: 0xF7F8FA, dark: 0x303237), Color(light: 0xE4E7EB, dark: 0x1C1D21)], startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: [Color(Palette.tile.top), Color(Palette.tile.floor)], startPoint: .top, endPoint: .bottom)
     }
 }

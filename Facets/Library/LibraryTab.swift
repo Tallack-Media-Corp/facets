@@ -29,15 +29,15 @@ struct LibraryTab: View {
                 case .browse: BrowseView(path: $path)
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("Section", selection: $section) {
-                        ForEach(Section.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .fixedSize()
+            // Under the large title, like the other tabs, rather than in its place.
+            .safeAreaBar(edge: .top) {
+                Picker("Section", selection: $section) {
+                    ForEach(Section.allCases) { Text($0.rawValue).tag($0) }
                 }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 320)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
             }
             .navigationDestination(for: LibraryRoute.self) { route in
                 switch route {

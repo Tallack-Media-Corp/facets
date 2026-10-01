@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-01T22:05:00Z",
+  "generatedAt": "2026-10-01T22:20:00Z",
   "title": "Design System: Facets",
   "extensions": {
     "colorMeta": {
@@ -101,7 +101,7 @@
     {
       "name": "Library | Browse Switch",
       "kind": "nav",
-      "description": "Segmented control in the Library tab's principal toolbar slot.",
+      "description": "Segmented control in a safeAreaBar under the Library tab's large title.",
       "html": "<div class=\"ds-seg\" role=\"tablist\"><button class=\"ds-seg-item ds-seg-on\" role=\"tab\" aria-selected=\"true\">Library</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">Browse</button></div>",
       "css": ".ds-seg { display: inline-flex; padding: 4px; border-radius: 9999px; background: rgba(255,255,255,0.55); backdrop-filter: blur(20px); border: 0.5px solid rgba(255,255,255,0.7); font-family: -apple-system, system-ui, sans-serif; } .ds-seg-item { font: 500 15px/1 inherit; color: #1d1d1f; background: none; border: none; padding: 9px 14px; border-radius: 9999px; cursor: pointer; } .ds-seg-item:hover { background: rgba(0,0,0,0.04); } .ds-seg-on { background: rgba(0,0,0,0.08); } .ds-seg-item:focus-visible { outline: 2px solid #F2782E; }"
     },
@@ -146,7 +146,7 @@
       "Don't add drop shadows or hand-made blur to cards, tiles or panels.",
       "Don't build a dark-only, CAD-style interface; light and dark are both first-class.",
       "Don't let file or preset filament colours tint interface elements.",
-      "Don't use a different orange anywhere (the earlier #F2802E model default and the renderer's #F19545 fallback are drift to remove)."
+      "Don't use a different orange anywhere; the app tint, the asset catalog accent, the model default and MeshKit's renderer default are all #F2782E."
     ]
   }
 }

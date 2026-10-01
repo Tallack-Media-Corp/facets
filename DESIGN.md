@@ -145,7 +145,7 @@ Filament presets (Orange, White, Grey, Black, Red, Yellow, Green, Blue, Purple) 
 - **Headline** (semibold, 17pt): row titles in lists (library list, recents, search results).
 - **Card Title** (medium, 15pt, subheadline): names under library grid cards, toast text; up to two lines.
 - **Chip Label** (semibold, 15pt, subheadline): the plate picker over the model.
-- **Readout** (medium, 13pt, footnote, tabular figures): the dimensions chip. Measurements always use tabular figures so they don't jitter as values change.
+- **Readout** (medium, 13pt, footnote, tabular figures): the dimensions chip. Measurements always use tabular figures and one decimal place (176.0, not 176) so they don't jitter or mix precision.
 - **Caption** (regular, 12pt): metadata lines ("STL · 217 KB · 1:59 PM"), joined with middle dots.
 - **Caption Small** (regular, 11pt, caption2): secondary context such as a search hit's folder path.
 
@@ -160,7 +160,7 @@ The library is an adaptive grid: columns from 150 to 220pt wide with 16pt betwee
 
 Settings, info sheets, Browse and Recents are inset grouped lists. The viewer is full-bleed: the 3D canvas ignores the safe area, chips sit at the top below the navigation bar (8pt apart, stacked and centred), and tools live in the bottom toolbar, which replaces the tab bar there.
 
-On iPad the tab bar moves to the top and the grid simply gains columns; no separate iPad layout exists. Spacing steps are 2, 4, 8, 12, 16, 20 and 24pt.
+On iPad the tab bar moves to the top and the grid simply gains columns; no separate iPad layout exists. At accessibility text sizes the library always shows rows, because two columns can't hold a name. Spacing steps are 2, 4, 8, 12, 16, 20 and 24pt.
 
 ## Elevation & Depth
 
@@ -197,7 +197,7 @@ Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt co
 
 ### Navigation
 - Tab bar with Library, Recents, Settings and a search-role tab; it minimises on scroll and hides inside the viewer.
-- Library and Browse are a segmented control in the Library tab's principal toolbar slot.
+- Library and Browse are a segmented control in a `safeAreaBar` directly under the large title (max 320pt wide), so every tab keeps its large title.
 - Pushes use the zoom transition from a card into the viewer; files opened from other apps present the viewer full-screen with a Close button.
 
 ### Toast
@@ -226,4 +226,4 @@ The viewer and every thumbnail are the same object at two scales: a Stage or Til
 - **Don't** add drop shadows or hand-made blur to cards, tiles or panels.
 - **Don't** build a dark-only, CAD-style interface; light and dark are both first-class.
 - **Don't** let file or preset filament colours tint interface elements.
-- **Don't** use a different orange anywhere (the earlier #F2802E model default and the renderer's #F19545 fallback are drift to remove).
+- **Don't** use a different orange anywhere; the app tint, the asset catalog accent, the model default and MeshKit's renderer default are all #F2782E.

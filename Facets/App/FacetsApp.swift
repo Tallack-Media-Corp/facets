@@ -27,11 +27,26 @@ struct FacetsApp: App {
     }
 
     #if DEBUG
-    /// `FACETS_OPEN=<path below Documents>` opens a library file at launch, for
-    /// screenshots and quick checks.
+    /// Launch options for screenshots and quick checks:
+    /// `FACETS_OPEN=<path below Documents>` opens a library file,
+    /// `FACETS_TAB=library|browse|recents|settings|search` picks the screen.
     private func openFromLaunchEnvironment() {
-        guard let path = ProcessInfo.processInfo.environment["FACETS_OPEN"], !path.isEmpty else { return }
-        router.open(library.root.appending(path: path), library: library)
+        let env = ProcessInfo.processInfo.environment
+        switch env["FACETS_TAB"] {
+        case "browse":
+            UserDefaults.standard.set("Browse", forKey: "library.section")
+            router.tab = .library
+        case "library":
+            UserDefaults.standard.set("Library", forKey: "library.section")
+            router.tab = .library
+        case "recents": router.tab = .recents
+        case "settings": router.tab = .settings
+        case "search": router.tab = .search
+        default: break
+        }
+        if let path = env["FACETS_OPEN"], !path.isEmpty {
+            router.open(library.root.appending(path: path), library: library)
+        }
     }
     #endif
 }

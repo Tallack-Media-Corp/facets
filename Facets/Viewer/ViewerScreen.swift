@@ -181,6 +181,9 @@ struct ViewerScreen: View {
             // A multi-plate project opens on its first plate, like the slicer.
             appearance.plateID = model.plates.first?.id
             phase = .loaded(model)
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["FACETS_INFO"] == "1" { showingInfo = true }
+            #endif
         } catch {
             phase = .failed(error.localizedDescription)
         }
@@ -267,20 +270,8 @@ private struct ViewerChips: View {
 /// A soft studio backdrop behind the transparent 3D view.
 struct ViewerBackground: View {
     var body: some View {
-        LinearGradient(
-            colors: [Color(light: 0xF6F7F9, dark: 0x2C2E33), Color(light: 0xD9DCE1, dark: 0x111214)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        LinearGradient(colors: [Color(Palette.stage.top), Color(Palette.stage.floor)], startPoint: .top, endPoint: .bottom)
         .ignoresSafeArea()
     }
 }
 
-extension Color {
-    init(light: UInt32, dark: UInt32) {
-        func color(_ rgb: UInt32) -> UIColor {
-            UIColor(red: CGFloat((rgb >> 16) & 0xFF) / 255, green: CGFloat((rgb >> 8) & 0xFF) / 255, blue: CGFloat(rgb & 0xFF) / 255, alpha: 1)
-        }
-        self.init(uiColor: UIColor { $0.userInterfaceStyle == .dark ? color(dark) : color(light) })
-    }
-}

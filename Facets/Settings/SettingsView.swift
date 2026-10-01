@@ -82,31 +82,30 @@ private struct ModelColorPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ScrollView(.horizontal) {
-                HStack(spacing: 12) {
-                    ForEach(ModelColorPreset.all) { preset in
-                        let selected = preset.hex.caseInsensitiveCompare(hex) == .orderedSame
-                        Button {
-                            hex = preset.hex
-                        } label: {
-                            Circle()
-                                .fill(Color(hex: preset.hex) ?? .gray)
-                                .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
-                                .padding(selected ? 4 : 0)
-                                .overlay {
-                                    if selected { Circle().strokeBorder(.tint, lineWidth: 2.5) }
-                                }
-                                .frame(width: 36, height: 36)
-                                .contentShape(.circle)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(preset.name)
-                        .accessibilityAddTraits(selected ? .isSelected : [])
+            // Every preset visible at once, wrapping as the row narrows or text grows.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44, maximum: 52), spacing: 4)], spacing: 4) {
+                ForEach(ModelColorPreset.all) { preset in
+                    let selected = preset.hex.caseInsensitiveCompare(hex) == .orderedSame
+                    Button {
+                        hex = preset.hex
+                    } label: {
+                        Circle()
+                            .fill(Color(hex: preset.hex) ?? .gray)
+                            .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
+                            .padding(selected ? 4 : 0)
+                            .overlay {
+                                if selected { Circle().strokeBorder(.tint, lineWidth: 2.5) }
+                            }
+                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
+                            .contentShape(.circle)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(preset.name)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
-                .padding(.vertical, 2)
             }
-            .scrollIndicators(.hidden)
+            .padding(.vertical, 2)
             ColorPicker("Custom Colour", selection: Binding(
                 get: { Color(hex: hex) ?? .orange },
                 set: { hex = $0.hexString }

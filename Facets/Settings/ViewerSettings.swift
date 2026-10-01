@@ -17,7 +17,7 @@ struct ModelColorPreset: Identifiable, Hashable {
     var id: String { hex }
 
     static let all: [ModelColorPreset] = [
-        .init(name: "Orange", hex: "#F2802E"),
+        .init(name: "Orange", hex: Palette.filamentOrange),
         .init(name: "White", hex: "#F2F2EE"),
         .init(name: "Grey", hex: "#8E9196"),
         .init(name: "Black", hex: "#2F3033"),
@@ -52,7 +52,9 @@ final class ViewerSettings {
     }
 
     init() {
-        colorHex = defaults.string(forKey: "viewer.color") ?? ModelColorPreset.all[0].hex
+        let saved = defaults.string(forKey: "viewer.color")
+        // The Orange preset was #F2802E before the design system settled on one orange.
+        colorHex = (saved == nil || saved == "#F2802E") ? Palette.filamentOrange : saved!
         usesFileColors = defaults.object(forKey: "viewer.fileColors") as? Bool ?? true
         showsGrid = defaults.object(forKey: "viewer.grid") as? Bool ?? true
         units = MeasurementUnits(rawValue: defaults.string(forKey: "viewer.units") ?? "")

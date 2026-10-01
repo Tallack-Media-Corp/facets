@@ -30,6 +30,7 @@ targets:
     platform: iOS
     sources:
       - path: Facets
+      - path: Shared
     dependencies:
       - package: MeshKit
       - target: FacetsPreview
@@ -108,6 +109,7 @@ targets:
     platform: iOS
     sources:
       - path: FacetsPreview
+      - path: Shared
     dependencies:
       - package: MeshKit
       - sdk: QuickLook.framework
