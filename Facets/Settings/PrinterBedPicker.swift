@@ -54,9 +54,10 @@ struct PrinterBedPicker: View {
             settings.bedID = id
         } label: {
             HStack {
-                Text(title).foregroundStyle(.primary)
+                // Colour, not hierarchical styles: inside a button those resolve to the tint.
+                Text(title).foregroundStyle(Color.primary)
                 Spacer()
-                if let detail { Text(detail).foregroundStyle(.secondary).monospacedDigit() }
+                if let detail { Text(detail).foregroundStyle(Color.secondary).monospacedDigit() }
                 Image(systemName: "checkmark")
                     .fontWeight(.semibold)
                     .foregroundStyle(.tint)
@@ -68,10 +69,12 @@ struct PrinterBedPicker: View {
         .accessibilityAddTraits(settings.bedID == id ? .isSelected : [])
     }
 
-    /// "256 × 256 × 250 mm".
+    /// "256 × 256 × 250 mm": whole millimetres, since beds are specified that way.
     private func size(_ width: Float, _ depth: Float, _ height: Float) -> String {
-        "\(Format.dimension(width, units: settings.units)) × \(Format.dimension(depth, units: settings.units)) × \(Format.dimension(height, units: settings.units))"
-            .replacingOccurrences(of: " \(settings.units.symbol) ×", with: " ×")
+        let factor: Float = settings.units == .inches ? 25.4 : 1
+        let digits = settings.units == .inches ? 1 : 0
+        let parts = [width, depth, height].map { ($0 / factor).formatted(.number.precision(.fractionLength(digits))) }
+        return parts.joined(separator: " × ") + " " + settings.units.symbol
     }
 
     /// Shows and edits millimetres in the user's units.

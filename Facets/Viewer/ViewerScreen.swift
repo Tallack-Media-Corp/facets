@@ -31,6 +31,10 @@ struct ViewerScreen: View {
     @AppStorage("viewer.interactions") private var interactions = 0
     @State private var showingHint = false
     @State private var findingFile = false
+    @State private var choosingPrinter = false
+    /// How many models have offered "Set printer…"; it retires after three.
+    @AppStorage("viewer.printerPrompts") private var printerPrompts = 0
+    @State private var offersPrinter = false
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var fileSize: Int64?
     @State private var isAccessing = false
@@ -86,7 +90,9 @@ struct ViewerScreen: View {
                     plateID: $appearance.plateID,
                     dimensions: Format.dimensions(visibleBounds(model).size, units: settings.units),
                     spokenDimensions: Format.spokenDimensions(visibleBounds(model).size, units: settings.units),
-                    fitNote: fitNote(for: model)
+                    fitNote: fitNote(for: model),
+                    offersPrinter: offersPrinter && settings.bed == nil,
+                    choosePrinter: { choosingPrinter = true }
                 )
                     .padding(.top, 8)
             }
@@ -123,6 +129,21 @@ struct ViewerScreen: View {
             recents.remove(fileAt: file.url)
             dismiss()
             router.presented = ModelFileRef(url: url, isExternal: !library.contains(url))
+        }
+        .sheet(isPresented: $choosingPrinter) {
+            NavigationStack {
+                PrinterBedPicker()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done", systemImage: "checkmark") { choosingPrinter = false }
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .onChange(of: settings.bedID) { _, id in
+            // Choosing a printer means wanting to see its bed.
+            if id != nil { appearance.showsGrid = true }
         }
         .task { await load() }
         .onDisappear {
@@ -220,32 +241,11 @@ struct ViewerScreen: View {
 
     private var displayName: String { file.displayName }
 
-    /// The grid and printer bed, together in one menu: try another printer without
-    /// leaving the model. A chosen bed is remembered, like in Settings.
+    /// The grid is a plain switch; the printer lives behind the fit note (or the
+    /// one-off "Set printer…" chip), where the question it answers is asked.
     private var buildPlateMenu: some View {
-        Menu {
-            Toggle("Show Grid", isOn: $appearance.showsGrid)
-            Picker("Printer Bed", selection: Binding(
-                get: { settings.bedID },
-                set: { id in
-                    settings.bedID = id
-                    if id != nil { appearance.showsGrid = true }
-                }
-            )) {
-                Text("No Printer Bed").tag(String?.none)
-                ForEach(PrinterBed.byMake, id: \.make) { group in
-                    Section(group.make) {
-                        ForEach(group.beds) { bed in
-                            Text(bed.name).tag(Optional(bed.id))
-                        }
-                    }
-                }
-                if settings.customBedWidth > 0 {
-                    Text("Custom (\(Format.dimension(settings.customBedWidth, units: settings.units)) × \(Format.dimension(settings.customBedDepth, units: settings.units)))").tag(Optional(PrinterBed.customID))
-                }
-            }
-        } label: {
-            Label("Build Plate", systemImage: appearance.showsGrid ? "grid" : "square.dashed")
+        Toggle(isOn: $appearance.showsGrid) {
+            Label("Build Plate Grid", systemImage: "grid")
         }
     }
 
@@ -338,6 +338,10 @@ struct ViewerScreen: View {
             appearance.plateID = model.plates.first?.id
             phase = .loaded(model)
             offerGestureHint()
+            if settings.bed == nil, printerPrompts < 3 {
+                offersPrinter = true
+                printerPrompts += 1
+            }
             #if DEBUG
             if ProcessInfo.processInfo.environment["FACETS_INFO"] == "1" { showingInfo = true }
             #endif
@@ -377,6 +381,9 @@ private struct ViewerChips: View {
     let dimensions: String
     let spokenDimensions: String
     let fitNote: (text: String, tooBig: Bool)?
+    /// No printer chosen yet: offer one, quietly, for the first few models.
+    let offersPrinter: Bool
+    let choosePrinter: () -> Void
 
     var body: some View {
         GlassEffectContainer(spacing: 8) {
@@ -406,23 +413,59 @@ private struct ViewerChips: View {
                     .glassEffect(.regular.interactive(), in: .capsule)
                     .accessibilityLabel("Plate: \(plateTitle)")
                 }
-                VStack(spacing: 2) {
-                    Text(dimensions)
-                        .font(.footnote.weight(.medium).monospacedDigit())
-                    if let fitNote {
-                        Label(fitNote.text, systemImage: fitNote.tooBig ? "exclamationmark.triangle.fill" : "checkmark.circle")
-                            .font(.caption.weight(.medium).monospacedDigit())
-                            .foregroundStyle(fitNote.tooBig ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                            .multilineTextAlignment(.center)
-                    }
+                // With a printer chosen the readout is a button: tap the verdict to
+                // try another printer. Without one it's just a readout.
+                if fitNote != nil {
+                    Button(action: choosePrinter) { readout }
+                        .buttonStyle(.plain)
+                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(readoutLabel)
+                        .accessibilityHint("Changes the printer")
+                        .accessibilityAddTraits(.isButton)
+                } else {
+                    readout
+                        .glassEffect(.regular, in: .capsule)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(readoutLabel)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .glassEffect(.regular, in: fitNote == nil ? AnyShape(.capsule) : AnyShape(.rect(cornerRadius: 16)))
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Size: \(spokenDimensions)\(fitNote.map { ". \($0.text)" } ?? "")")
+
+                if offersPrinter {
+                    Button(action: choosePrinter) {
+                        Label("Set printer…", systemImage: "printer")
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .frame(minHeight: 32)
+                            .contentShape(.capsule)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .accessibilityHint("Shows whether models fit your printer")
+                }
             }
         }
+    }
+
+    private var readout: some View {
+        VStack(spacing: 2) {
+            Text(dimensions)
+                .font(.footnote.weight(.medium).monospacedDigit())
+                .foregroundStyle(Color.primary)
+            if let fitNote {
+                Label(fitNote.text, systemImage: fitNote.tooBig ? "exclamationmark.triangle.fill" : "checkmark.circle")
+                    .font(.caption.weight(.medium).monospacedDigit())
+                    .foregroundStyle(fitNote.tooBig ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .contentShape(.rect)
+    }
+
+    private var readoutLabel: String {
+        "Size: \(spokenDimensions)\(fitNote.map { ". \($0.text)" } ?? "")"
     }
 
     private var plateTitle: String {
