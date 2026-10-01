@@ -18,7 +18,7 @@ struct RecentlyDeletedView: View {
                         .frame(width: 28)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(item.name)
+                        Text(item.displayName)
                             .font(.headline)
                             .lineLimit(3)
                         Text(detail(for: item))
@@ -64,7 +64,7 @@ struct RecentlyDeletedView: View {
         } message: {
             Text("They can't be restored after this.")
         }
-        .confirmationDialog("Delete \"\(purging?.name ?? "")\" for good?", isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }), titleVisibility: .visible) {
+        .confirmationDialog("Delete \"\(purging?.displayName ?? "")\" for good?", isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }), titleVisibility: .visible) {
             Button("Delete Now", role: .destructive) {
                 if let purging { purge([purging]) }
             }
@@ -89,7 +89,7 @@ struct RecentlyDeletedView: View {
         do {
             let restored = try library.restore(chosen)
             if restored.count == 1, let first = restored.first {
-                toasts.show("Restored \(first.deletingPathExtension().lastPathComponent)")
+                toasts.show("Restored \(Format.title(fromFileName: first.deletingPathExtension().lastPathComponent))")
             } else {
                 toasts.show("Restored \(restored.count) items")
             }

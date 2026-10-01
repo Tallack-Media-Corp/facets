@@ -63,16 +63,16 @@ struct ModelInfoSheet: View {
                     if let fileSize {
                         LabeledContent("Size", value: Format.fileSize(fileSize))
                     }
-                    if let title = model.title, title != file.name {
+                    if let title = model.title, title != file.name, title != file.displayName {
                         LabeledContent("Title", value: title)
                     }
                     if let application = model.application {
                         LabeledContent("Made With", value: application.replacingOccurrences(of: "-", with: " "))
                     }
-                    LabeledContent("Location", value: file.isExternal ? "Another app" : "Facets library")
+                    LabeledContent("Location", value: file.isExternal ? "Not saved in Facets" : "In your Facets library")
                 }
             }
-            .navigationTitle(file.name)
+            .navigationTitle(file.displayName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

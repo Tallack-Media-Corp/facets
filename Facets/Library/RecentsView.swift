@@ -50,7 +50,7 @@ struct RecentsView: View {
                 }
                 Button("Keep", role: .cancel) {}
             } message: {
-                Text("\(missing?.name ?? "This model") was moved, renamed or deleted, or Facets no longer has access to it.")
+                Text("\(missing?.displayName ?? "This model") was moved, renamed or deleted, or Facets no longer has access to it.")
             }
         }
     }
@@ -91,7 +91,7 @@ private struct RecentRow: View {
             .frame(width: min(thumbnailSize, 88), height: min(thumbnailSize, 88))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.name)
+                Text(entry.displayName)
                     .font(.headline)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                 HStack(spacing: 4) {

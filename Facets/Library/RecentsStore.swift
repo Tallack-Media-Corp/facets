@@ -10,6 +10,7 @@ final class RecentsStore {
     struct Entry: Codable, Identifiable, Hashable {
         let id: UUID
         var name: String
+        var displayName: String { Format.title(fromFileName: name) }
         var fileExtension: String
         var bookmark: Data
         var lastOpened: Date

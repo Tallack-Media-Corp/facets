@@ -9,6 +9,7 @@ struct ModelFileRef: Identifiable, Hashable {
 
     var id: URL { url }
     var name: String { url.deletingPathExtension().lastPathComponent }
+    var displayName: String { Format.title(fromFileName: name) }
 }
 
 /// App-wide navigation: the selected tab, and a file another app asked us to open.

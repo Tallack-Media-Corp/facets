@@ -227,9 +227,9 @@ struct FolderView: View {
     private var deleteTitle: String {
         guard let deleting else { return "" }
         if deleting.isFolder {
-            return "Delete \"\(deleting.name)\" and everything in it?"
+            return "Delete \"\(deleting.displayName)\" and everything in it?"
         }
-        return "Delete \"\(deleting.name)\"?"
+        return "Delete \"\(deleting.displayName)\"?"
     }
 
     private func route(for item: LibraryItem) -> LibraryRoute {
@@ -247,7 +247,7 @@ struct FolderView: View {
         perform("Couldn't Save to Library") {
             guard let copy = try library.importFiles([item.url], into: library.root).first else { return }
             saved.insert(item.url)
-            toasts.show("Saved to Library as \(copy.deletingPathExtension().lastPathComponent)")
+            toasts.show("Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))")
         }
     }
 
@@ -268,14 +268,14 @@ struct FolderView: View {
                 do {
                     try library.restore(deleted)
                 } catch {
-                    toasts.show("Couldn't put \(item.name) back. It's still in Settings › Recently Deleted.", symbol: "exclamationmark.triangle.fill")
+                    toasts.show("Couldn't put \(item.displayName) back. It's still in Settings › Recently Deleted.", symbol: "exclamationmark.triangle.fill")
                 }
             }
             undoManager?.registerUndo(withTarget: library) { _ in
                 MainActor.assumeIsolated { undo() }
             }
-            undoManager?.setActionName("Delete \(item.name)")
-            toasts.show("Deleted \(item.name)", symbol: "trash.fill", actionTitle: "Undo", action: undo)
+            undoManager?.setActionName("Delete \(item.displayName)")
+            toasts.show("Deleted \(item.displayName)", symbol: "trash.fill", actionTitle: "Undo", action: undo)
         }
     }
 
@@ -370,7 +370,7 @@ struct LibraryCard: View {
             .aspectRatio(1, contentMode: .fit)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
+                Text(item.displayName)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -443,7 +443,7 @@ struct LibraryRow: View {
             // At accessibility sizes names wrap rather than truncate; that's the point
             // of showing rows there.
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.name)
+                Text(item.displayName)
                     .font(.headline)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                 Text(Self.subtitle(for: item))
@@ -489,7 +489,7 @@ struct MoveSheet: View {
                 }
                 .disabled(isCurrent || isSelf)
             }
-            .navigationTitle("Move \"\(item.name)\"")
+            .navigationTitle("Move \"\(item.displayName)\"")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

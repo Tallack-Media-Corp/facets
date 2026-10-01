@@ -40,10 +40,13 @@ enum Format {
         return "\(length(size.x, units: units)) \(unitName) wide, \(length(size.y, units: units)) deep, \(length(size.z, units: units)) high"
     }
 
-    /// A file name for a title: "Eufy_S1_Case" reads as "Eufy S1 Case". The real
-    /// name still shows in the info sheet.
+    /// A file name for a title: "Eufy_S1_Case_-_Multicolour" reads as
+    /// "Eufy S1 Case – Multicolour". The real name still shows in Info › File and in
+    /// the rename field.
     static func title(fromFileName name: String) -> String {
-        name.replacingOccurrences(of: "_", with: " ").trimmingCharacters(in: .whitespaces)
+        name.replacingOccurrences(of: "_-_", with: " – ")
+            .replacingOccurrences(of: "_", with: " ")
+            .trimmingCharacters(in: .whitespaces)
     }
 
     static func dimension(_ mm: Float, units: MeasurementUnits) -> String {

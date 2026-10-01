@@ -15,6 +15,8 @@ struct LibraryItem: Identifiable, Hashable {
 
     var id: URL { url }
     var name: String { isFolder ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent }
+    /// What a title shows: a model's file name tidied; a folder's name as typed.
+    var displayName: String { isFolder ? name : Format.title(fromFileName: name) }
     var fileExtension: String { url.pathExtension.uppercased() }
 }
 
@@ -186,6 +188,7 @@ final class FileLibrary {
 
         var id: URL { stored }
         var name: String { isFolder ? original.lastPathComponent : original.deletingPathExtension().lastPathComponent }
+        var displayName: String { isFolder ? name : Format.title(fromFileName: name) }
     }
 
     /// Outside Documents, so the Files app never shows it.

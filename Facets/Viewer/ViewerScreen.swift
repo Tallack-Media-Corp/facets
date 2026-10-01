@@ -1,5 +1,6 @@
 import MeshKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The full-screen 3D view of one file.
 struct ViewerScreen: View {
@@ -17,6 +18,7 @@ struct ViewerScreen: View {
     @Environment(RecentsStore.self) private var recents
     @Environment(FileLibrary.self) private var library
     @Environment(ToastCenter.self) private var toasts
+    @Environment(Router.self) private var router
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
@@ -28,6 +30,7 @@ struct ViewerScreen: View {
     /// How many times someone has moved a model; the gesture hint stops after that.
     @AppStorage("viewer.interactions") private var interactions = 0
     @State private var showingHint = false
+    @State private var findingFile = false
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var fileSize: Int64?
     @State private var isAccessing = false
@@ -48,13 +51,23 @@ struct ViewerScreen: View {
                 } description: {
                     Text(error.message)
                 } actions: {
-                    Button("Try Again") { Task { await load(retrying: true) } }
-                        .buttonStyle(.glassProminent)
-                    if error.kind == .missing || error.kind == .noAccess, recents.contains(fileAt: file.url) {
-                        Button("Remove from Recents") {
-                            recents.remove(fileAt: file.url)
-                            dismiss()
+                    // Lead with the action that can work: a moved file needs finding,
+                    // a flaky download needs another go.
+                    switch error.kind {
+                    case .missing, .noAccess:
+                        Button("Find in Files…") { findingFile = true }
+                            .buttonStyle(.glassProminent)
+                        if recents.contains(fileAt: file.url) {
+                            Button("Remove from Recents") {
+                                recents.remove(fileAt: file.url)
+                                dismiss()
+                            }
                         }
+                    case .notDownloaded, .noSpace, .other:
+                        Button("Try Again") { Task { await load(retrying: true) } }
+                            .buttonStyle(.glassProminent)
+                    case .notAModel, .empty, .damaged, .noShapes:
+                        EmptyView()
                     }
                 }
             case .loaded(let model):
@@ -103,6 +116,13 @@ struct ViewerScreen: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(saveError ?? "")
+        }
+        // Relink a moved file: open the one picked, and point Recents at it instead.
+        .fileImporter(isPresented: $findingFile, allowedContentTypes: UTType.models) { result in
+            guard case .success(let url) = result else { return }
+            recents.remove(fileAt: file.url)
+            dismiss()
+            router.presented = ModelFileRef(url: url, isExternal: !library.contains(url))
         }
         .task { await load() }
         .onDisappear {
@@ -198,7 +218,7 @@ struct ViewerScreen: View {
         appearance.gridColor = RenderAppearance.gridColor(dark: colorScheme == .dark)
     }
 
-    private var displayName: String { Format.title(fromFileName: file.name) }
+    private var displayName: String { file.displayName }
 
     /// The grid and printer bed, together in one menu: try another printer without
     /// leaving the model. A chosen bed is remembered, like in Settings.
@@ -342,7 +362,7 @@ struct ViewerScreen: View {
             let copies = try library.importFiles([file.url], into: library.root)
             guard let copy = copies.first else { return }
             withAnimation(.snappy) { isSaved = true }
-            toasts.show("Saved to Library as \(copy.deletingPathExtension().lastPathComponent)")
+            toasts.show("Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))")
         } catch {
             saveError = FriendlyError(file: error).message
         }

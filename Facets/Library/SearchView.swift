@@ -11,7 +11,8 @@ struct SearchView: View {
         let terms = query.split(separator: " ").map(String.init)
         guard !terms.isEmpty else { return [] }
         return all
-            .filter { item in terms.allSatisfy { item.name.localizedStandardContains($0) } }
+            // Match the tidy name as well, so "Eufy S1" finds "Eufy_S1_Case".
+            .filter { item in terms.allSatisfy { item.name.localizedStandardContains($0) || item.displayName.localizedStandardContains($0) } }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
