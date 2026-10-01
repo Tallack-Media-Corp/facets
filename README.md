@@ -71,7 +71,9 @@ MESHKIT_SAMPLES=~/Downloads swift test --filter RealFilesTests
 MESHKIT_SNAPSHOT_FILES=/path/a.stl:/path/b.3mf MESHKIT_SNAPSHOT_OUT=/tmp/snaps swift test --filter SnapshotTests
 ```
 
-The app icon is drawn by the renderer too: `FACETS_ICON_OUT=<AppIcon.appiconset path> swift test --filter IconTests`.
+### Icons
+
+The app icon and its alternates (Settings › App Icon) are Icon Composer documents in `Facets/Resources/Icons`, built by `python3 tools/icons/build_icons.py`, which also renders the picker previews. The Benchy artwork in `tools/icons/art` is drawn by MeshKit from the public domain (CC0) [#3DBenchy](https://www.3dbenchy.com) model by Creative Tools: a solid render, and a wireframe of the model simplified to 600 triangles by quadric edge collapse. The script's docstring has the command to redraw it; the STL itself isn't kept here.
 
 ## File types
 

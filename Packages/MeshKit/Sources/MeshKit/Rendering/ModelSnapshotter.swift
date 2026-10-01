@@ -13,7 +13,9 @@ public final class ModelSnapshotter {
 
     /// A multi-plate project shows its first plate, as the slicer does, unless the
     /// appearance names one.
-    public func image(of model: Model3D, pixelSize: Int, appearance: RenderAppearance = RenderAppearance()) -> CGImage? {
+    /// `yaw` and `pitch` (radians) override the isometric angle; `fill` is how much of
+    /// the square the model spans.
+    public func image(of model: Model3D, pixelSize: Int, appearance: RenderAppearance = RenderAppearance(), yaw: Float? = nil, pitch: Float? = nil, fill: Float = 0.9) -> CGImage? {
         let size = max(16, min(pixelSize, 2048))
         let context = renderer.context
         var appearance = appearance
@@ -26,7 +28,9 @@ public final class ModelSnapshotter {
 
         var camera = OrbitCamera()
         camera.apply(.isometric)
-        camera.fitTightly(renderer.visibleParts, aspect: 1)
+        if let yaw { camera.yaw = yaw }
+        if let pitch { camera.pitch = pitch }
+        camera.fitTightly(renderer.visibleParts, aspect: 1, fill: fill)
 
         let msaa = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: RenderContext.colorFormat, width: size, height: size, mipmapped: false)
         msaa.textureType = .type2DMultisample

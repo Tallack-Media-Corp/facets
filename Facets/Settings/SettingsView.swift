@@ -28,6 +28,10 @@ struct SettingsView: View {
                     Text("3MF projects from Bambu Studio, Orca Slicer and others carry filament colours. STL files always use the model colour.")
                 }
 
+                Section("App Icon") {
+                    AppIconPicker()
+                }
+
                 Section("Viewer") {
                     Toggle("Show Build Plate Grid", isOn: $settings.showsGrid)
                     Picker("Units", selection: $settings.units) {
@@ -137,6 +141,8 @@ private struct AboutView: View {
             }
             Section("Licence") {
                 Text("MIT Licence. The source code, issues and releases are on GitHub.")
+                Text("The Benchy icons are drawn from #3DBenchy by Creative Tools, a public domain (CC0) model. 3DBenchy.com")
+                    .foregroundStyle(.secondary)
                 Link("github.com/Tallack-Media-Corp/facets", destination: AppInfo.sourceURL)
             }
         }
