@@ -123,7 +123,7 @@ struct ModelInfoSheet: View {
             } header: {
                 Text("Print Estimate")
             } footer: {
-                Text("Worked out from the model's shape for \(printerName), assuming 0.2 mm layers, two walls and 15% \(material.title) infill. Weight is usually within a tenth of the slicer's; time within a fifth. Supports add more. A project saved after slicing in Bambu Studio or Orca shows the slicer's own figures here.")
+                Text("Estimated from the model's shape for \(printerName), with typical settings: 0.2 mm layers, two walls and 15% \(material.title) infill. Your slicer will usually be within 10% on filament and 20% on time, more if the model needs supports.")
             }
         }
     }
