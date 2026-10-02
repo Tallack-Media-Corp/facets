@@ -36,9 +36,6 @@ struct ViewerScreen: View {
     @State private var shownHintStage: Int?
     @State private var findingFile = false
     @State private var choosingPrinter = false
-    /// How many models have offered "Set printer…"; it retires after three.
-    @AppStorage("viewer.printerPrompts") private var printerPrompts = 0
-    @State private var offersPrinter = false
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var fileSize: Int64?
     @State private var isAccessing = false
@@ -95,7 +92,7 @@ struct ViewerScreen: View {
                     dimensions: Format.dimensions(visibleBounds(model).size, units: settings.units),
                     spokenDimensions: Format.spokenDimensions(visibleBounds(model).size, units: settings.units),
                     fitNote: fitNote(for: model),
-                    offersPrinter: offersPrinter && settings.bed == nil,
+                    hasPrinter: settings.bed != nil,
                     choosePrinter: { choosingPrinter = true }
                 )
                 // Overlays on the model stop growing at the first accessibility
@@ -376,10 +373,6 @@ struct ViewerScreen: View {
             appearance.plateID = model.plates.first?.id
             phase = .loaded(model)
             offerGestureHint()
-            if settings.bed == nil, printerPrompts < 3 {
-                offersPrinter = true
-                printerPrompts += 1
-            }
             #if DEBUG
             if ProcessInfo.processInfo.environment["FACETS_INFO"] == "1" { showingInfo = true }
             #endif
@@ -420,7 +413,8 @@ private struct ViewerChips: View {
     let spokenDimensions: String
     let fitNote: (text: String, tooBig: Bool)?
     /// No printer chosen yet: offer one, quietly, for the first few models.
-    let offersPrinter: Bool
+    /// Without a printer the readout says so, and tapping it picks one.
+    let hasPrinter: Bool
     let choosePrinter: () -> Void
 
     /// iPad's canvas is much larger; the chips step up a size to match.
@@ -456,36 +450,16 @@ private struct ViewerChips: View {
                     .glassEffect(.regular.interactive(), in: .capsule)
                     .accessibilityLabel("Plate: \(plateTitle)")
                 }
-                // With a printer chosen the readout is a button: tap the verdict to
-                // try another printer. Without one it's just a readout.
-                if fitNote != nil {
-                    Button(action: choosePrinter) { readout }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(readoutLabel)
-                        .accessibilityHint("Changes the printer")
-                        .accessibilityAddTraits(.isButton)
-                } else {
-                    readout
-                        .glassEffect(.regular, in: .capsule)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(readoutLabel)
-                }
-
-                if offersPrinter {
-                    Button(action: choosePrinter) {
-                        Label("Set printer…", systemImage: "printer")
-                            .font(.caption.weight(.medium))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .frame(minHeight: 44)
-                            .contentShape(.capsule)
-                    }
+                // The readout is also the printer control: it says which printer the
+                // model's measured against (or that none is chosen), and tapping it
+                // picks another.
+                Button(action: choosePrinter) { readout }
                     .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                    .accessibilityHint("Shows whether models fit your printer")
-                }
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(readoutLabel)
+                    .accessibilityHint(hasPrinter ? "Changes the printer" : "Chooses a printer to check the model fits")
+                    .accessibilityAddTraits(.isButton)
             }
         }
     }
@@ -508,13 +482,15 @@ private struct ViewerChips: View {
                     }
                     .font((wide ? Font.footnote : .caption).weight(.medium).monospacedDigit())
                     .multilineTextAlignment(.center)
+                } else if !hasPrinter {
+                    Label("No printer selected", systemImage: "printer")
+                        .font((wide ? Font.footnote : .caption).weight(.medium))
+                        .foregroundStyle(Color.secondary)
                 }
             }
-            if fitNote != nil {
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(Color.secondary)
-            }
+            Image(systemName: "chevron.down")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Color.secondary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -523,7 +499,7 @@ private struct ViewerChips: View {
     }
 
     private var readoutLabel: String {
-        "Size: \(spokenDimensions)\(fitNote.map { ". \($0.text)" } ?? "")"
+        "Size: \(spokenDimensions)\(fitNote.map { ". \($0.text)" } ?? (hasPrinter ? "" : ". No printer selected"))"
     }
 
     private var plateTitle: String {
