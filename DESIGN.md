@@ -217,6 +217,9 @@ The viewer and every thumbnail are the same object at two scales: a Stage or Til
 - The readout chip gains a second line in Caption that names the side that's over: "Fits the Bambu Lab A1", "Fits the Prusa MK4S turned 90°" (secondary, checkmark), or "Too wide for the Bambu Lab A1 by 39.9 mm", "Too tall …", "Fits …, but runs off the plate as arranged" (tint, warning triangle). The chip becomes a 16pt-corner rounded rectangle while it has two lines.
 - Slicer projects keep their real plate positions; anything else centres the bed under the model. Hidden when all plates show at once.
 
+### Viewer Overlays
+- Chips and hints floating over the model stop growing at the first accessibility text size (`.dynamicTypeSize(...accessibility1)`), so they never cover the model they describe. On iPad (regular width) the chips step up one text size to sit in proportion with the larger canvas.
+
 ### Gesture Hint
 - Two short beats, one per model opened: first "Drag to turn · Pinch to zoom" (hand.draw), then "Double-tap to fit the model" (hand.tap), the way back when a model is lost off-screen. Each is a regular-glass capsule above the bottom toolbar in Card Title type, fades on the first touch or after 6 seconds, and advances only once the model has been moved while it showed. Never shown with VoiceOver on; there the canvas offers custom actions instead (turn, tilt, front, top, isometric, fit). One line on the smallest iPhone; no tours or coach marks elsewhere.
 

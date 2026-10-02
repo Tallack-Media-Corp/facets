@@ -98,12 +98,16 @@ struct ViewerScreen: View {
                     offersPrinter: offersPrinter && settings.bed == nil,
                     choosePrinter: { choosingPrinter = true }
                 )
+                // Overlays on the model stop growing at the first accessibility
+                // size; beyond that they'd cover what they describe.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .padding(.top, 8)
             }
         }
         .overlay(alignment: .bottom) {
             if showingHint {
                 GestureHint(stage: shownHintStage ?? 0)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .padding(.bottom, 12)
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
@@ -396,6 +400,10 @@ private struct ViewerChips: View {
     let offersPrinter: Bool
     let choosePrinter: () -> Void
 
+    /// iPad's canvas is much larger; the chips step up a size to match.
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var wide: Bool { sizeClass == .regular }
+
     var body: some View {
         GlassEffectContainer(spacing: 8) {
             VStack(spacing: 8) {
@@ -415,7 +423,7 @@ private struct ViewerChips: View {
                             Image(systemName: "chevron.down")
                                 .font(.caption2.weight(.bold))
                         }
-                        .font(.subheadline.weight(.semibold))
+                        .font((wide ? Font.body : .subheadline).weight(.semibold))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .contentShape(.capsule)
@@ -461,11 +469,11 @@ private struct ViewerChips: View {
     private var readout: some View {
         VStack(spacing: 2) {
             Text(dimensions)
-                .font(.footnote.weight(.medium).monospacedDigit())
+                .font((wide ? Font.subheadline : .footnote).weight(.medium).monospacedDigit())
                 .foregroundStyle(Color.primary)
             if let fitNote {
                 Label(fitNote.text, systemImage: fitNote.tooBig ? "exclamationmark.triangle.fill" : "checkmark.circle")
-                    .font(.caption.weight(.medium).monospacedDigit())
+                    .font((wide ? Font.footnote : .caption).weight(.medium).monospacedDigit())
                     .foregroundStyle(fitNote.tooBig ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
                     .multilineTextAlignment(.center)
             }
