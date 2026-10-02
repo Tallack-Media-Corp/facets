@@ -7,12 +7,8 @@ struct BrowseView: View {
     @Binding var path: [LibraryRoute]
 
     @Environment(LocationsStore.self) private var locations
-    private enum Picking {
-        case folder, file
-    }
-
-    @State private var picking = Picking.folder
-    @State private var showingPicker = false
+    @State private var pickingFolder = false
+    @State private var pickingFile = false
     @State private var renaming: LocationsStore.Location?
     @State private var renameText = ""
     @State private var errorMessage: String?
@@ -27,22 +23,18 @@ struct BrowseView: View {
                 }
             }
             Section {
-                Button("Add Location…", systemImage: "folder.badge.plus") { pick(.folder) }
-                Button("Open a File…", systemImage: "doc.badge.ellipsis") { pick(.file) }
+                // Each button has its own picker on its own view: one shared importer
+                // whose types change between presentations can come up with the other
+                // button's types, which let a file be added as a location.
+                Button("Add Location…", systemImage: "folder.badge.plus") { pickingFolder = true }
+                    .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder], onCompletion: handle)
+                Button("Open a File…", systemImage: "doc.badge.ellipsis") { pickingFile = true }
+                    .fileImporter(isPresented: $pickingFile, allowedContentTypes: UTType.models, onCompletion: handle)
             } footer: {
                 Text("Add a folder from iCloud Drive, On My iPhone or any storage app in Files to browse its STL and 3MF files here. Facets can only see folders you choose.")
             }
         }
         .navigationTitle("Browse")
-        // One importer for both: SwiftUI ignores all but one `fileImporter` in a view.
-        .fileImporter(isPresented: $showingPicker, allowedContentTypes: picking == .folder ? [.folder] : UTType.models) { result in
-            switch result {
-            case .success(let url):
-                picked(url)
-            case .failure(let error):
-                errorMessage = FriendlyError(file: error).message
-            }
-        }
         .alert("Rename Location", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) {}
@@ -57,24 +49,32 @@ struct BrowseView: View {
         }
     }
 
-    private func pick(_ kind: Picking) {
-        picking = kind
-        showingPicker = true
+    private func handle(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            picked(url)
+        case .failure(let error):
+            errorMessage = FriendlyError(file: error).message
+        }
     }
 
+    /// Goes by what was picked, not which button picked it: a folder becomes a
+    /// location, a model opens.
     private func picked(_ url: URL) {
-        switch picking {
-        case .folder:
-            do {
-                let location = try locations.add(url)
-                if let folder = locations.url(for: location) {
-                    path.append(.browse(folder, title: location.name))
-                }
-            } catch {
-                errorMessage = FriendlyError(file: error).message
-            }
-        case .file:
+        let scoped = url.startAccessingSecurityScopedResource()
+        let isFolder = LocationsStore.isFolder(url) || url.hasDirectoryPath
+        if scoped { url.stopAccessingSecurityScopedResource() }
+        guard isFolder else {
             path.append(.model(ModelFileRef(url: url, isExternal: true)))
+            return
+        }
+        do {
+            let location = try locations.add(url)
+            if let folder = locations.url(for: location) {
+                path.append(.browse(folder, title: location.name))
+            }
+        } catch {
+            errorMessage = FriendlyError(file: error).message
         }
     }
 
@@ -89,7 +89,7 @@ struct BrowseView: View {
             } else {
                 // The folder moved, was deleted, or its provider revoked access.
                 Button {
-                    pick(.folder)
+                    pickingFolder = true
                 } label: {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {

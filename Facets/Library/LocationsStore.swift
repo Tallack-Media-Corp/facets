@@ -21,8 +21,23 @@ final class LocationsStore {
 
     init() {
         if let data = try? Data(contentsOf: file), let saved = try? JSONDecoder().decode([Location].self, from: data) {
-            locations = saved
+            // Earlier builds could add a file as a location; drop any that resolve
+            // to one. Ones that don't resolve stay, to show "Add it again".
+            locations = saved.filter { location in
+                var stale = false
+                guard let url = try? URL(resolvingBookmarkData: location.bookmark, bookmarkDataIsStale: &stale) else { return true }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                return Self.isFolder(url)
+            }
+            if locations.count != saved.count { save() }
         }
+    }
+
+    /// Whether the picked or resolved URL is a folder (a package counts as a file).
+    static func isFolder(_ url: URL) -> Bool {
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+        return values?.isDirectory == true && values?.isPackage != true
     }
 
     /// Adds a folder picked in the system picker. Picking one that's already listed
@@ -31,6 +46,7 @@ final class LocationsStore {
     func add(_ url: URL) throws -> Location {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard Self.isFolder(url) else { throw CocoaError(.fileReadUnsupportedScheme) }
         let path = url.standardizedFileURL.path
         if let existing = locations.first(where: { self.url(for: $0)?.standardizedFileURL.path == path }) {
             return existing
