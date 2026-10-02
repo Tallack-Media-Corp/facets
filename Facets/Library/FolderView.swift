@@ -125,7 +125,7 @@ struct FolderView: View {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 16, alignment: .top)], spacing: 20) {
                     ForEach(items) { item in
-                        NavigationLink(value: route(for: item)) {
+                        open(item) {
                             LibraryCard(item: item)
                         }
                         .buttonStyle(.plain)
@@ -147,7 +147,7 @@ struct FolderView: View {
         } else {
             List {
                 ForEach(items) { item in
-                    NavigationLink(value: route(for: item)) {
+                    open(item) {
                         LibraryRow(item: item)
                     }
                     .zoomSource(id: item.url, in: zoom)
@@ -238,11 +238,15 @@ struct FolderView: View {
         return "Delete \"\(deleting.displayName)\"?"
     }
 
-    private func route(for item: LibraryItem) -> LibraryRoute {
+    /// A folder pushes; a model opens in the viewer over the tab.
+    @ViewBuilder
+    private func open(_ item: LibraryItem, @ViewBuilder label: () -> some View) -> some View {
         if item.isFolder {
-            return isBrowsing ? .browse(item.url, title: item.url.lastPathComponent) : .folder(item.url)
+            NavigationLink(value: isBrowsing ? LibraryRoute.browse(item.url, title: item.url.lastPathComponent) : .folder(item.url), label: label)
+        } else {
+            let content = label()
+            OpenModelButton(file: ModelFileRef(url: item.url, isExternal: isBrowsing)) { content }
         }
-        return .model(ModelFileRef(url: item.url, isExternal: isBrowsing))
     }
 
     private func isSaved(_ item: LibraryItem) -> Bool {
@@ -394,9 +398,11 @@ struct LibraryCard: View {
 }
 
 struct FolderTile: View {
+    var showsBackdrop = true
+
     var body: some View {
         RoundedRectangle(cornerRadius: 14)
-            .fill(.thumbnailBackground)
+            .fill(showsBackdrop ? AnyShapeStyle(.thumbnailBackground) : AnyShapeStyle(.clear))
             .overlay {
                 // Inset in proportion, so the glyph fills a 52pt row tile and a grid tile alike.
                 GeometryReader { geometry in
@@ -413,9 +419,11 @@ struct FolderTile: View {
 
 /// A model in iCloud that isn't on the device yet; it downloads when opened.
 struct CloudTile: View {
+    var showsBackdrop = true
+
     var body: some View {
         RoundedRectangle(cornerRadius: 14)
-            .fill(.thumbnailBackground)
+            .fill(showsBackdrop ? AnyShapeStyle(.thumbnailBackground) : AnyShapeStyle(.clear))
             .overlay {
                 Image(systemName: "icloud.and.arrow.down")
                     .font(.system(size: 28, weight: .light))
@@ -436,11 +444,11 @@ struct LibraryRow: View {
         HStack(spacing: 12) {
             Group {
                 if item.isFolder {
-                    FolderTile()
+                    FolderTile(showsBackdrop: false)
                 } else if !item.isDownloaded {
-                    CloudTile()
+                    CloudTile(showsBackdrop: false)
                 } else {
-                    ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 10)
+                    ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 10, showsBackdrop: false)
                 }
             }
             .frame(width: min(thumbnailSize, 88), height: min(thumbnailSize, 88))

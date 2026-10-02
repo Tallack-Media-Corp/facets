@@ -19,7 +19,7 @@ struct SearchView: View {
     var body: some View {
         NavigationStack {
             List(results) { item in
-                NavigationLink(value: ModelFileRef(url: item.url, isExternal: false)) {
+                OpenModelButton(file: ModelFileRef(url: item.url, isExternal: false)) {
                     VStack(alignment: .leading, spacing: 2) {
                         LibraryRow(item: item)
                         if let folder = library.relativeFolder(of: item.url) {
@@ -41,13 +41,11 @@ struct SearchView: View {
                 }
             }
             .navigationTitle("Search")
-            .navigationDestination(for: ModelFileRef.self) { file in
-                ViewerScreen(file: file)
-                    .zoomDestination(id: file.url, in: zoom)
-            }
             .searchable(text: $query, prompt: "Models")
             .onAppear { all = library.allModels() }
             .onChange(of: library.revision) { all = library.allModels() }
         }
+        .presentsModels()
+        .environment(\.zoomNamespace, zoom)
     }
 }

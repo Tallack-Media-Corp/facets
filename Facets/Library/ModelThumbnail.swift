@@ -6,6 +6,9 @@ struct ModelThumbnail: View {
     var size: Int64?
     var modified: Date?
     var cornerRadius: CGFloat = 14
+    /// The studio backdrop behind the model: on for cards, off in list rows, where
+    /// the row's own background is enough.
+    var showsBackdrop = true
 
     @Environment(\.displayScale) private var displayScale
     /// Optional: a context-menu preview is drawn outside the app's environment.
@@ -19,12 +22,14 @@ struct ModelThumbnail: View {
             let look = ThumbnailStore.Look(colorHex: settings?.colorHex ?? Palette.filamentOrange, usesFileColors: settings?.usesFileColors ?? true)
             let key = ThumbnailStore.key(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
             ZStack {
-                Rectangle().fill(.thumbnailBackground)
+                if showsBackdrop {
+                    Rectangle().fill(.thumbnailBackground)
+                }
                 if let image = image ?? ThumbnailStore.shared.cached(key) {
                     Image(platformImage: image)
                         .resizable()
                         .scaledToFit()
-                        .padding(geometry.size.width * 0.08)
+                        .padding(geometry.size.width * (showsBackdrop ? 0.08 : 0.02))
                 } else {
                     Image(systemName: failed ? "exclamationmark.triangle" : "cube.transparent")
                         .font(.system(size: max(14, geometry.size.width * 0.28), weight: .light))

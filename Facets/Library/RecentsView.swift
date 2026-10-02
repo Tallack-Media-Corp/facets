@@ -76,16 +76,13 @@ private struct RecentRow: View {
         HStack(spacing: 12) {
             Group {
                 if let url, isAvailable {
-                    ModelThumbnail(url: url, size: nil, modified: entry.lastOpened, cornerRadius: 10)
+                    ModelThumbnail(url: url, size: nil, modified: entry.lastOpened, cornerRadius: 10, showsBackdrop: false)
                 } else if !isAvailable {
-                    RoundedRectangle(cornerRadius: 10).fill(.thumbnailBackground)
-                        .overlay {
-                            Image(systemName: "questionmark.folder")
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
-                        }
+                    Image(systemName: "questionmark.folder")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
                 } else {
-                    RoundedRectangle(cornerRadius: 10).fill(.thumbnailBackground)
+                    Color.clear
                 }
             }
             .frame(width: min(thumbnailSize, 88), height: min(thumbnailSize, 88))

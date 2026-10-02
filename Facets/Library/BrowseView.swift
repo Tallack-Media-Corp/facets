@@ -7,6 +7,7 @@ struct BrowseView: View {
     @Binding var path: [LibraryRoute]
 
     @Environment(LocationsStore.self) private var locations
+    @Environment(\.openModel) private var openModel
     @State private var pickingFolder = false
     @State private var pickingFile = false
     @State private var renaming: LocationsStore.Location?
@@ -65,7 +66,7 @@ struct BrowseView: View {
         let isFolder = LocationsStore.isFolder(url) || url.hasDirectoryPath
         if scoped { url.stopAccessingSecurityScopedResource() }
         guard isFolder else {
-            path.append(.model(ModelFileRef(url: url, isExternal: true)))
+            openModel(ModelFileRef(url: url, isExternal: true))
             return
         }
         do {

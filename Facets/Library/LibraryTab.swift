@@ -4,11 +4,10 @@ enum LibraryRoute: Hashable {
     case folder(URL)
     /// A folder outside the library, reached through Browse.
     case browse(URL, title: String)
-    case model(ModelFileRef)
 }
 
 /// The library's navigation stack, with Library and Browse side by side at the root.
-/// Folders push inside it; a model opens in the viewer with a zoom from its card.
+/// Folders push inside it; a model opens over it in the viewer, zooming from its card.
 struct LibraryTab: View {
     enum Section: String, CaseIterable, Identifiable {
         case library = "Library"
@@ -46,12 +45,10 @@ struct LibraryTab: View {
                     FolderView(folder: url, title: url.lastPathComponent)
                 case .browse(let url, let title):
                     FolderView(folder: url, title: title, isBrowsing: true)
-                case .model(let file):
-                    ViewerScreen(file: file)
-                        .zoomDestination(id: file.url, in: zoom)
                 }
             }
         }
+        .presentsModels()
         .environment(\.zoomNamespace, zoom)
     }
 }
