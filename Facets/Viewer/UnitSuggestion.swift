@@ -40,13 +40,13 @@ struct UnitSuggestionCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Label("Saved in another unit?", systemImage: "ruler")
                     .font(.subheadline.weight(.semibold))
-                Text("It's only \(Format.dimension(largest, units: units)) across, smaller than anything a printer makes. Files in metres or inches open this way.")
+                Text("It's only \(Format.dimension(largest, units: units)) across, smaller than anything a printer makes. Files in metres or inches open this way. You can change this later in Info.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 8) {
-                ForEach(Array(suggestions.enumerated()), id: \.element) { index, unit in
+                ForEach(suggestions) { unit in
                     Button { choose(unit) } label: {
                         VStack(spacing: 1) {
                             Text(unit.title).font(.footnote.weight(.semibold))
@@ -56,7 +56,8 @@ struct UnitSuggestionCard: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 40)
                     }
-                    .modifier(SuggestionStyle(prominent: index == 0))
+                    // Equal weight: size alone can't tell metres from inches.
+                    .buttonStyle(.glass)
                     .accessibilityLabel("\(unit.title), \(Format.dimension(largest * unit.factor, units: units)) across")
                 }
                 Button("Keep", action: keep)
@@ -74,14 +75,3 @@ struct UnitSuggestionCard: View {
     }
 }
 
-private struct SuggestionStyle: ViewModifier {
-    let prominent: Bool
-
-    func body(content: Content) -> some View {
-        if prominent {
-            content.buttonStyle(.glassProminent)
-        } else {
-            content.buttonStyle(.glass)
-        }
-    }
-}

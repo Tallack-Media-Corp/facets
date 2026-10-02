@@ -11,9 +11,11 @@ struct ModelInfoSheet: View {
     let material: FilamentMaterial
     /// The printer chosen in Facets, for the estimate's speeds.
     let printer: PrinterBed?
-    /// The unit the file was taken to be in, when it was scaled up to millimetres.
-    let scaledFrom: UnitGuess?
-    let resetScale: () -> Void
+    /// The scale applied for the file's unit (1: as saved), the size as saved, and
+    /// a way to change it. Always relative to the file, so choices don't compound.
+    let unitScale: Float
+    let originalSize: SIMD3<Float>
+    let setUnitScale: (Float) -> Void
     @Binding var appearance: RenderAppearance
     @Binding var detent: PresentationDetent
 
@@ -65,12 +67,14 @@ struct ModelInfoSheet: View {
                     }
                 }
 
-                Section("File") {
+                Section {
                     LabeledContent("Name", value: file.url.lastPathComponent)
                     LabeledContent("Format", value: model.format.rawValue)
-                    if let scaledFrom {
-                        LabeledContent("Scale", value: "From \(scaledFrom.title.lowercased()), ×\(scaledFrom.factor.formatted())")
-                        Button("Show at the File's Own Size", action: resetScale)
+                    Picker("File Units", selection: Binding(get: { unitScale }, set: setUnitScale)) {
+                        Text("As Saved · \(largestSide(1))").tag(Float(1))
+                        ForEach(UnitGuess.allCases) { unit in
+                            Text("\(unit.title) · \(largestSide(unit.factor))").tag(unit.factor)
+                        }
                     }
                     if let fileSize {
                         LabeledContent("Size", value: Format.fileSize(fileSize))
@@ -82,6 +86,10 @@ struct ModelInfoSheet: View {
                         LabeledContent("Made With", value: application.replacingOccurrences(of: "-", with: " "))
                     }
                     LabeledContent("Location", value: file.isExternal ? "Not saved in Facets" : "In your Facets library")
+                } header: {
+                    Text("File")
+                } footer: {
+                    Text("File Units sets what one unit in the file means, for a model saved in metres, centimetres or inches. Facets remembers it for this file; the file itself isn't changed.")
                 }
             }
             .navigationTitle(file.displayName)
@@ -133,6 +141,11 @@ struct ModelInfoSheet: View {
                 Text("Estimated from the model's shape for \(printerName), with typical settings: 0.2 mm layers, two walls and 15% \(material.title) infill. Your slicer will usually be within 10% on filament and 20% on time, more if the model needs supports.")
             }
         }
+    }
+
+    /// The largest side at a scale, for the File Units choices.
+    private func largestSide(_ factor: Float) -> String {
+        Format.dimension(max(originalSize.x, originalSize.y, originalSize.z) * factor, units: units)
     }
 
     private var printerName: String {

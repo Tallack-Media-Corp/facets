@@ -73,9 +73,13 @@ enum Format {
         return formatter.string(from: TimeInterval(minutes * 60)) ?? "\(minutes) min"
     }
 
-    /// "6.5 g"; whole grams from 100 up.
+    /// "6.5 g"; whole grams from 100 up; two decimals under a gram, so a tiny part
+    /// doesn't read as nothing.
     static func grams(_ grams: Float) -> String {
-        grams >= 100 ? "\(Int(grams.rounded())) g" : String(format: "%.1f g", grams)
+        if grams >= 100 { return "\(Int(grams.rounded())) g" }
+        if grams >= 1 { return String(format: "%.1f g", grams) }
+        if grams >= 0.01 { return String(format: "%.2f g", grams) }
+        return "under 0.01 g"
     }
 
     /// Filament length: "2.13 m", or feet in inch mode.

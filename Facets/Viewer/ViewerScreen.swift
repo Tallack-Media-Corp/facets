@@ -183,7 +183,7 @@ struct ViewerScreen: View {
         .toolbar { toolbar }
         .sheet(isPresented: $showingInfo) {
             if let model = shownModel {
-                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material, printer: settings.bed, scaledFrom: UnitGuess.allCases.first { $0.factor == unitScale }, resetScale: resetUnit, appearance: $appearance, detent: $infoDetent)
+                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material, printer: settings.bed, unitScale: unitScale, originalSize: original?.bounds.size ?? model.bounds.size, setUnitScale: setUnit, appearance: $appearance, detent: $infoDetent)
             }
         }
         .background { escapeKey }
@@ -451,10 +451,11 @@ struct ViewerScreen: View {
         unitSuggestions = []
     }
 
-    /// Back to the size the file says, from the Info sheet.
-    private func resetUnit() {
-        UnitChoices.set(1, for: unitKey)
-        rescale(to: 1)
+    /// From the Info sheet: any unit, always applied to the file as saved.
+    private func setUnit(_ factor: Float) {
+        UnitChoices.set(factor, for: unitKey)
+        unitSuggestions = []
+        rescale(to: factor)
     }
 
     private func rescale(to factor: Float) {
