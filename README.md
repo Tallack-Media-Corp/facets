@@ -79,6 +79,21 @@ The app icon and its alternates (Settings › App Icon) are Icon Composer docume
 
 STL uses the system's `public.standard-tesselated-geometry-format`. 3MF has no system type, so Facets imports `com.bambulab.3mf`, the identifier Bambu Studio declares and other 3MF apps on Apple platforms share. Both are imported rather than exported: Facets opens these files but doesn't claim to own them.
 
+## TestFlight
+
+Maintainers only: this needs the team and bundle id in `Config/Local.xcconfig`. Bump `CURRENT_PROJECT_VERSION` in `project.yml` first; App Store Connect rejects a build number it has already seen.
+
+```bash
+xcodegen generate
+xcodebuild -project Facets.xcodeproj -scheme Facets -configuration Release -destination 'generic/platform=iOS' \
+  -archivePath .build/archive/Facets.xcarchive -allowProvisioningUpdates archive
+xcodebuild -exportArchive -archivePath .build/archive/Facets.xcarchive \
+  -exportOptionsPlist docs/ExportOptions.plist -exportPath .build/archive/export -allowProvisioningUpdates
+xcrun altool --upload-app -f .build/archive/export/Facets.ipa -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+```
+
+The export step is what registers the app's and extensions' bundle ids: with no entitlements the archive signs with the team's wildcard profile. The key is an App Store Connect API key at `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8`.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
