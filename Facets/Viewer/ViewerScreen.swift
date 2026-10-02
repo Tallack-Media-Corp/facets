@@ -162,7 +162,7 @@ struct ViewerScreen: View {
         .toolbar { toolbar }
         .sheet(isPresented: $showingInfo) {
             if let model = shownModel {
-                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material, appearance: $appearance, detent: $infoDetent)
+                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material, printer: settings.bed, appearance: $appearance, detent: $infoDetent)
             }
         }
         .background { escapeKey }

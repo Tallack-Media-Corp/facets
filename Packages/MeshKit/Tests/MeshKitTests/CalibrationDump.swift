@@ -13,7 +13,7 @@ import Testing
         let urls = try FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: folder), includingPropertiesForKeys: nil)
             .filter { $0.pathExtension.lowercased() == "3mf" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        var rows = ["file,plate,volume,side,up,down,height,parts,tris,grams,seconds,filaments,supports,layer,infill,walls,top,bottom,linewidth,printer,density,pattern,material"]
+        var rows = ["file,plate,volume,side,up,down,height,parts,tris,grams,seconds,filaments,supports,layer,infill,walls,top,bottom,linewidth,printer,density,pattern,material,overhang,support"]
         for url in urls {
             guard let model = try? ModelLoader.load(url), !model.estimates.isEmpty,
                   let archive = try? ZipArchive(data: Data(contentsOf: url, options: .alwaysMapped)) else { continue }
@@ -43,6 +43,7 @@ import Testing
                     value("printer_model").replacingOccurrences(of: ",", with: " "),
                     value("filament_density"), value("sparse_infill_pattern"),
                     value("filament_type"),
+                    "\(surface.overhang)", "\(surface.supportVolume(bedZ: bounds.min.z))",
                 ]
                 rows.append(fields.joined(separator: ","))
             }

@@ -172,18 +172,19 @@ import simd
         surface.up = 27360.168
         surface.down = 27360.113
         let estimate = try #require(PrintEstimate(volume: 196681.55, surface: surface, height: 45.54792, parts: 1, density: 1.24))
-        #expect(abs(estimate.grams - 123.65) < 0.1)
-        #expect(abs(estimate.seconds - 13473) < 5)
+        #expect(abs(estimate.grams - 120.58) < 0.1)
+        #expect(abs(estimate.seconds - 13845) < 5)
     }
 
     @Test func thinPartsAreAllShell() throws {
         // A 1 mm thick, 100 × 100 mm plate: walls and skins would be more than the
-        // solid, so it prints solid and weighs (nearly) its volume.
+        // solid, so it's all shell: most of its solid weight (slicer lines never quite
+        // fill a volume), and never more.
         let box = cubeTriangles.flatMap { $0.flatMap { [$0.x * 100, $0.y * 100, $0.z * 1] } }
         let model = Model3D(format: .stl, parts: [ModelPart(id: 0, name: "p", geometry: MeshGeometry(positions: box))], objects: [])
         let estimate = try #require(model.shapeEstimate(plateID: nil, hidden: [], density: 1.24))
         let solid: Float = 10_000 * 1.24 / 1000
-        #expect(estimate.grams <= solid && estimate.grams > solid * 0.8)
+        #expect(estimate.grams <= solid && estimate.grams > solid * 0.7)
     }
 
     @Test func chunkyPartsAreMostlyInfill() throws {
@@ -202,5 +203,18 @@ import simd
         #expect(abs(s.side - 1800) < 0.01)
         #expect(abs(s.up - 200) < 0.01)
         #expect(abs(s.down - 200) < 0.01)
+    }
+}
+
+@Suite struct SupportTests {
+    @Test func aBoxOnTheBedNeedsNoSupport() {
+        let box = cubeTriangles.flatMap { $0.flatMap { [$0.x * 10, $0.y * 10, $0.z * 10] } }
+        let part = ModelPart(id: 0, name: "b", geometry: MeshGeometry(positions: box))
+        #expect(part.surface.supportVolume(bedZ: 0) < 0.001)
+        // Raised 5 mm: a 10 × 10 column 5 mm tall underneath.
+        var t = matrix_identity_float4x4
+        t.columns.3 = SIMD4(0, 0, 5, 1)
+        let raised = ModelPart(id: 0, name: "b", geometry: MeshGeometry(positions: box), transform: t)
+        #expect(abs(raised.surface.supportVolume(bedZ: 0) - 500) < 0.01)
     }
 }

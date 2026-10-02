@@ -41,6 +41,12 @@ public struct SurfaceStats: Sendable, Equatable {
     public var up: Float = 0
     public var down: Float = 0
     public var total: Float = 0
+    /// Footprint of faces that point down more steeply than 45°: what a slicer
+    /// would hold up with supports (the bed contact counts too; see `supportVolume`).
+    public var overhang: Float = 0
+    /// Σ overhang footprint × height, so the column of support under the overhangs
+    /// is `overhangMoment − bed height × overhang`.
+    public var overhangMoment: Float = 0
 
     public init() {}
 
@@ -50,7 +56,21 @@ public struct SurfaceStats: Sendable, Equatable {
         s.up = a.up + b.up
         s.down = a.down + b.down
         s.total = a.total + b.total
+        s.overhang = a.overhang + b.overhang
+        s.overhangMoment = a.overhangMoment + b.overhangMoment
         return s
+    }
+
+    /// The same surface moved up by `dz`.
+    func raised(by dz: Float) -> SurfaceStats {
+        var s = self
+        s.overhangMoment += overhang * dz
+        return s
+    }
+
+    /// Volume of the support columns under the overhangs, down to a bed at `bedZ`.
+    public func supportVolume(bedZ: Float) -> Float {
+        max(overhangMoment - bedZ * overhang, 0)
     }
 
     /// Adds a triangle. Winding can't be trusted for up versus down, so the side the
@@ -64,6 +84,11 @@ public struct SurfaceStats: Sendable, Equatable {
         total += Float(area)
         side += Float(area * (1 - nz * nz).squareRoot())
         if nz > 0 { up += Float(area * nz) } else { down += Float(area * -nz) }
+        if nz < -0.7071 {
+            let footprint = area * -nz
+            overhang += Float(footprint)
+            overhangMoment += Float(footprint * (a.z + b.z + c.z) / 3)
+        }
     }
 }
 
@@ -187,7 +212,7 @@ public struct ModelPart: Sendable, Identifiable {
         )
         // Moved but not turned or scaled: the mesh's own surface stats hold.
         if linear == matrix_identity_float3x3 {
-            surface = geometry.surface
+            surface = geometry.surface.raised(by: transform.columns.3.z)
         } else {
             let outward: Double = geometry.volume * simd_determinant(linear) < 0 ? -1 : 1
             surface = MeshGeometry.surface(positions: geometry.positions, indices: geometry.indices, transform: transform, outward: outward)

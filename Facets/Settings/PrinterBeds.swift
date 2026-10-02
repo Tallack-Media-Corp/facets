@@ -1,3 +1,4 @@
+import MeshKit
 import Foundation
 
 /// A printer's bed footprint, for the viewer's build-plate outline.
@@ -46,4 +47,18 @@ struct PrinterBed: Identifiable, Hashable {
     }
 
     static let customID = "custom"
+}
+
+extension PrinterBed {
+    /// Which calibrated speed profile the print estimate uses for this printer
+    /// (docs/print-estimates.md). Custom beds assume a Bambu-class printer.
+    var machine: PrintEstimate.Machine {
+        switch id {
+        case "bambu-a1mini", "bambu-a1": .bambuBedSlinger
+        case _ where id.hasPrefix("bambu-"): .bambuCoreXY
+        case "creality-k1", "creality-k2plus", "voron-24-350", "prusa-coreone", "prusa-xl": .coreXY
+        case "creality-ender3v3", "elegoo-n4pro", "prusa-mk4s", "prusa-mini": .bedSlinger
+        default: .bambuCoreXY
+        }
+    }
 }

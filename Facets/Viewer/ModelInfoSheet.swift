@@ -9,6 +9,8 @@ struct ModelInfoSheet: View {
     let fileSize: Int64?
     let units: MeasurementUnits
     let material: FilamentMaterial
+    /// The printer chosen in Facets, for the estimate's speeds.
+    let printer: PrinterBed?
     @Binding var appearance: RenderAppearance
     @Binding var detent: PresentationDetent
 
@@ -114,16 +116,21 @@ struct ModelInfoSheet: View {
                      ? "From the slicer, for every plate together, as of when the project was last sliced."
                      : "From the slicer, as of when the project was last sliced.")
             }
-        } else if let estimate = model.shapeEstimate(plateID: appearance.plateID, hidden: appearance.hiddenObjects, density: material.density) {
+        } else if let estimate = model.shapeEstimate(plateID: appearance.plateID, hidden: appearance.hiddenObjects, density: material.density, machine: printer?.machine ?? .bambuCoreXY) {
             Section {
                 LabeledContent("Print Time", value: "about \(Format.duration(seconds: estimate.seconds))")
                 LabeledContent("Filament", value: "about \(Format.grams(estimate.grams)) · \(Format.filamentLength(estimate.meters, units: units))")
             } header: {
                 Text("Print Estimate")
             } footer: {
-                Text("Worked out from the model's shape, assuming 0.2 mm layers, two walls and 15% \(material.title) infill on a fast printer such as a Bambu Lab. Expect the slicer to differ by around a fifth either way, more with supports. A project saved after slicing in Bambu Studio or Orca shows the slicer's own figures here.")
+                Text("Worked out from the model's shape for \(printerName), assuming 0.2 mm layers, two walls and 15% \(material.title) infill. Weight is usually within a tenth of the slicer's; time within a fifth. Supports add more. A project saved after slicing in Bambu Studio or Orca shows the slicer's own figures here.")
             }
         }
+    }
+
+    private var printerName: String {
+        guard let printer, printer.id != PrinterBed.customID else { return "a Bambu Lab printer" }
+        return "the \(printer.title)"
     }
 
     /// The object's colour as drawn: its file colour, or the model colour.
