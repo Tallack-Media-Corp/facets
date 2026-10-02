@@ -28,10 +28,6 @@ struct SettingsView: View {
                     Text("3MF projects from Bambu Studio, Orca Slicer and others carry filament colours. STL files always use the model colour.")
                 }
 
-                Section("App Icon") {
-                    AppIconPicker()
-                }
-
                 Section("Viewer") {
                     Toggle("Show Build Plate Grid", isOn: $settings.showsGrid)
                     NavigationLink {
@@ -42,6 +38,10 @@ struct SettingsView: View {
                     Picker("Units", selection: $settings.units) {
                         ForEach(MeasurementUnits.allCases) { Text($0.title).tag($0) }
                     }
+                }
+
+                Section("App Icon") {
+                    AppIconPicker()
                 }
 
                 Section {

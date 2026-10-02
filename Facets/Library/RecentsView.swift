@@ -97,7 +97,7 @@ private struct RecentRow: View {
                 HStack(spacing: 4) {
                     if !isAvailable {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(.tint)
                             .accessibilityHidden(true)
                         Text("File not found")
                     } else {

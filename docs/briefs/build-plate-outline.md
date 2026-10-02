@@ -2,7 +2,7 @@
 
 Confirmed with Brennan, 1 October 2026 (Impeccable shape). Built the same day.
 
-**As built:** the bed's size and fit go in a second line of the size chip ("Fits the Bambu Lab A1" / "Too big for the Bambu Lab A1 by 39.9 mm") rather than a label drawn on the 3D bed corner, which would need text rendering in Metal. The H2D is 350 × 320 (from its own project files), not the 325 × 320 first listed. Bambu/Orca plate origins: a grid ⌈√n⌉ plates wide, each step 1.2 × the project's bed, rows toward −Y; checked on four real projects.
+**As built:** the bed's size and fit go in a second line of the size chip ("Fits the Bambu Lab A1 as oriented" / "Too big for the Bambu Lab A1 by 39.9 mm") rather than a label drawn on the 3D bed corner, which would need text rendering in Metal. The grid button is a menu as briefed, holding recently used printers plus "Other Printer…" (an interim build moved the printer to a top chip; the critique put it back in thumb reach). The H2D is 350 × 320 (from its own project files), not the 325 × 320 first listed. Bambu/Orca plate origins: a grid ⌈√n⌉ plates wide, each step 1.2 × the project's bed, rows toward −Y; checked on four real projects.
 
 1. **Job.** A hobbyist who has just opened a model on their phone wants to know at a glance whether it fits their printer, instead of comparing "W 156.5 · D 176.0 · H 79.6 mm" against their bed in their head.
 2. **Outcome.** The viewer draws the user's bed as an outline on the grid, with its width and depth labelled at one corner. If the part's footprint is bigger than the bed, the outline turns Filament Orange and the size chip adds "Too big for A1 by 12 mm". A warning, never a block.

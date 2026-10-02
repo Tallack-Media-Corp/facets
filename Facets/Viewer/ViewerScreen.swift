@@ -84,7 +84,7 @@ struct ViewerScreen: View {
                 }
                     .ignoresSafeArea()
                     .accessibilityLabel("\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))\(fitNote(for: model).map { ". \($0.text)" } ?? "")")
-                    .accessibilityHint("Drag to turn, pinch to zoom, double tap to fit.")
+                    .accessibilityHint("Swipe up or down to turn the model or change the view.")
             }
         }
         .overlay(alignment: .top) {
@@ -152,7 +152,9 @@ struct ViewerScreen: View {
         .onChange(of: settings.bedID) { _, id in
             // Choosing a printer means wanting to see its bed.
             if id != nil { appearance.showsGrid = true }
+            announceFit()
         }
+        .onChange(of: appearance.plateID) { announceFit() }
         .task { await load() }
         .onDisappear {
             if isAccessing {
@@ -249,11 +251,25 @@ struct ViewerScreen: View {
 
     private var displayName: String { file.displayName }
 
-    /// The grid is a plain switch; the printer lives behind the fit note (or the
-    /// one-off "Set printer…" chip), where the question it answers is asked.
+    /// The grid and the printer, in the bottom bar where a thumb can reach them.
+    /// Printers used lately are one tap away; the full list is behind "Other Printer…".
     private var buildPlateMenu: some View {
-        Toggle(isOn: $appearance.showsGrid) {
-            Label("Build Plate Grid", systemImage: "grid")
+        Menu {
+            Toggle(isOn: $appearance.showsGrid) {
+                Label("Build Plate Grid", systemImage: "grid")
+            }
+            Section("Printer") {
+                Picker("Printer", selection: Binding(get: { settings.bedID }, set: { settings.bedID = $0 })) {
+                    Text("None").tag(String?.none)
+                    ForEach(settings.recentBeds) { bed in
+                        Text(bed.id == PrinterBed.customID ? "Custom Bed" : bed.title).tag(Optional(bed.id))
+                    }
+                }
+                .pickerStyle(.inline)
+                Button("Other Printer…", systemImage: "printer") { choosingPrinter = true }
+            }
+        } label: {
+            Label("Build Plate and Printer", systemImage: "grid")
         }
     }
 
@@ -267,7 +283,7 @@ struct ViewerScreen: View {
     }
 
     /// What the chosen bed makes of the model, naming the side that's over:
-    /// "Fits the Bambu Lab A1", "Fits the Prusa MK4S turned 90°",
+    /// "Fits the Bambu Lab A1 as oriented", "Fits the Prusa MK4S turned 90°",
     /// "Too tall for the Bambu Lab A1 by 12.0 mm", or for a slicer project laid out
     /// partly off its plate, "Fits the Bambu Lab A1, but runs off the plate as arranged".
     private func fitNote(for model: Model3D) -> (text: String, tooBig: Bool)? {
@@ -277,7 +293,7 @@ struct ViewerScreen: View {
         let units = settings.units
         switch fit.verdict {
         case .fits:
-            return ("Fits \(name)", false)
+            return ("Fits \(name) as oriented", false)
         case .fitsTurned:
             return ("Fits \(name) turned 90°", false)
         case .offPlate:
@@ -293,6 +309,13 @@ struct ViewerScreen: View {
             let detail = sides.map { "\(Format.dimension($0.1, units: units)) too \($0.0)" }.joined(separator: ", ")
             return ("Too big for \(name): \(detail)", true)
         }
+    }
+
+    /// A plate or printer change rewrites the verdict where VoiceOver can't see it.
+    private func announceFit() {
+        guard UIAccessibility.isVoiceOverRunning, case .loaded(let model) = phase,
+              let note = fitNote(for: model) else { return }
+        UIAccessibility.post(notification: .announcement, argument: note.text)
     }
 
     /// On iPhone the info sheet's medium detent covers the lower half; keep the model
@@ -426,6 +449,7 @@ private struct ViewerChips: View {
                         .font((wide ? Font.body : .subheadline).weight(.semibold))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
+                        .frame(minHeight: 44)
                         .contentShape(.capsule)
                     }
                     .buttonStyle(.plain)
@@ -455,7 +479,7 @@ private struct ViewerChips: View {
                             .font(.caption.weight(.medium))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .frame(minHeight: 32)
+                            .frame(minHeight: 44)
                             .contentShape(.capsule)
                     }
                     .buttonStyle(.plain)
@@ -467,19 +491,34 @@ private struct ViewerChips: View {
     }
 
     private var readout: some View {
-        VStack(spacing: 2) {
-            Text(dimensions)
-                .font((wide ? Font.subheadline : .footnote).weight(.medium).monospacedDigit())
-                .foregroundStyle(Color.primary)
-            if let fitNote {
-                Label(fitNote.text, systemImage: fitNote.tooBig ? "exclamationmark.triangle.fill" : "checkmark.circle")
+        HStack(spacing: 8) {
+            VStack(spacing: 2) {
+                Text(dimensions)
+                    .font((wide ? Font.subheadline : .footnote).weight(.medium).monospacedDigit())
+                    .foregroundStyle(Color.primary)
+                if let fitNote {
+                    // Orange text on glass is too faint to read; the symbol carries the
+                    // warning (with the dashed outline) and the words stay in ink.
+                    Label {
+                        Text(fitNote.text)
+                            .foregroundStyle(fitNote.tooBig ? Color.primary : Color.secondary)
+                    } icon: {
+                        Image(systemName: fitNote.tooBig ? "exclamationmark.triangle.fill" : "checkmark.circle")
+                            .foregroundStyle(fitNote.tooBig ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
+                    }
                     .font((wide ? Font.footnote : .caption).weight(.medium).monospacedDigit())
-                    .foregroundStyle(fitNote.tooBig ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
                     .multilineTextAlignment(.center)
+                }
+            }
+            if fitNote != nil {
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.secondary)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+        .frame(minHeight: 44)
         .contentShape(.rect)
     }
 

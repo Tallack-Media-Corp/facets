@@ -53,8 +53,21 @@ final class ViewerSettings {
 
     /// The printer bed drawn in the viewer: a preset id, "custom", or nil for none.
     var bedID: String? {
-        didSet { defaults.set(bedID, forKey: "viewer.bed") }
+        didSet {
+            defaults.set(bedID, forKey: "viewer.bed")
+            if let bedID {
+                recentBedIDs = Array(([bedID] + recentBedIDs.filter { $0 != bedID }).prefix(4))
+            }
+        }
     }
+
+    /// Printers chosen lately, newest first, so someone with a few printers can
+    /// switch between them from the viewer without the full list.
+    private(set) var recentBedIDs: [String] {
+        didSet { defaults.set(recentBedIDs, forKey: "viewer.bed.recents") }
+    }
+
+    var recentBeds: [PrinterBed] { recentBedIDs.compactMap(bed(withID:)) }
 
     /// The custom bed, in millimetres.
     var customBedWidth: Float {
@@ -69,8 +82,9 @@ final class ViewerSettings {
         didSet { defaults.set(customBedHeight, forKey: "viewer.bed.height") }
     }
 
-    var bed: PrinterBed? {
-        guard let bedID else { return nil }
+    var bed: PrinterBed? { bedID.flatMap(bed(withID:)) }
+
+    private func bed(withID bedID: String) -> PrinterBed? {
         if bedID == PrinterBed.customID {
             guard customBedWidth > 0, customBedDepth > 0 else { return nil }
             return PrinterBed(id: PrinterBed.customID, make: "Custom", name: "bed", width: customBedWidth, depth: customBedDepth, height: customBedHeight)
@@ -84,7 +98,9 @@ final class ViewerSettings {
         colorHex = (saved == nil || saved == "#F2802E") ? Palette.filamentOrange : saved!
         usesFileColors = defaults.object(forKey: "viewer.fileColors") as? Bool ?? true
         showsGrid = defaults.object(forKey: "viewer.grid") as? Bool ?? true
-        bedID = defaults.string(forKey: "viewer.bed")
+        let savedBed = defaults.string(forKey: "viewer.bed")
+        bedID = savedBed
+        recentBedIDs = defaults.stringArray(forKey: "viewer.bed.recents") ?? savedBed.map { [$0] } ?? []
         customBedWidth = defaults.object(forKey: "viewer.bed.width") as? Float ?? 256
         customBedDepth = defaults.object(forKey: "viewer.bed.depth") as? Float ?? 256
         customBedHeight = defaults.object(forKey: "viewer.bed.height") as? Float ?? 256

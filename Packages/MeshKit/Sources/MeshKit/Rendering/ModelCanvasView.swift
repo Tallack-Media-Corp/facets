@@ -62,7 +62,9 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
         isMultipleTouchEnabled = true
         installGestures()
         isAccessibilityElement = true
-        accessibilityTraits = [.image, .allowsDirectInteraction]
+        // No direct interaction: it would hand VoiceOver's swipes to the model and
+        // hide the camera actions below.
+        accessibilityTraits = [.image]
         accessibilityLabel = "3D model"
         installAccessibilityActions()
     }
@@ -128,6 +130,8 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
             UIAccessibilityCustomAction(name: name) { [weak self] _ in
                 guard let self else { return false }
                 perform(self)
+                // The view changed out of sight: say what happened.
+                UIAccessibility.post(notification: .announcement, argument: name)
                 return true
             }
         }
