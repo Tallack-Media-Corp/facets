@@ -6,7 +6,8 @@ import simd
 /// The full-screen 3D view of one file.
 struct ViewerScreen: View {
     let file: ModelFileRef
-    /// True when presented over the app (opened from another app), not pushed.
+    /// Shows a Close button: the viewer is presented full screen over the app. The
+    /// Mac's model windows have their own close button instead.
     var showsCloseButton = false
 
     private enum Phase {
@@ -92,7 +93,9 @@ struct ViewerScreen: View {
                         Button("Try Again") { Task { await load(retrying: true) } }
                             .buttonStyle(.glassProminent)
                     case .notAModel, .empty, .damaged, .noShapes:
-                        EmptyView()
+                        // Nothing to retry; the way on is another file.
+                        Button("Open Another File…") { findingFile = true }
+                            .buttonStyle(.glass)
                     }
                 }
             case .loaded(let base):
@@ -108,41 +111,43 @@ struct ViewerScreen: View {
                 ) {
                     noteInteraction()
                 }
-                    .ignoresSafeArea()
+                    // Under the bars, but beside an open inspector rather than behind it.
+                    .ignoresSafeArea(edges: showingInfo && infoAsInspector ? .vertical : .all)
                     .accessibilityLabel("\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))\(fitNote(for: model).map { ". \($0.text)" } ?? "")")
                     .accessibilityHint("Swipe up or down to turn the model or change the view.")
             }
         }
         .overlay(alignment: .top) {
             if let model = shownModel {
-                ViewerChips(
-                    model: model,
-                    plateID: $appearance.plateID,
-                    dimensions: Format.dimensions(visibleBounds(model).size, units: settings.units),
-                    spokenDimensions: Format.spokenDimensions(visibleBounds(model).size, units: settings.units),
-                    fitNote: fitNote(for: model),
-                    checksFit: settings.checksFit,
-                    hasPrinter: settings.fitBed != nil,
-                    choosePrinter: { choosingPrinter = true }
-                )
+                VStack(spacing: 10) {
+                    ViewerChips(
+                        model: model,
+                        plateID: $appearance.plateID,
+                        dimensions: Format.dimensions(visibleBounds(model).size, units: settings.units),
+                        spokenDimensions: Format.spokenDimensions(visibleBounds(model).size, units: settings.units),
+                        fitNote: fitNote(for: model),
+                        checksFit: settings.checksFit,
+                        hasPrinter: settings.fitBed != nil,
+                        unsureOfUnits: !unitSuggestions.isEmpty,
+                        choosePrinter: { choosingPrinter = true }
+                    )
+                    // Stacked under the readout it qualifies, so larger text can't
+                    // push the two into each other.
+                    if !unitSuggestions.isEmpty {
+                        UnitSuggestionCard(
+                            size: model.bounds.size,
+                            suggestions: unitSuggestions,
+                            units: settings.units,
+                            choose: { applyUnit($0) },
+                            keep: { keepUnit() }
+                        )
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
                 // Overlays on the model stop growing at the first accessibility
                 // size; beyond that they'd cover what they describe.
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                    .padding(.top, 8)
-            }
-        }
-        .overlay(alignment: .top) {
-            if !unitSuggestions.isEmpty, let model = shownModel {
-                UnitSuggestionCard(
-                    size: model.bounds.size,
-                    suggestions: unitSuggestions,
-                    units: settings.units,
-                    choose: { applyUnit($0) },
-                    keep: { keepUnit() }
-                )
-                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                .padding(.top, 76)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(.top, 8)
             }
         }
         .animation(.snappy(duration: 0.25), value: unitSuggestions)
@@ -181,9 +186,15 @@ struct ViewerScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .hidesTabBar()
         .toolbar { toolbar }
-        .sheet(isPresented: $showingInfo) {
-            if let model = shownModel {
-                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material, printer: settings.bed, unitScale: unitScale, originalSize: original?.bounds.size ?? model.bounds.size, setUnitScale: setUnit, appearance: $appearance, detent: $infoDetent)
+        // A sheet on iPhone, where the model glides up above it; an inspector beside
+        // the model on iPad and Mac, so hiding an object shows what changed.
+        .modifier(InfoPresentation(asInspector: infoAsInspector, isPresented: $showingInfo) { infoSheet })
+        .onChange(of: showingInfo) {
+            // The canvas narrows or widens with the inspector; reframe once it has.
+            guard infoAsInspector else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                controller.frameModel()
             }
         }
         .background { escapeKey }
@@ -210,7 +221,7 @@ struct ViewerScreen: View {
         }
         .sheet(isPresented: $choosingPrinter) {
             NavigationStack {
-                PrinterBedPicker(verdict: shownModel.map { model in { bed in verdict(model, on: bed) } })
+                PrinterBedPicker(verdict: shownModel.map { model in { bed in verdict(model, on: bed) } }, onPick: { choosingPrinter = false })
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
                             Button("Done", systemImage: "checkmark") { choosingPrinter = false }
@@ -276,7 +287,7 @@ struct ViewerScreen: View {
                         Button(preset.title, systemImage: symbol(for: preset)) { controller.show(preset) }
                     }
                 } label: {
-                    Label("Preset Views", systemImage: "view.3d")
+                    Label("Preset Views", systemImage: "move.3d")
                 }
             }
             ToolbarSpacer(.flexible, placement: .bottomControls)
@@ -333,8 +344,6 @@ struct ViewerScreen: View {
 
     private var displayName: String { file.displayName }
 
-    /// The grid and the printer, in the bottom bar where a thumb can reach them.
-    /// Printers used lately are one tap away; the full list is behind "Other Printer…".
     /// How the model's drawn: wireframe, the grid, and (with fit checks on) the
     /// printer, with recent printers one tap away.
     private var buildPlateMenu: some View {
@@ -349,7 +358,8 @@ struct ViewerScreen: View {
                 printerSection
             }
         } label: {
-            Label("Display", systemImage: "square.grid.3x3.square")
+            // A view-options glyph: the menu holds the printer as well as the grid.
+            Label("Display", systemImage: "slider.horizontal.3")
         }
     }
 
@@ -377,7 +387,9 @@ struct ViewerScreen: View {
     /// cross-section cut while that tool is open.
     private func staged(_ appearance: RenderAppearance, for model: Model3D) -> RenderAppearance {
         var staged = appearance
-        if let bed = settings.fitBed {
+        // While the file's unit is in question, a bed under it would be a verdict
+        // on a size that's probably wrong.
+        if let bed = settings.fitBed, unitSuggestions.isEmpty {
             staged.bed = model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
         }
         if tool == .section {
@@ -420,6 +432,28 @@ struct ViewerScreen: View {
         guard Spoken.isVoiceOverRunning, let model = shownModel,
               let note = fitNote(for: model) else { return }
         Spoken.announce(note.text)
+    }
+
+    @ViewBuilder
+    private var infoSheet: some View {
+        if let model = shownModel {
+            ModelInfoSheet(
+                model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material,
+                printer: settings.bed, unsureOfUnits: !unitSuggestions.isEmpty,
+                fitsPrinter: settings.fitBed.flatMap { verdict(model, on: $0) }.map { $0 == .fits || $0 == .fitsTurned },
+                unitScale: unitScale, originalSize: original?.bounds.size ?? model.bounds.size, setUnitScale: setUnit,
+                close: { showingInfo = false },
+                appearance: $appearance, detent: $infoDetent
+            )
+        }
+    }
+
+    private var infoAsInspector: Bool {
+        #if os(macOS)
+        true
+        #else
+        sizeClass == .regular
+        #endif
     }
 
     // MARK: Units
@@ -684,14 +718,16 @@ private struct ViewerChips: View {
     let dimensions: String
     let spokenDimensions: String
     let fitNote: (text: String, tooBig: Bool)?
-    /// No printer chosen yet: offer one, quietly, for the first few models.
+    /// No printer chosen: the readout says so and opens the printer list.
     /// Off: the readout is just the dimensions.
     let checksFit: Bool
     /// Without a printer the readout says so, and tapping it picks one.
     let hasPrinter: Bool
+    /// The file's unit is in question (the unit card is up): no verdict yet.
+    let unsureOfUnits: Bool
     let choosePrinter: () -> Void
 
-    /// iPad's canvas is much larger; the chips step up two sizes to match.
+    /// iPad's canvas is much larger; the chips step up a size or two to match.
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var wide: Bool { sizeClass == .regular }
 
@@ -751,7 +787,11 @@ private struct ViewerChips: View {
                 Text(dimensions)
                     .font((wide ? Font.body : .footnote).weight(.medium).monospacedDigit())
                     .foregroundStyle(Color.primary)
-                if let fitNote {
+                if unsureOfUnits {
+                    Label("Check the file's units", systemImage: "ruler")
+                        .font((wide ? Font.subheadline : .caption).weight(.medium))
+                        .foregroundStyle(Color.secondary)
+                } else if let fitNote {
                     // Orange text on glass is too faint to read; the symbol carries the
                     // warning (with the dashed outline) and the words stay in ink.
                     Label {
@@ -782,7 +822,8 @@ private struct ViewerChips: View {
     }
 
     private var readoutLabel: String {
-        "Size: \(spokenDimensions)\(fitNote.map { ". \($0.text)" } ?? (hasPrinter || !checksFit ? "" : ". No printer selected"))"
+        if unsureOfUnits { return "Size: \(spokenDimensions). Check the file's units" }
+        return "Size: \(spokenDimensions)\(fitNote.map { ". \($0.text)" } ?? (hasPrinter || !checksFit ? "" : ". No printer selected"))"
     }
 
     private var plateTitle: String {
@@ -815,5 +856,23 @@ private struct GestureHint: View {
             .padding(.horizontal)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+/// Info as a sheet on iPhone; as an inspector beside the model on iPad and Mac. Only
+/// one is attached, so the inspector's toolbar can't leak into the iPhone viewer.
+private struct InfoPresentation<Info: View>: ViewModifier {
+    let asInspector: Bool
+    @Binding var isPresented: Bool
+    @ViewBuilder let info: () -> Info
+
+    func body(content: Content) -> some View {
+        if asInspector {
+            content.inspector(isPresented: $isPresented) {
+                info().inspectorColumnWidth(min: 320, ideal: 360, max: 440)
+            }
+        } else {
+            content.sheet(isPresented: $isPresented) { info() }
+        }
     }
 }

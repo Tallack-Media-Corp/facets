@@ -6,6 +6,9 @@ struct PrinterBedPicker: View {
     /// Opened from the viewer: what the model there makes of each bed, so the list
     /// can say which printers would take it.
     var verdict: ((PrinterBed) -> BedFit.Verdict?)? = nil
+    /// Opened from the viewer: called after a printer is picked, to close the sheet.
+    /// Custom stays open for its sizes.
+    var onPick: (() -> Void)? = nil
 
     @Environment(ViewerSettings.self) private var settings
 
@@ -60,6 +63,7 @@ struct PrinterBedPicker: View {
         let note = verdict.map(Self.note(for:))
         return Button {
             settings.bedID = id
+            if id != PrinterBed.customID { onPick?() }
         } label: {
             HStack {
                 // Colour, not hierarchical styles: inside a button those resolve to the tint.

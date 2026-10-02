@@ -60,9 +60,10 @@ struct ToolPanel: View {
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityFocused($titleFocused)
                 Spacer()
-                Button("Done", systemImage: "xmark", action: close)
+                Button("Close", systemImage: "xmark", action: close)
                     .labelStyle(.iconOnly)
                     .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.primary)
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
                     .padding(.vertical, -12)
@@ -154,7 +155,7 @@ struct ToolPanel: View {
             Image(systemName: symbol)
             Text(title).font(.caption2.weight(.medium))
         }
-        .frame(maxWidth: .infinity, minHeight: 36)
+        .frame(maxWidth: .infinity, minHeight: 44)
     }
 
     // MARK: Section

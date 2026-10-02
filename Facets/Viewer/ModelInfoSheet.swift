@@ -11,15 +11,20 @@ struct ModelInfoSheet: View {
     let material: FilamentMaterial
     /// The printer chosen in Facets, for the estimate's speeds.
     let printer: PrinterBed?
+    /// The unit card is up: no estimate until the size is settled.
+    let unsureOfUnits: Bool
+    /// Whether the model fits the chosen printer as oriented (nil: no printer).
+    let fitsPrinter: Bool?
     /// The scale applied for the file's unit (1: as saved), the size as saved, and
     /// a way to change it. Always relative to the file, so choices don't compound.
     let unitScale: Float
     let originalSize: SIMD3<Float>
     let setUnitScale: (Float) -> Void
+    /// Closes the sheet or inspector (an inspector doesn't answer to `dismiss`).
+    let close: () -> Void
     @Binding var appearance: RenderAppearance
     @Binding var detent: PresentationDetent
 
-    @Environment(\.dismiss) private var dismiss
 
     private var shownParts: [ModelPart] {
         model.visibleParts(plateID: appearance.plateID, hidden: appearance.hiddenObjects)
@@ -51,6 +56,7 @@ struct ModelInfoSheet: View {
                         ForEach(plateObjects) { object in
                             ObjectRow(
                                 object: object,
+                                label: label(for: object),
                                 color: color(of: object),
                                 isVisible: Binding(
                                     get: { !appearance.hiddenObjects.contains(object.id) },
@@ -96,7 +102,7 @@ struct ModelInfoSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", systemImage: "checkmark") { dismiss() }
+                    Button("Done", systemImage: "checkmark", action: close)
                 }
             }
         }
@@ -131,16 +137,30 @@ struct ModelInfoSheet: View {
                      ? "From the slicer, for every plate together, as of when the project was last sliced."
                      : "From the slicer, as of when the project was last sliced.")
             }
+        } else if unsureOfUnits {
+            Section("Print Estimate") {
+                Text("Choose the file's units to see an estimate.")
+                    .foregroundStyle(.secondary)
+            }
         } else if let estimate = model.shapeEstimate(plateID: appearance.plateID, hidden: appearance.hiddenObjects, density: material.density, machine: printer?.machine ?? .bambuCoreXY) {
             Section {
-                LabeledContent("Print Time", value: "about \(Format.duration(seconds: estimate.seconds))")
-                LabeledContent("Filament", value: "about \(Format.grams(estimate.grams)) · \(Format.filamentLength(estimate.meters, units: units))")
+                // Rounded to what the estimate can claim; slicer figures stay exact.
+                LabeledContent("Print Time", value: "about \(Format.roughDuration(seconds: estimate.seconds))")
+                LabeledContent("Filament", value: "about \(Format.roughGrams(estimate.grams))")
             } header: {
                 Text("Print Estimate")
             } footer: {
-                Text("Estimated from the model's shape for \(printerName), with typical settings: 0.2 mm layers, two walls and 15% \(material.title) infill. Your slicer will usually be within 10% on filament and 20% on time, more if the model needs supports.")
+                Text("Estimated from the model's shape for \(printerName), with typical settings: 0.2 mm layers, two walls and 15% \(material.title) infill. Your slicer will usually be within 10% on filament and 20% on time, more if the model needs supports.\(fitsPrinter == false ? " It doesn't fit this printer as it sits." : "")")
             }
         }
+    }
+
+    /// An object's name, numbered when several share it ("Roller (2)"), so each
+    /// switch can be told apart, VoiceOver included.
+    private func label(for object: ModelObject) -> String {
+        let same = plateObjects.filter { $0.name == object.name }
+        guard same.count > 1, let index = same.firstIndex(of: object) else { return object.name }
+        return "\(object.name) (\(index + 1))"
     }
 
     /// The largest side at a scale, for the File Units choices.
@@ -184,6 +204,7 @@ private struct FilamentRow: View {
 
 private struct ObjectRow: View {
     let object: ModelObject
+    let label: String
     let color: Color
     @Binding var isVisible: Bool
 
@@ -195,11 +216,11 @@ private struct ObjectRow: View {
                     .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
                     .frame(width: 18, height: 18)
                     .accessibilityHidden(true)
-                Text(object.name)
+                Text(label)
                     .lineLimit(2)
                     .foregroundStyle(isVisible ? .primary : .secondary)
             }
         }
-        .accessibilityLabel("Show \(object.name)")
+        .accessibilityLabel("Show \(label)")
     }
 }

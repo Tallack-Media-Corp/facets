@@ -157,7 +157,9 @@ enum ShaderSource {
             }
             a = inside ? a + grid.color.a * 0.10 : a * 0.45;
             float3 outlineRGB = state > 1.5 ? grid.bedColor.rgb : grid.color.rgb;
-            float outlineA = state > 1.5 ? 0.95 : min(grid.color.a * 3.0, 0.8);
+            // A fitting bed is context, so its line stays lighter than the part; a
+            // bed that's too small is the warning, so it's strong.
+            float outlineA = state > 1.5 ? 0.95 : min(grid.color.a * 3.0, 0.8) * 0.7;
             rgb = mix(rgb, outlineRGB, outline);
             a = max(a, outline * outlineA);
         }

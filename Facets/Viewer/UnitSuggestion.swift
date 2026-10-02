@@ -54,7 +54,7 @@ struct UnitSuggestionCard: View {
                                 .font(.caption2.monospacedDigit())
                                 .opacity(0.8)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 40)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     // Equal weight: size alone can't tell metres from inches.
                     .buttonStyle(.glass)

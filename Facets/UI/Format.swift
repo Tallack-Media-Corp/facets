@@ -89,4 +89,31 @@ enum Format {
         case .inches: String(format: "%.1f ft", meters * 3.28084)
         }
     }
+
+    /// An estimate's time, no finer than it can claim: to 5 minutes under an hour,
+    /// to the quarter hour up to 10 hours ("9¼ hours"), then to the hour.
+    static func roughDuration(seconds: Int) -> String {
+        let minutes = Double(seconds) / 60
+        if minutes < 60 {
+            let m = max(5, Int((minutes / 5).rounded()) * 5)
+            return m >= 60 ? "1 hour" : "\(m) min"
+        }
+        let hours = minutes / 60
+        if hours < 10 {
+            let quarters = Int((hours * 4).rounded())
+            let whole = quarters / 4
+            let fraction = ["", "¼", "½", "¾"][quarters % 4]
+            return "\(whole)\(fraction) hour\(quarters == 4 ? "" : "s")"
+        }
+        return "\(Int(hours.rounded())) hours"
+    }
+
+    /// An estimate's weight to two significant figures ("120 g", "8.4 g").
+    static func roughGrams(_ grams: Float) -> String {
+        guard grams >= 0.01 else { return "under 0.01 g" }
+        let digits = Int(floor(log10(Double(grams))))
+        let step = pow(10, Double(digits - 1))
+        let rounded = (Double(grams) / step).rounded() * step
+        return digits >= 1 ? "\(Int(rounded)) g" : String(format: "%.\(max(0, 1 - digits))f g", rounded)
+    }
 }

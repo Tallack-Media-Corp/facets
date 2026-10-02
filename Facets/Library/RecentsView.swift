@@ -76,7 +76,10 @@ private struct RecentRow: View {
         HStack(spacing: 12) {
             Group {
                 if let url, isAvailable {
-                    ModelThumbnail(url: url, size: nil, modified: entry.lastOpened, cornerRadius: 10, showsBackdrop: false)
+                    // Keyed on the file itself, as the library is, so the two share
+                    // one cached picture and reopening doesn't redraw it.
+                    let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+                    ModelThumbnail(url: url, size: values?.fileSize.map(Int64.init), modified: values?.contentModificationDate, cornerRadius: 10, showsBackdrop: false)
                 } else if !isAvailable {
                     Image(systemName: "questionmark.folder")
                         .font(.title3)

@@ -32,11 +32,13 @@ struct ModelThumbnail: View {
                         .padding(geometry.size.width * (showsBackdrop ? 0.08 : 0.02))
                 } else {
                     Image(systemName: failed ? "exclamationmark.triangle" : "cube.transparent")
-                        .font(.system(size: max(14, geometry.size.width * 0.28), weight: .light))
+                        .font(.system(size: max(14, geometry.size.width * (showsBackdrop ? 0.28 : 0.45)), weight: .light))
                         .foregroundStyle(.tertiary)
                         .symbolEffect(.pulse, isActive: !failed)
                 }
             }
+            // Fill the slot, so the picture and placeholder sit in its centre.
+            .frame(width: geometry.size.width, height: geometry.size.height)
             .task(id: key) {
                 image = nil
                 failed = false

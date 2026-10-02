@@ -16,7 +16,7 @@ struct SettingsView: View {
     @Environment(FileLibrary.self) private var library
 
     /// Where the library is when it isn't in iCloud.
-    private static var deviceName: String {
+    static var deviceName: String {
         #if os(macOS)
         "On This Mac"
         #else
@@ -50,7 +50,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Viewer")
                 } footer: {
-                    Text("Pure Black takes the viewer and thumbnail backgrounds to true black in dark mode, for OLED screens.")
+                    Text("The grid setting is where each model starts; the viewer's Display menu changes it for that model. Filament for Estimates sets the material used to estimate weight. Pure Black takes the viewer and thumbnail backgrounds to true black in dark mode, for OLED screens.")
                 }
 
                 Section {
@@ -168,6 +168,8 @@ private struct ModelColorPicker: View {
 }
 
 private struct AboutView: View {
+    @Environment(FileLibrary.self) private var library
+
     var body: some View {
         Form {
             Section {
@@ -181,7 +183,9 @@ private struct AboutView: View {
             }
             Section("Opening Files") {
                 Label("Tap an STL, 3MF or OBJ in Files, Mail or Messages and choose Facets.", systemImage: "doc")
-                Label("In the Files app, Facets keeps its library under On My iPhone › Facets.", systemImage: "folder")
+                Label(library.location == .iCloud
+                      ? "In the Files app, your library is the Facets folder in iCloud Drive."
+                      : "In the Files app, your library is under \(SettingsView.deviceName) › Facets.", systemImage: "folder")
                 Label("To look through a folder without importing, add it under Library › Browse.", systemImage: "folder.badge.plus")
                 Label("Long-press a model in Files for a 3D Quick Look preview.", systemImage: "eye")
             }
