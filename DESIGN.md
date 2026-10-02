@@ -5,12 +5,12 @@ colors:
   filament-orange: "#F2782E"
   stage-light-top: "#F6F7F9"
   stage-light-bottom: "#D9DCE1"
-  stage-dark-top: "#2C2E33"
-  stage-dark-bottom: "#111214"
+  stage-dark-top: "#1B1C20"
+  stage-dark-bottom: "#08090A"
   tile-light-top: "#F7F8FA"
   tile-light-bottom: "#E4E7EB"
-  tile-dark-top: "#303237"
-  tile-dark-bottom: "#1C1D21"
+  tile-dark-top: "#232428"
+  tile-dark-bottom: "#131417"
   grid-ink-light: "rgba(80, 84, 94, 0.26)"
   grid-ink-dark: "rgba(231, 235, 243, 0.15)"
   icon-cream-top: "#FFF7EF"
@@ -119,8 +119,9 @@ A single warm accent over cool, quiet neutrals: the orange of a fresh spool agai
 - **Filament Orange** (#F2782E): the app tint (selected tab, buttons, toggles, prominent glass buttons, selection rings, folder glyphs) and the default colour every model renders in, in the app, in Quick Look and in thumbnails. One value, everywhere.
 
 ### Neutral
-- **Stage** (light #F6F7F9 to #D9DCE1, dark #2C2E33 to #111214, top to bottom): the viewer's backdrop behind the transparent 3D canvas. Cool, desaturated, darker at the floor like a studio sweep.
-- **Tile** (light #F7F8FA to #E4E7EB, dark #303237 to #1C1D21): the same sweep in miniature behind every thumbnail, folder tile and cloud tile, so white and grey models still read.
+- **Stage** (light #F6F7F9 to #D9DCE1, dark #1B1C20 to #08090A, top to bottom): the viewer's backdrop behind the transparent 3D canvas. Cool, desaturated, darker at the floor like a studio sweep.
+- **Tile** (light #F7F8FA to #E4E7EB, dark #232428 to #131417): the same sweep in miniature behind every thumbnail, folder tile and cloud tile, so white and grey models still read.
+- **Pure Black** (Settings › Viewer, off by default): in dark mode the stage runs #101113 to #000000 and tiles #16171A to #000000, for OLED screens. The dark grid is kept at 7% opacity because blending happens in linear light, where a little alpha over near-black reads bright.
 - **Grid Ink** (light rgba(80, 84, 94, 0.26), dark rgba(231, 235, 243, 0.15)): the build-plate grid under a model. Minor lines at 40% of this, every fifth line at 80%, fading out toward the plate edge.
 - **System semantics**: page backgrounds (systemGroupedBackground), text (label, secondaryLabel, tertiaryLabel) and separators come from iOS, never hex.
 - **Icon fills** (cream #FFF7EF to #F6DCC6, charcoal #2A2C31 to #0C0D10, navy #222C45 to #0B1020): app icon backgrounds only. They never appear in the interface.

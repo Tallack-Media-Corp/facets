@@ -38,14 +38,19 @@ struct SettingsView: View {
                     Text("3MF projects from Bambu Studio, Orca Slicer and others carry filament colours. STL files always use the model colour.")
                 }
 
-                Section("Viewer") {
+                Section {
                     Toggle("Show Build Plate Grid", isOn: $settings.showsGrid)
+                    Toggle("Pure Black in Dark Mode", isOn: $settings.pureBlack)
                     Picker("Units", selection: $settings.units) {
                         ForEach(MeasurementUnits.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Filament for Estimates", selection: $settings.material) {
                         ForEach(FilamentMaterial.allCases) { Text($0.title).tag($0) }
                     }
+                } header: {
+                    Text("Viewer")
+                } footer: {
+                    Text("Pure Black takes the viewer and thumbnail backgrounds to true black in dark mode, for OLED screens.")
                 }
 
                 Section {

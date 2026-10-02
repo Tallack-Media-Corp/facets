@@ -77,6 +77,11 @@ final class ViewerSettings {
         didSet { defaults.set(showsGrid, forKey: "viewer.grid") }
     }
 
+    /// True black at the darkest points in dark mode, for OLED screens.
+    var pureBlack: Bool {
+        didSet { defaults.set(pureBlack, forKey: "display.pureBlack") }
+    }
+
     /// The filament the shape-based print estimate assumes.
     var material: FilamentMaterial {
         didSet { defaults.set(material.rawValue, forKey: "viewer.material") }
@@ -142,6 +147,7 @@ final class ViewerSettings {
         usesFileColors = defaults.object(forKey: "viewer.fileColors") as? Bool ?? true
         showsGrid = defaults.object(forKey: "viewer.grid") as? Bool ?? true
         checksFit = defaults.object(forKey: "viewer.checksFit") as? Bool ?? true
+        pureBlack = defaults.bool(forKey: "display.pureBlack")
         material = FilamentMaterial(rawValue: defaults.string(forKey: "viewer.material") ?? "") ?? .pla
         let savedBed = defaults.string(forKey: "viewer.bed")
         bedID = savedBed

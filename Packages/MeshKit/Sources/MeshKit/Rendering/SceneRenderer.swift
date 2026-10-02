@@ -33,9 +33,11 @@ public struct RenderAppearance: Sendable, Equatable {
         parseColor(hex)
     }
 
-    /// Grid colour for a light or dark backdrop.
+    /// Grid colour for a light or dark backdrop. Blending happens in linear light, so
+    /// a small alpha over a dark stage reads far brighter than it sounds; dark mode's
+    /// is kept low so the plate stays near black.
     public static func gridColor(dark: Bool) -> SIMD4<Float> {
-        dark ? SIMD4(0.80, 0.83, 0.90, 0.15) : SIMD4(0.08, 0.09, 0.11, 0.26)
+        dark ? SIMD4(0.80, 0.83, 0.90, 0.07) : SIMD4(0.08, 0.09, 0.11, 0.26)
     }
 }
 

@@ -13,10 +13,24 @@ enum Palette {
     /// Filament Orange: the app tint and the default model colour.
     static let filamentOrange = "#F2782E"
 
-    /// The viewer's backdrop, top to floor.
-    static let stage = (top: PlatformColor(light: 0xF6F7F9, dark: 0x2C2E33), floor: PlatformColor(light: 0xD9DCE1, dark: 0x111214))
+    /// The viewer's backdrop, top to floor. Near black in dark mode, so the model is
+    /// what's lit.
+    static let stage = stage(pureBlack: false)
     /// The same sweep in miniature behind thumbnails and tiles.
-    static let tile = (top: PlatformColor(light: 0xF7F8FA, dark: 0x303237), floor: PlatformColor(light: 0xE4E7EB, dark: 0x1C1D21))
+    static let tile = tile(pureBlack: false)
+
+    /// With Pure Black on (for OLED screens), dark mode's floor goes to true black.
+    static func stage(pureBlack: Bool) -> (top: PlatformColor, floor: PlatformColor) {
+        pureBlack
+            ? (PlatformColor(light: 0xF6F7F9, dark: 0x101113), PlatformColor(light: 0xD9DCE1, dark: 0x000000))
+            : (PlatformColor(light: 0xF6F7F9, dark: 0x1B1C20), PlatformColor(light: 0xD9DCE1, dark: 0x08090A))
+    }
+
+    static func tile(pureBlack: Bool) -> (top: PlatformColor, floor: PlatformColor) {
+        pureBlack
+            ? (PlatformColor(light: 0xF7F8FA, dark: 0x16171A), PlatformColor(light: 0xE4E7EB, dark: 0x000000))
+            : (PlatformColor(light: 0xF7F8FA, dark: 0x232428), PlatformColor(light: 0xE4E7EB, dark: 0x131417))
+    }
 }
 
 extension PlatformColor {

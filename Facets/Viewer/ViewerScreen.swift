@@ -58,7 +58,7 @@ struct ViewerScreen: View {
 
     var body: some View {
         ZStack {
-            ViewerBackground()
+            ViewerBackground(pureBlack: settings.pureBlack)
             switch phase {
             case .loading:
                 ProgressView("Opening \(displayName)…")
@@ -725,8 +725,11 @@ private struct ViewerChips: View {
 
 /// A soft studio backdrop behind the transparent 3D view.
 struct ViewerBackground: View {
+    var pureBlack = false
+
     var body: some View {
-        LinearGradient(colors: [Color(Palette.stage.top), Color(Palette.stage.floor)], startPoint: .top, endPoint: .bottom)
+        let stage = Palette.stage(pureBlack: pureBlack)
+        LinearGradient(colors: [Color(stage.top), Color(stage.floor)], startPoint: .top, endPoint: .bottom)
         .ignoresSafeArea()
     }
 }

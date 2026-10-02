@@ -23,7 +23,7 @@ struct ModelThumbnail: View {
             let key = ThumbnailStore.key(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
             ZStack {
                 if showsBackdrop {
-                    Rectangle().fill(.thumbnailBackground)
+                    Rectangle().fill(Palette.tileGradient(pureBlack: settings?.pureBlack ?? false))
                 }
                 if let image = image ?? ThumbnailStore.shared.cached(key) {
                     Image(platformImage: image)
@@ -57,9 +57,10 @@ struct ModelThumbnail: View {
     }
 }
 
-extension ShapeStyle where Self == LinearGradient {
+extension Palette {
     /// The viewer's studio backdrop in miniature, so white and grey models still read.
-    static var thumbnailBackground: LinearGradient {
-        LinearGradient(colors: [Color(Palette.tile.top), Color(Palette.tile.floor)], startPoint: .top, endPoint: .bottom)
+    static func tileGradient(pureBlack: Bool) -> LinearGradient {
+        let tile = tile(pureBlack: pureBlack)
+        return LinearGradient(colors: [Color(tile.top), Color(tile.floor)], startPoint: .top, endPoint: .bottom)
     }
 }

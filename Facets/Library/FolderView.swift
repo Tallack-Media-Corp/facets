@@ -399,10 +399,11 @@ struct LibraryCard: View {
 
 struct FolderTile: View {
     var showsBackdrop = true
+    @Environment(ViewerSettings.self) private var settings: ViewerSettings?
 
     var body: some View {
         RoundedRectangle(cornerRadius: 14)
-            .fill(showsBackdrop ? AnyShapeStyle(.thumbnailBackground) : AnyShapeStyle(.clear))
+            .fill(showsBackdrop ? AnyShapeStyle(Palette.tileGradient(pureBlack: settings?.pureBlack ?? false)) : AnyShapeStyle(.clear))
             .overlay {
                 // Inset in proportion, so the glyph fills a 52pt row tile and a grid tile alike.
                 GeometryReader { geometry in
@@ -420,10 +421,11 @@ struct FolderTile: View {
 /// A model in iCloud that isn't on the device yet; it downloads when opened.
 struct CloudTile: View {
     var showsBackdrop = true
+    @Environment(ViewerSettings.self) private var settings: ViewerSettings?
 
     var body: some View {
         RoundedRectangle(cornerRadius: 14)
-            .fill(showsBackdrop ? AnyShapeStyle(.thumbnailBackground) : AnyShapeStyle(.clear))
+            .fill(showsBackdrop ? AnyShapeStyle(Palette.tileGradient(pureBlack: settings?.pureBlack ?? false)) : AnyShapeStyle(.clear))
             .overlay {
                 Image(systemName: "icloud.and.arrow.down")
                     .font(.system(size: 28, weight: .light))
