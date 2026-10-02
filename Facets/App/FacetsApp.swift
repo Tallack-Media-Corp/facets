@@ -1,3 +1,4 @@
+import CoreSpotlight
 import SwiftUI
 
 @main
@@ -7,7 +8,8 @@ struct FacetsApp: App {
     @State private var locations = LocationsStore()
     @State private var toasts = ToastCenter()
     @State private var settings = ViewerSettings()
-    @State private var router = Router()
+    @State private var router = Router.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -22,6 +24,16 @@ struct FacetsApp: App {
                 // Files, Mail, Messages and the share sheet hand files over here.
                 .onOpenURL { url in
                     router.open(url, library: library)
+                }
+                // A library model picked from a Spotlight search.
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    if let url = SpotlightIndexer.url(for: activity) {
+                        router.presented = ModelFileRef(url: url, isExternal: false)
+                    }
+                }
+                .task { SpotlightIndexer.reindex() }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .background { SpotlightIndexer.reindex() }
                 }
                 #if DEBUG
                 .task { openFromLaunchEnvironment() }

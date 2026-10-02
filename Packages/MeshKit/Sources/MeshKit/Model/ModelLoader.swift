@@ -3,7 +3,7 @@ import Foundation
 /// Opens any supported file, choosing the reader by content rather than trusting the
 /// extension (a 3MF renamed .stl still opens).
 public enum ModelLoader {
-    public static let supportedExtensions: Set<String> = ["stl", "3mf"]
+    public static let supportedExtensions: Set<String> = ["stl", "3mf", "obj"]
 
     public static func isSupported(_ url: URL) -> Bool {
         supportedExtensions.contains(url.pathExtension.lowercased())
@@ -22,6 +22,10 @@ public enum ModelLoader {
         }
         if fileExtension.lowercased() == "3mf" {
             throw ModelError.corrupt("it isn't a ZIP package")
+        }
+        // OBJ is plain text with nothing to sniff for reliably; go by the name.
+        if fileExtension.lowercased() == "obj" {
+            return try OBJReader.read(data, name: name)
         }
         return try STLReader.read(data, name: name)
     }

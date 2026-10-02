@@ -18,7 +18,7 @@ struct FriendlyError: Equatable {
         if let model = error as? ModelError {
             switch model {
             case .unsupportedFormat:
-                self.init(.notAModel, "Not an STL or 3MF File", "Facets opens STL and 3MF files. This one is something else, or has the wrong extension.")
+                self.init(.notAModel, "Not an STL, 3MF or OBJ File", "Facets opens STL, 3MF and OBJ files. This one is something else, or has the wrong extension.")
             case .emptyFile:
                 self.init(.empty, "This File Is Empty", "It has no data in it. If it came from a download, try downloading it again.")
             case .noGeometry:

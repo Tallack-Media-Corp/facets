@@ -16,6 +16,9 @@ struct ModelFileRef: Identifiable, Hashable {
 @MainActor
 @Observable
 final class Router {
+    /// The one router, shared with Shortcuts so "Open Model" can show a file.
+    static let shared = Router()
+
     enum Tab: Hashable {
         case library, recents, settings, search
     }

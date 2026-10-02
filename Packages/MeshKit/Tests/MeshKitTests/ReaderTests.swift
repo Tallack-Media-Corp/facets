@@ -7,13 +7,13 @@ import simd
 // MARK: - Fixtures
 
 /// A unit cube as 12 outward-facing triangles.
-private let cubeTriangles: [[SIMD3<Float>]] = {
+let cubeTriangles: [[SIMD3<Float>]] = {
     let v = (0..<8).map { i in SIMD3<Float>(Float(i & 1), Float((i >> 1) & 1), Float((i >> 2) & 1)) }
     let faces = [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5]]
     return faces.flatMap { f in [[v[f[0]], v[f[1]], v[f[2]]], [v[f[0]], v[f[2]], v[f[3]]]] }
 }()
 
-private func binarySTL(_ triangles: [[SIMD3<Float>]], header: String = "binary") -> Data {
+func binarySTL(_ triangles: [[SIMD3<Float>]], header: String = "binary") -> Data {
     var data = Data(header.utf8.prefix(80))
     data.append(Data(count: 80 - data.count))
     var count = UInt32(triangles.count).littleEndian
@@ -38,7 +38,7 @@ private func asciiSTL(_ triangles: [[SIMD3<Float>]]) -> Data {
 }
 
 /// Cube mesh XML for a 3MF object.
-private func cubeMeshXML() -> String {
+func cubeMeshXML() -> String {
     var vertices: [SIMD3<Float>] = []
     var indices: [Int] = []
     for triangle in cubeTriangles {
@@ -52,7 +52,7 @@ private func cubeMeshXML() -> String {
 }
 
 /// A ZIP with each entry deflated (or stored), enough for the reader.
-private func zip(_ entries: [(String, String)], deflate: Bool = true) -> Data {
+func zip(_ entries: [(String, String)], deflate: Bool = true) -> Data {
     var out = Data()
     var central = Data()
     func le16(_ v: Int) -> Data { var x = UInt16(v).littleEndian; return Data(bytes: &x, count: 2) }
@@ -82,7 +82,7 @@ private func zip(_ entries: [(String, String)], deflate: Bool = true) -> Data {
     return out
 }
 
-private let rels = """
+let rels = """
 <?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>

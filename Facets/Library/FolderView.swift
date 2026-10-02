@@ -99,13 +99,13 @@ struct FolderView: View {
     @ViewBuilder
     private var content: some View {
         if items.isEmpty, loaded, isBrowsing {
-            ContentUnavailableView("No Models Here", systemImage: "cube.transparent", description: Text("This folder has no STL or 3MF files. Subfolders show up here too."))
+            ContentUnavailableView("No Models Here", systemImage: "cube.transparent", description: Text("This folder has no STL, 3MF or OBJ files. Subfolders show up here too."))
         } else if items.isEmpty, loaded {
             ScrollView {
                 ContentUnavailableView {
                     Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: "cube.transparent")
                 } description: {
-                    Text("Import STL and 3MF files, or save them to Facets from the Files app, Mail or any app's share sheet.")
+                    Text("Import STL, 3MF and OBJ files, or save them to Facets from the Files app, Mail or any app's share sheet.")
                         .frame(maxWidth: 480)
                 } actions: {
                     Button("Import Files") { importing = true }
@@ -321,11 +321,11 @@ struct FolderView: View {
             let missed = total - added
             switch (added, missed) {
             case (0, _):
-                toasts.show(total == 1 ? "Couldn't add that file. Only STL and 3MF files can go in the library." : "Couldn't add those files. Only STL and 3MF files can go in the library.", symbol: "exclamationmark.triangle.fill")
+                toasts.show(total == 1 ? "Couldn't add that file. Only STL, 3MF and OBJ files can go in the library." : "Couldn't add those files. Only STL, 3MF and OBJ files can go in the library.", symbol: "exclamationmark.triangle.fill")
             case (_, 0):
                 toasts.show(added == 1 ? "Added 1 model" : "Added \(added) models")
             default:
-                toasts.show("Added \(added) of \(total). The others aren't STL or 3MF files.", symbol: "exclamationmark.triangle.fill")
+                toasts.show("Added \(added) of \(total). The others aren't STL, 3MF or OBJ files.", symbol: "exclamationmark.triangle.fill")
             }
         }
         return true

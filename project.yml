@@ -77,9 +77,14 @@ targets:
             LSHandlerRank: Default
             LSItemContentTypes:
               - com.bambulab.3mf
-        # Neither format is ours, so both are imported. STL is declared by the system;
-        # 3MF has no system type, and Bambu Studio's identifier is the one other apps
-        # on Apple platforms already use.
+          - CFBundleTypeName: OBJ Model
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.geometry-definition-format
+        # None of the formats is ours, so all are imported. STL and OBJ are declared by
+        # the system; 3MF has no system type, and Bambu Studio's identifier is the one
+        # other apps on Apple platforms already use.
         UTImportedTypeDeclarations:
           - UTTypeIdentifier: public.standard-tesselated-geometry-format
             UTTypeDescription: STL Model
@@ -103,6 +108,16 @@ targets:
               public.mime-type:
                 - model/3mf
                 - application/vnd.ms-package.3dmanufacturing-3dmodel+xml
+          - UTTypeIdentifier: public.geometry-definition-format
+            UTTypeDescription: OBJ Model
+            UTTypeConformsTo:
+              - public.data
+              - public.3d-content
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - obj
+              public.mime-type:
+                - model/obj
 
   FacetsPreview:
     type: app-extension
@@ -130,6 +145,7 @@ targets:
             QLSupportedContentTypes:
               - public.standard-tesselated-geometry-format
               - com.bambulab.3mf
+              - public.geometry-definition-format
 
   FacetsThumbnail:
     type: app-extension
@@ -156,6 +172,7 @@ targets:
             QLSupportedContentTypes:
               - public.standard-tesselated-geometry-format
               - com.bambulab.3mf
+              - public.geometry-definition-format
 
 schemes:
   Facets:

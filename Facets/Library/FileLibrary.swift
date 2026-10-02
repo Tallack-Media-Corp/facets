@@ -35,7 +35,7 @@ enum LibrarySort: String, CaseIterable, Identifiable {
 }
 
 /// The app's Documents folder, which the Files app shows as "On My iPhone › Facets".
-/// Only STL and 3MF files and folders are listed; everything else is left alone.
+/// Only STL, 3MF and OBJ files and folders are listed; everything else is left alone.
 @MainActor
 @Observable
 final class FileLibrary {

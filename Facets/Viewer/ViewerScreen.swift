@@ -1,6 +1,7 @@
 import MeshKit
 import SwiftUI
 import UniformTypeIdentifiers
+import simd
 
 /// The full-screen 3D view of one file.
 struct ViewerScreen: View {
@@ -41,6 +42,13 @@ struct ViewerScreen: View {
     @State private var isAccessing = false
     @State private var isSaved = false
     @State private var saveError: String?
+    /// The open tool, if any.
+    @State private var tool: ViewerTool?
+    @State private var measurePoints: [SIMD3<Float>] = []
+    /// The model turned or laid flat by the user; nil while it's as the file has it.
+    @State private var arranged: Model3D?
+    /// Cross-section height as a fraction of the model's height.
+    @State private var sectionFraction = 1.0
 
     var body: some View {
         ZStack {
@@ -75,8 +83,17 @@ struct ViewerScreen: View {
                         EmptyView()
                     }
                 }
-            case .loaded(let model):
-                ModelCanvas(model: model, appearance: staged(appearance, for: model), controller: controller, bottomObscured: obscuredBySheet) {
+            case .loaded(let base):
+                let model = arranged ?? base
+                ModelCanvas(
+                    model: model,
+                    appearance: staged(appearance, for: model),
+                    controller: controller,
+                    bottomObscured: obscuredBySheet,
+                    tool: tool?.canvasTool ?? .none,
+                    markers: tool == .measure ? measurePoints : [],
+                    onSurfaceTap: { hit, point in surfaceTapped(hit, point, in: model) }
+                ) {
                     noteInteraction()
                 }
                     .ignoresSafeArea()
@@ -85,7 +102,7 @@ struct ViewerScreen: View {
             }
         }
         .overlay(alignment: .top) {
-            if case .loaded(let model) = phase {
+            if let model = shownModel {
                 ViewerChips(
                     model: model,
                     plateID: $appearance.plateID,
@@ -103,7 +120,22 @@ struct ViewerScreen: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if showingHint {
+            if let tool, let model = shownModel {
+                ToolPanel(
+                    tool: tool,
+                    units: settings.units,
+                    points: measurePoints,
+                    sectionFraction: $sectionFraction,
+                    sectionHeight: sectionHeight(in: model) ?? visibleBounds(model).max.z,
+                    isTurned: arranged != nil,
+                    clearPoints: { measurePoints = [] },
+                    turn: { axis in reorient(by: quarterTurn(about: axis)) },
+                    resetOrientation: resetOrientation,
+                    close: { closeTool() }
+                )
+                .padding(.bottom, 8)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if showingHint {
                 GestureHint(stage: shownHintStage ?? 0)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .padding(.bottom, 12)
@@ -120,9 +152,16 @@ struct ViewerScreen: View {
         .toolbar(.hidden, for: .tabBar)
         .toolbar { toolbar }
         .sheet(isPresented: $showingInfo) {
-            if case .loaded(let model) = phase {
-                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, appearance: $appearance, detent: $infoDetent)
+            if let model = shownModel {
+                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material, appearance: $appearance, detent: $infoDetent)
             }
+        }
+        .background { keyboardShortcuts }
+        .animation(.snappy(duration: 0.25), value: tool)
+        .onChange(of: appearance.plateID) {
+            // Another plate is another arrangement: start it as the file has it.
+            arranged = nil
+            measurePoints = []
         }
         .alert("Couldn't Save", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
             Button("OK", role: .cancel) {}
@@ -138,7 +177,7 @@ struct ViewerScreen: View {
         }
         .sheet(isPresented: $choosingPrinter) {
             NavigationStack {
-                PrinterBedPicker()
+                PrinterBedPicker(fits: shownModel.map { model in { bed in fits(model, on: bed) } })
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
                             Button("Done", systemImage: "checkmark") { choosingPrinter = false }
@@ -204,14 +243,12 @@ struct ViewerScreen: View {
                         Button(preset.title, systemImage: symbol(for: preset)) { controller.show(preset) }
                     }
                 } label: {
-                    Label("Preset Views", systemImage: "rotate.3d")
+                    Label("Preset Views", systemImage: "view.3d")
                 }
             }
             ToolbarSpacer(.flexible, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) {
-                Toggle(isOn: $appearance.wireframe) {
-                    Label("Wireframe", systemImage: "cube.transparent")
-                }
+                toolsMenu
             }
             ToolbarItem(placement: .bottomBar) {
                 buildPlateMenu
@@ -221,6 +258,23 @@ struct ViewerScreen: View {
                 Button("Info", systemImage: "info.circle") { showingInfo = true }
             }
         }
+    }
+
+    /// Measure, Lay Flat and Cross-Section. The button shows the open tool.
+    private var toolsMenu: some View {
+        Menu {
+            ForEach(ViewerTool.allCases) { option in
+                Button {
+                    open(option)
+                } label: {
+                    Label(option.title, systemImage: option.symbol)
+                    if option == tool { Text("Open") }
+                }
+            }
+        } label: {
+            Label(tool?.title ?? "Tools", systemImage: tool?.symbol ?? "wrench.and.screwdriver")
+        }
+        .tint(tool == nil ? nil : Color.accentColor)
     }
 
     private func symbol(for preset: OrbitCamera.Preset) -> String {
@@ -251,42 +305,53 @@ struct ViewerScreen: View {
 
     /// The grid and the printer, in the bottom bar where a thumb can reach them.
     /// Printers used lately are one tap away; the full list is behind "Other Printer…".
-    @ViewBuilder
+    /// How the model's drawn: wireframe, the grid, and (with fit checks on) the
+    /// printer, with recent printers one tap away.
     private var buildPlateMenu: some View {
-        if settings.checksFit {
-            printerMenu
-        } else {
-            Toggle(isOn: $appearance.showsGrid) {
-                Label("Build Plate Grid", systemImage: "grid")
-            }
-        }
-    }
-
-    private var printerMenu: some View {
         Menu {
+            Toggle(isOn: $appearance.wireframe) {
+                Label("Wireframe", systemImage: "cube.transparent")
+            }
             Toggle(isOn: $appearance.showsGrid) {
                 Label("Build Plate Grid", systemImage: "grid")
             }
-            Section("Printer") {
-                Picker("Printer", selection: Binding(get: { settings.bedID }, set: { settings.bedID = $0 })) {
-                    Text("None").tag(String?.none)
-                    ForEach(settings.recentBeds) { bed in
-                        Text(bed.id == PrinterBed.customID ? "Custom Bed" : bed.title).tag(Optional(bed.id))
-                    }
-                }
-                .pickerStyle(.inline)
-                Button("Other Printer…", systemImage: "printer") { choosingPrinter = true }
+            if settings.checksFit {
+                printerSection
             }
         } label: {
-            Label("Build Plate and Printer", systemImage: "grid")
+            Label("Display", systemImage: "square.grid.3x3.square")
         }
     }
 
-    /// The appearance with the chosen bed placed under what's showing.
+    @ViewBuilder
+    private var printerSection: some View {
+        Section("Printer") {
+            Picker("Printer", selection: Binding(get: { settings.bedID }, set: { settings.bedID = $0 })) {
+                Text("None").tag(String?.none)
+                ForEach(settings.recentBeds) { bed in
+                    Text(bed.id == PrinterBed.customID ? "Custom Bed" : bed.title).tag(Optional(bed.id))
+                }
+            }
+            .pickerStyle(.inline)
+            Button("Other Printer…", systemImage: "printer") { choosingPrinter = true }
+        }
+    }
+
+    /// The model as shown: turned or laid flat by the user, or as the file has it.
+    private var shownModel: Model3D? {
+        guard case .loaded(let base) = phase else { return nil }
+        return arranged ?? base
+    }
+
+    /// The appearance with the chosen bed placed under what's showing, and the
+    /// cross-section cut while that tool is open.
     private func staged(_ appearance: RenderAppearance, for model: Model3D) -> RenderAppearance {
         var staged = appearance
         if let bed = settings.fitBed {
             staged.bed = model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
+        }
+        if tool == .section {
+            staged.sectionHeight = sectionHeight(in: model)
         }
         return staged
     }
@@ -322,9 +387,108 @@ struct ViewerScreen: View {
 
     /// A plate or printer change rewrites the verdict where VoiceOver can't see it.
     private func announceFit() {
-        guard UIAccessibility.isVoiceOverRunning, case .loaded(let model) = phase,
+        guard UIAccessibility.isVoiceOverRunning, let model = shownModel,
               let note = fitNote(for: model) else { return }
         UIAccessibility.post(notification: .announcement, argument: note.text)
+    }
+
+    // MARK: Tools
+
+    private func open(_ option: ViewerTool) {
+        if tool == option {
+            closeTool()
+            return
+        }
+        tool = option
+        measurePoints = []
+        sectionFraction = option == .section ? 0.5 : sectionFraction
+        noteInteraction()
+    }
+
+    private func closeTool() {
+        tool = nil
+        measurePoints = []
+    }
+
+    /// The cut's height in mm: a fraction of the way up what's showing. Nil at the
+    /// very top, where nothing is cut.
+    private func sectionHeight(in model: Model3D) -> Float? {
+        guard sectionFraction < 0.999 else { return nil }
+        let bounds = visibleBounds(model)
+        return bounds.min.z + Float(sectionFraction) * bounds.size.z
+    }
+
+    private func surfaceTapped(_ hit: SurfaceHit, _ point: SIMD3<Float>, in model: Model3D) {
+        switch tool {
+        case .measure:
+            // A third tap starts a new measurement.
+            if measurePoints.count >= 2 { measurePoints = [] }
+            measurePoints.append(point)
+            if measurePoints.count == 2 {
+                let distance = Format.dimension(simd_distance(measurePoints[0], measurePoints[1]), units: settings.units)
+                UIAccessibility.post(notification: .announcement, argument: distance)
+            }
+        case .layFlat:
+            reorient(by: layFlatRotation(for: hit.normal))
+        default:
+            break
+        }
+    }
+
+    /// Turns what's showing, keeping each turn on top of the last.
+    private func reorient(by rotation: simd_float3x3) {
+        guard let model = shownModel else { return }
+        arranged = model.reoriented(by: rotation, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
+        measurePoints = []
+        announceFit()
+    }
+
+    private func resetOrientation() {
+        arranged = nil
+        measurePoints = []
+        announceFit()
+    }
+
+    /// Whether the model as shown fits a bed, for marking the printer list.
+    private func fits(_ model: Model3D, on bed: PrinterBed) -> Bool? {
+        model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects)?.fits
+    }
+
+    /// Keyboard commands for iPad (and anything with a keyboard), listed in the
+    /// Command-key overlay. Invisible buttons carry them.
+    private var keyboardShortcuts: some View {
+        Group {
+            if isLoaded {
+                Button("Fit to Screen") { controller.frameModel() }
+                    .keyboardShortcut("0", modifiers: .command)
+                ForEach(Array(OrbitCamera.Preset.allCases.enumerated()), id: \.element) { index, preset in
+                    Button("\(preset.title) View") { controller.show(preset) }
+                        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                }
+                Button("Info") { showingInfo = true }
+                    .keyboardShortcut("i", modifiers: .command)
+                Button("Build Plate Grid") { appearance.showsGrid.toggle() }
+                    .keyboardShortcut("g", modifiers: .command)
+                Button("Wireframe") { appearance.wireframe.toggle() }
+                    .keyboardShortcut("w", modifiers: [.command, .shift])
+                Button("Measure") { open(.measure) }
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
+                Button("Lay Flat") { open(.layFlat) }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+                Button("Cross-Section") { open(.section) }
+                    .keyboardShortcut("x", modifiers: [.command, .shift])
+            }
+            if tool != nil {
+                Button("Close Tool") { closeTool() }
+                    .keyboardShortcut(.escape, modifiers: [])
+            } else if showsCloseButton {
+                Button("Close") { dismiss() }
+                    .keyboardShortcut("w", modifiers: .command)
+            }
+        }
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     /// On iPhone the info sheet's medium detent covers the lower half; keep the model
@@ -431,7 +595,7 @@ private struct ViewerChips: View {
     let hasPrinter: Bool
     let choosePrinter: () -> Void
 
-    /// iPad's canvas is much larger; the chips step up a size to match.
+    /// iPad's canvas is much larger; the chips step up two sizes to match.
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var wide: Bool { sizeClass == .regular }
 
@@ -454,7 +618,7 @@ private struct ViewerChips: View {
                             Image(systemName: "chevron.down")
                                 .font(.caption2.weight(.bold))
                         }
-                        .font((wide ? Font.body : .subheadline).weight(.semibold))
+                        .font((wide ? Font.title3 : .subheadline).weight(.semibold))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .frame(minHeight: 44)
@@ -489,7 +653,7 @@ private struct ViewerChips: View {
         HStack(spacing: 8) {
             VStack(spacing: 2) {
                 Text(dimensions)
-                    .font((wide ? Font.subheadline : .footnote).weight(.medium).monospacedDigit())
+                    .font((wide ? Font.body : .footnote).weight(.medium).monospacedDigit())
                     .foregroundStyle(Color.primary)
                 if let fitNote {
                     // Orange text on glass is too faint to read; the symbol carries the
@@ -501,11 +665,11 @@ private struct ViewerChips: View {
                         Image(systemName: fitNote.tooBig ? "exclamationmark.triangle.fill" : "checkmark.circle")
                             .foregroundStyle(fitNote.tooBig ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
                     }
-                    .font((wide ? Font.footnote : .caption).weight(.medium).monospacedDigit())
+                    .font((wide ? Font.subheadline : .caption).weight(.medium).monospacedDigit())
                     .multilineTextAlignment(.center)
                 } else if checksFit, !hasPrinter {
                     Label("No printer selected", systemImage: "printer")
-                        .font((wide ? Font.footnote : .caption).weight(.medium))
+                        .font((wide ? Font.subheadline : .caption).weight(.medium))
                         .foregroundStyle(Color.secondary)
                 }
             }

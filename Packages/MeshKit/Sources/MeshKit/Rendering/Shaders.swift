@@ -15,6 +15,7 @@ enum ShaderSource {
         float4x4 view;
         float4x4 projection;
         float4 gridColor;
+        float4 clip; // x: section height (world z), y: 1 when cutting
     };
 
     struct Part {
@@ -26,6 +27,7 @@ enum ShaderSource {
     struct MeshOut {
         float4 position [[position]];
         float3 viewPosition;
+        float worldZ;
     };
 
     vertex MeshOut mesh_vertex(const device packed_float3 *positions [[buffer(0)]],
@@ -36,13 +38,25 @@ enum ShaderSource {
         float4 world = part.model * float4(float3(positions[vid]), 1.0);
         float4 viewPosition = frame.view * world;
         out.viewPosition = viewPosition.xyz;
+        out.worldZ = world.z;
         out.position = frame.projection * viewPosition;
         return out;
     }
 
     fragment float4 mesh_fragment(MeshOut in [[stage_in]],
+                                  bool frontFacing [[front_facing]],
+                                  constant Frame &frame [[buffer(1)]],
                                   constant Part &part [[buffer(2)]]) {
+        bool cutting = frame.clip.y > 0.5;
+        if (cutting && in.worldZ > frame.clip.x) {
+            discard_fragment();
+        }
         float3 base = part.color.rgb;
+        // With the top cut away, the far side of a wall shows from inside: shade it
+        // dark so walls and cavities read against the outer surface.
+        if (cutting && !frontFacing) {
+            base = base * 0.28 + 0.03;
+        }
         if (part.options.x > 0.5) {
             return float4(base * 0.85 + 0.05, 1.0);
         }

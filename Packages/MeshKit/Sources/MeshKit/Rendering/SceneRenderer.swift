@@ -17,6 +17,9 @@ public struct RenderAppearance: Sendable, Equatable {
     public var bed: BedFit?
     /// Outline colour when the model is too big for the bed (linear).
     public var warningColor = RenderAppearance.defaultColor
+    /// A cross-section: everything above this height (mm, world Z) is cut away and
+    /// the inside shows through. Nil draws the whole model.
+    public var sectionHeight: Float?
 
     public init(baseColor: SIMD4<Float> = RenderAppearance.defaultColor) {
         self.baseColor = baseColor
@@ -40,6 +43,8 @@ private struct FrameUniforms {
     var view: simd_float4x4
     var projection: simd_float4x4
     var gridColor: SIMD4<Float>
+    /// x: section height, y: 1 when cutting.
+    var clip: SIMD4<Float>
 }
 
 private struct GridUniforms {
@@ -84,14 +89,20 @@ public final class SceneRenderer {
         self.context = context
     }
 
-    /// Uploads the model's geometry; shared meshes upload once.
+    /// Uploads the model's geometry; shared meshes upload once. Meshes already on
+    /// the GPU (the same model turned or laid flat) are kept rather than copied again.
     public func setModel(_ model: Model3D?) {
+        let previous = geometries
         self.model = model
         geometries.removeAll()
         if let model {
             for part in model.parts {
                 let key = ObjectIdentifier(part.geometry)
                 guard geometries[key] == nil else { continue }
+                if let kept = previous[key] {
+                    geometries[key] = kept
+                    continue
+                }
                 let geometry = part.geometry
                 guard !geometry.positions.isEmpty,
                       let positions = geometry.positions.withUnsafeBytes({ context.device.makeBuffer(bytes: $0.baseAddress!, length: $0.count, options: .storageModeShared) }) else { continue }
@@ -134,13 +145,17 @@ public final class SceneRenderer {
         guard model != nil else { return }
         var frame = FrameUniforms(
             view: camera.viewMatrix,
-            projection: Self.shift(verticalShift) * camera.projectionMatrix(aspect: aspect, sceneRadius: sceneRadius + simd_distance(camera.target, focusBounds.center)),
-            gridColor: appearance.gridColor
+            projection: projection(camera: camera, aspect: aspect, verticalShift: verticalShift),
+            gridColor: appearance.gridColor,
+            clip: SIMD4(appearance.sectionHeight ?? 0, appearance.sectionHeight == nil ? 0 : 1, 0, 0)
         )
 
         encoder.setRenderPipelineState(context.meshPipeline)
         encoder.setDepthStencilState(context.depthWrite)
         encoder.setCullMode(.none)
+        // STL and 3MF wind outward faces counter-clockwise; the section view relies on
+        // telling the outside of a wall from its inside.
+        encoder.setFrontFacing(.counterClockwise)
         encoder.setTriangleFillMode(appearance.wireframe ? .lines : .fill)
         encoder.setVertexBytes(&frame, length: MemoryLayout<FrameUniforms>.stride, index: 1)
         encoder.setFragmentBytes(&frame, length: MemoryLayout<FrameUniforms>.stride, index: 1)
@@ -177,6 +192,17 @@ public final class SceneRenderer {
             encoder.setFragmentBytes(&uniforms, length: MemoryLayout<GridUniforms>.stride, index: 3)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
         }
+    }
+
+    /// The projection `encode` uses, shift included.
+    func projection(camera: OrbitCamera, aspect: Float, verticalShift: Float) -> simd_float4x4 {
+        Self.shift(verticalShift) * camera.projectionMatrix(aspect: aspect, sceneRadius: sceneRadius + simd_distance(camera.target, focusBounds.center))
+    }
+
+    /// World to clip space exactly as drawn, for turning a tap into a ray and a
+    /// world point back into a spot on screen.
+    public func viewProjection(camera: OrbitCamera, aspect: Float, verticalShift: Float = 0) -> simd_float4x4 {
+        projection(camera: camera, aspect: aspect, verticalShift: verticalShift) * camera.viewMatrix
     }
 
     /// Fits the picture into the top `1 - amount` of the view: scaled down by the

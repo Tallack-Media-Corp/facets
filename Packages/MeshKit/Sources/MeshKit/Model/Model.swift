@@ -157,6 +157,75 @@ public enum ModelFormat: String, Sendable {
     case stl = "STL"
     case asciiSTL = "STL (ASCII)"
     case threeMF = "3MF"
+    case obj = "OBJ"
+}
+
+/// What a slicer worked out when it last sliced a plate (Bambu Studio and Orca save it
+/// in `Metadata/slice_info.config`).
+public struct SliceEstimate: Sendable, Equatable {
+    public struct Filament: Sendable, Equatable {
+        /// "PLA", "PETG-CF".
+        public let type: String?
+        /// "#00AE42".
+        public let colorHex: String?
+        public let meters: Float?
+        public let grams: Float?
+
+        public init(type: String?, colorHex: String?, meters: Float?, grams: Float?) {
+            self.type = type
+            self.colorHex = colorHex
+            self.meters = meters
+            self.grams = grams
+        }
+    }
+
+    /// Plate number, matching `Plate.id` (1 for a single-plate project).
+    public let plate: Int
+    public let seconds: Int?
+    public let grams: Float?
+    public let filaments: [Filament]
+    public let usesSupports: Bool
+
+    public init(plate: Int, seconds: Int?, grams: Float?, filaments: [Filament], usesSupports: Bool = false) {
+        self.plate = plate
+        self.seconds = seconds
+        self.grams = grams
+        self.filaments = filaments
+        self.usesSupports = usesSupports
+    }
+
+    public var meters: Float? {
+        let lengths = filaments.compactMap(\.meters)
+        return lengths.isEmpty ? nil : lengths.reduce(0, +)
+    }
+
+    /// Several plates' estimates as one, for "All Plates". Filaments of the same type
+    /// and colour are added together.
+    public static func combined(_ estimates: [SliceEstimate]) -> SliceEstimate? {
+        guard let first = estimates.first else { return nil }
+        if estimates.count == 1 { return first }
+        func sum(_ values: [Float?]) -> Float? {
+            let known = values.compactMap { $0 }
+            return known.isEmpty ? nil : known.reduce(0, +)
+        }
+        var filaments: [Filament] = []
+        for filament in estimates.flatMap(\.filaments) {
+            if let index = filaments.firstIndex(where: { $0.type == filament.type && $0.colorHex == filament.colorHex }) {
+                let existing = filaments[index]
+                filaments[index] = Filament(type: existing.type, colorHex: existing.colorHex, meters: sum([existing.meters, filament.meters]), grams: sum([existing.grams, filament.grams]))
+            } else {
+                filaments.append(filament)
+            }
+        }
+        let seconds = estimates.compactMap(\.seconds)
+        return SliceEstimate(
+            plate: 0,
+            seconds: seconds.isEmpty ? nil : seconds.reduce(0, +),
+            grams: sum(estimates.map(\.grams)),
+            filaments: filaments,
+            usesSupports: estimates.contains { $0.usesSupports }
+        )
+    }
 }
 
 /// The printer bed a slicer project was laid out on, read from the project's own
@@ -224,7 +293,10 @@ public struct BedFit: Sendable, Equatable {
 
 /// Everything read from one file.
 public struct Model3D: Sendable, Identifiable {
-    public let id = UUID()
+    /// New for every arrangement, so views know to redraw.
+    public let id: UUID
+    /// The file this came from; kept when the model is turned or laid flat.
+    public let sourceID: UUID
     public let format: ModelFormat
     public let parts: [ModelPart]
     public let objects: [ModelObject]
@@ -234,8 +306,15 @@ public struct Model3D: Sendable, Identifiable {
     public let application: String?
     /// The bed a slicer project was arranged on; nil for STL and plain 3MF.
     public let slicerBed: SlicerBed?
+    /// The slicer's time and filament estimates, per plate; empty unless the project
+    /// was sliced before it was saved.
+    public let estimates: [SliceEstimate]
 
-    public init(format: ModelFormat, parts: [ModelPart], objects: [ModelObject], plates: [Plate] = [], title: String? = nil, application: String? = nil, slicerBed: SlicerBed? = nil) {
+    public init(format: ModelFormat, parts: [ModelPart], objects: [ModelObject], plates: [Plate] = [], title: String? = nil, application: String? = nil, slicerBed: SlicerBed? = nil, estimates: [SliceEstimate] = [], sourceID: UUID? = nil) {
+        let id = UUID()
+        self.id = id
+        self.sourceID = sourceID ?? id
+        self.estimates = estimates
         self.format = format
         self.parts = parts
         self.objects = objects
@@ -325,6 +404,54 @@ public struct Model3D: Sendable, Identifiable {
         return objects.filter { plate.objectIDs.contains($0.id) }
     }
 
+    /// The slicer's estimate for what's showing: one plate, or every plate added up.
+    public func estimate(plateID: Int?) -> SliceEstimate? {
+        if let plateID { return estimates.first { $0.plate == plateID } }
+        if plates.isEmpty { return estimates.first { $0.plate == 1 } ?? estimates.first }
+        return SliceEstimate.combined(estimates)
+    }
+
+    /// The same model with every part turned by `rotation` about the centre of the
+    /// parts shown, then set down so the lowest of them rests on the bed (z = 0) where
+    /// it was. Plates, objects and estimates carry over; the slicer's bed doesn't,
+    /// since its layout no longer applies.
+    public func reoriented(by rotation: simd_float3x3, plateID: Int?, hidden: Set<Int>) -> Model3D {
+        let shown = bounds(of: visibleParts(plateID: plateID, hidden: hidden))
+        guard !shown.isEmpty else { return self }
+        let pivot = shown.center
+        var turn = matrix_identity_float4x4
+        turn.columns.0 = SIMD4(rotation.columns.0, 0)
+        turn.columns.1 = SIMD4(rotation.columns.1, 0)
+        turn.columns.2 = SIMD4(rotation.columns.2, 0)
+        func translation(_ t: SIMD3<Float>) -> simd_float4x4 {
+            var m = matrix_identity_float4x4
+            m.columns.3 = SIMD4(t, 1)
+            return m
+        }
+        let about = translation(pivot) * turn * translation(-pivot)
+        var turned = parts.map { part in
+            ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: about * part.transform, color: part.color, objectID: part.objectID)
+        }
+        let shownIDs = Set(visibleParts(plateID: plateID, hidden: hidden).map(\.id))
+        let lowest = turned.filter { shownIDs.contains($0.id) }.reduce(Bounds.empty) { $0.union($1.bounds) }.min.z
+        let drop = translation(SIMD3(0, 0, shown.min.z - lowest))
+        turned = turned.map { part in
+            ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: drop * part.transform, color: part.color, objectID: part.objectID)
+        }
+        return Model3D(format: format, parts: turned, objects: objects, plates: plates, title: title, application: application, slicerBed: nil, estimates: estimates, sourceID: sourceID)
+    }
+
+    /// Where a ray first meets what's showing, in world space.
+    public func hit(origin: SIMD3<Float>, direction: SIMD3<Float>, plateID: Int?, hidden: Set<Int>) -> SurfaceHit? {
+        var best: SurfaceHit?
+        for part in visibleParts(plateID: plateID, hidden: hidden) {
+            if let hit = part.hit(origin: origin, direction: direction), hit.distance < (best?.distance ?? .infinity) {
+                best = hit
+            }
+        }
+        return best
+    }
+
     /// Unique geometries, for counting what the file actually holds.
     public var uniqueGeometryCount: Int {
         Set(parts.map { ObjectIdentifier($0.geometry) }).count
@@ -339,7 +466,7 @@ public enum ModelError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .unsupportedFormat: "This isn't an STL or 3MF file."
+        case .unsupportedFormat: "This isn't an STL, 3MF or OBJ file."
         case .emptyFile: "The file is empty."
         case .corrupt(let detail): "The file couldn't be read: \(detail)."
         case .noGeometry: "The file has no triangles to show."

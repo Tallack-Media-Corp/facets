@@ -35,7 +35,7 @@ struct SearchView: View {
             }
             .overlay {
                 if query.isEmpty {
-                    ContentUnavailableView("Search Your Library", systemImage: "magnifyingglass", description: Text("Find STL and 3MF files by name, in every folder."))
+                    ContentUnavailableView("Search Your Library", systemImage: "magnifyingglass", description: Text("Find STL, 3MF and OBJ files by name, in every folder."))
                 } else if results.isEmpty {
                     ContentUnavailableView.search(text: query)
                 }

@@ -188,7 +188,8 @@ private struct Reader {
             plates: modelPlates.count > 1 ? modelPlates : [],
             title: root.metadata["Title"].flatMap { $0.isEmpty ? nil : $0 },
             application: root.metadata["Application"],
-            slicerBed: slicerBed(plateCount: plates.count)
+            slicerBed: slicerBed(plateCount: plates.count),
+            estimates: sliceEstimates()
         )
     }
 
@@ -441,6 +442,50 @@ private struct Reader {
             return SlicerBed(width: size.x, depth: size.y, printer: nil, plateCount: 1)
         }
         return nil
+    }
+
+    /// Time and filament per plate from the slicer's last slice, saved by Bambu Studio
+    /// and Orca in `Metadata/slice_info.config`. A project saved unsliced has none.
+    private func sliceEstimates() -> [SliceEstimate] {
+        guard let data = try? archive.data(for: "Metadata/slice_info.config") else { return [] }
+        return data.withUnsafeBytes { raw in
+            var scanner = XMLScanner(raw)
+            var estimates: [SliceEstimate] = []
+            var plate: (index: Int?, seconds: Int?, grams: Float?, supports: Bool, filaments: [SliceEstimate.Filament])?
+            while let event = scanner.next() {
+                switch event {
+                case .start:
+                    if scanner.isElement("plate") {
+                        plate = (nil, nil, nil, false, [])
+                    } else if scanner.isElement("metadata"), plate != nil, let key = scanner.string("key") {
+                        let value = scanner.string("value")
+                        switch key {
+                        case "index": plate?.index = value.flatMap { Int($0) }
+                        case "prediction": plate?.seconds = value.flatMap { Double($0) }.map { Int($0) }
+                        case "weight": plate?.grams = value.flatMap { Float($0) }
+                        case "support_used": plate?.supports = value == "true"
+                        default: break
+                        }
+                    } else if scanner.isElement("filament"), plate != nil {
+                        plate?.filaments.append(SliceEstimate.Filament(
+                            type: scanner.string("type"),
+                            colorHex: scanner.string("color"),
+                            meters: scanner.string("used_m").flatMap { Float($0) },
+                            grams: scanner.string("used_g").flatMap { Float($0) }
+                        ))
+                    }
+                case .end(let name):
+                    if scanner.isName(name, "plate"), let current = plate {
+                        // A plate the slicer listed but never sliced has no prediction.
+                        if current.seconds != nil || current.grams != nil {
+                            estimates.append(SliceEstimate(plate: current.index ?? estimates.count + 1, seconds: current.seconds, grams: current.grams, filaments: current.filaments, usesSupports: current.supports))
+                        }
+                        plate = nil
+                    }
+                }
+            }
+            return estimates
+        }
     }
 
     /// Filament colours from Bambu Studio / Orca project settings, indexed by extruder.

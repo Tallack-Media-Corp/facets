@@ -8,6 +8,7 @@ struct ModelInfoSheet: View {
     let file: ModelFileRef
     let fileSize: Int64?
     let units: MeasurementUnits
+    let material: FilamentMaterial
     @Binding var appearance: RenderAppearance
     @Binding var detent: PresentationDetent
 
@@ -35,6 +36,8 @@ struct ModelInfoSheet: View {
                         LabeledContent("Plates", value: Format.count(model.plates.count))
                     }
                 }
+
+                printSection
 
                 if plateObjects.count > 1 {
                     Section {
@@ -84,11 +87,73 @@ struct ModelInfoSheet: View {
         .presentationBackgroundInteraction(.enabled(upThrough: .medium))
     }
 
+    /// What printing it takes: the slicer's own numbers when the project was saved
+    /// sliced, otherwise the weight it would be printed solid, as an upper bound.
+    @ViewBuilder
+    private var printSection: some View {
+        if let estimate = model.estimate(plateID: appearance.plateID) {
+            Section {
+                if let seconds = estimate.seconds {
+                    LabeledContent("Print Time", value: Format.duration(seconds: seconds))
+                }
+                if let grams = estimate.grams {
+                    LabeledContent("Filament", value: [Format.grams(grams), estimate.meters.map { Format.filamentLength($0, units: units) }].compactMap { $0 }.joined(separator: " · "))
+                }
+                if estimate.filaments.count > 1 {
+                    ForEach(Array(estimate.filaments.enumerated()), id: \.offset) { _, filament in
+                        FilamentRow(filament: filament, units: units)
+                    }
+                }
+                if estimate.usesSupports {
+                    LabeledContent("Supports", value: "Yes")
+                }
+            } header: {
+                Text("Print Estimate")
+            } footer: {
+                Text(appearance.plateID == nil && model.plates.count > 1
+                     ? "From the slicer, for every plate together, as of when the project was last sliced."
+                     : "From the slicer, as of when the project was last sliced.")
+            }
+        } else {
+            let volume = abs(shownParts.reduce(0) { $0 + $1.volume })
+            if volume > 0 {
+                Section {
+                    LabeledContent("Weight if Solid", value: "\(Format.grams(volume / 1000 * material.density)) of \(material.title)")
+                } header: {
+                    Text("Print Estimate")
+                } footer: {
+                    Text("An upper limit: printed parts are mostly infill, so they usually weigh much less. A project saved after slicing in Bambu Studio or Orca shows the slicer's time and filament here instead. Choose the material in Settings.")
+                }
+            }
+        }
+    }
+
     /// The object's colour as drawn: its file colour, or the model colour.
     private func color(of object: ModelObject) -> Color {
         let part = model.parts.first { $0.objectID == object.id }
         let linear = (appearance.usesFileColors ? part?.color : nil) ?? appearance.baseColor
         return Color(.sRGBLinear, red: Double(linear.x), green: Double(linear.y), blue: Double(linear.z))
+    }
+}
+
+/// One filament in a multi-colour print: its colour, type and how much.
+private struct FilamentRow: View {
+    let filament: SliceEstimate.Filament
+    let units: MeasurementUnits
+
+    var body: some View {
+        LabeledContent {
+            Text([filament.grams.map(Format.grams), filament.meters.map { Format.filamentLength($0, units: units) }].compactMap { $0 }.joined(separator: " · "))
+        } label: {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(filament.colorHex.flatMap { Color(hex: $0) } ?? .gray)
+                    .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
+                    .frame(width: 18, height: 18)
+                    .accessibilityHidden(true)
+                Text(filament.type ?? "Filament")
+            }
+        }
     }
 }
 

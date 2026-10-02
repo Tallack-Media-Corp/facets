@@ -31,7 +31,7 @@ struct BrowseView: View {
                 Button("Open a File…", systemImage: "doc.badge.ellipsis") { pickingFile = true }
                     .fileImporter(isPresented: $pickingFile, allowedContentTypes: UTType.models, onCompletion: handle)
             } footer: {
-                Text("Add a folder from iCloud Drive, On My iPhone or any storage app in Files to browse its STL and 3MF files here. Facets can only see folders you choose.")
+                Text("Add a folder from iCloud Drive, On My iPhone or any storage app in Files to browse its STL, 3MF and OBJ files here. Facets can only see folders you choose.")
             }
         }
         .navigationTitle("Browse")

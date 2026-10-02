@@ -2,7 +2,7 @@ import MeshKit
 import QuickLookThumbnailing
 import UIKit
 
-/// Thumbnails for STL and 3MF in Files and anywhere else the system shows file icons.
+/// Thumbnails for STL, 3MF and OBJ in Files and anywhere else the system shows file icons.
 /// Rendered the same way as the app's library; very large files fall back to the
 /// picture a 3MF carries, because the extension has little memory to work with.
 final class ThumbnailProvider: QLThumbnailProvider {

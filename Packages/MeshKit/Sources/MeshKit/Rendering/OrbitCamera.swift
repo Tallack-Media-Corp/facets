@@ -105,16 +105,18 @@ public struct OrbitCamera: Sendable, Equatable {
     /// square. Perspective makes this nonlinear; a few passes converge.
     /// With `recenter` off the target stays on the model's centre, so orbiting doesn't
     /// wobble; only the distance changes.
-    public mutating func fitTightly(_ parts: [ModelPart], aspect: Float, fill: Float = 0.9, recenter: Bool = true) {
-        let bounds = parts.reduce(Bounds.empty) { $0.union($1.bounds) }
+    /// `including` adds points that must stay in view too, such as a bed's corners.
+    public mutating func fitTightly(_ parts: [ModelPart], aspect: Float, fill: Float = 0.9, recenter: Bool = true, including extra: [SIMD3<Float>] = []) {
+        var bounds = parts.reduce(Bounds.empty) { $0.union($1.bounds) }
         guard !bounds.isEmpty else { return }
+        for point in extra { bounds.add(point) }
         fit(bounds, aspect: aspect, margin: 1)
         // A sample of the real vertices: a round part's box corners stick far out of
         // its silhouette.
         let total = parts.reduce(0) { $0 + $1.geometry.vertexCount }
         let stride = max(1, total / 20_000)
-        var corners: [SIMD3<Float>] = []
-        corners.reserveCapacity(total / stride + 1)
+        var corners: [SIMD3<Float>] = extra
+        corners.reserveCapacity(total / stride + 1 + extra.count)
         for part in parts {
             part.geometry.positions.withUnsafeBufferPointer { p in
                 var i = 0

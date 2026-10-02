@@ -2,6 +2,10 @@ import SwiftUI
 
 /// Settings › Printer Bed: which bed the viewer outlines under a model.
 struct PrinterBedPicker: View {
+    /// Opened from the viewer: whether the model there fits each bed, so the list
+    /// can say which printers would take it.
+    var fits: ((PrinterBed) -> Bool?)? = nil
+
     @Environment(ViewerSettings.self) private var settings
 
     var body: some View {
@@ -10,12 +14,14 @@ struct PrinterBedPicker: View {
             Section {
                 row(title: "None", id: nil)
             } footer: {
-                Text("Pick your printer to see its bed under every model, and whether the model fits.")
+                Text(fits == nil
+                     ? "Pick your printer to see its bed under every model, and whether the model fits."
+                     : "Each printer says whether the model you're viewing fits it, as it's oriented now.")
             }
             ForEach(PrinterBed.byMake, id: \.make) { group in
                 Section(group.make) {
                     ForEach(group.beds) { bed in
-                        row(title: bed.name, detail: size(bed.width, bed.depth, bed.height), id: bed.id)
+                        row(title: bed.name, detail: size(bed.width, bed.depth, bed.height), id: bed.id, fits: fits?(bed))
                     }
                 }
             }
@@ -49,13 +55,23 @@ struct PrinterBedPicker: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func row(title: String, detail: String? = nil, id: String?) -> some View {
+    private func row(title: String, detail: String? = nil, id: String?, fits: Bool? = nil) -> some View {
         Button {
             settings.bedID = id
         } label: {
             HStack {
                 // Colour, not hierarchical styles: inside a button those resolve to the tint.
-                Text(title).foregroundStyle(Color.primary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).foregroundStyle(Color.primary)
+                    if let fits {
+                        HStack(spacing: 4) {
+                            Image(systemName: fits ? "checkmark.circle" : "exclamationmark.triangle.fill")
+                            Text(fits ? "Fits" : "Too small")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(Color.secondary)
+                    }
+                }
                 Spacer()
                 if let detail { Text(detail).foregroundStyle(Color.secondary).monospacedDigit() }
                 Image(systemName: "checkmark")
@@ -67,6 +83,7 @@ struct PrinterBedPicker: View {
             .contentShape(.rect)
         }
         .accessibilityAddTraits(settings.bedID == id ? .isSelected : [])
+        .accessibilityValue(fits.map { $0 ? "Fits" : "Too small" } ?? "")
     }
 
     /// "256 × 256 × 250 mm": whole millimetres, since beds are specified that way.

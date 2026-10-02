@@ -12,7 +12,7 @@ Hobbyist 3D printer owners (Bambu Lab, Prusa, Orca Slicer users) on the go. They
 
 ## Product Purpose
 
-Facets is a free viewer for STL and 3MF files on iPhone and iPad. It opens a model from anywhere on the device, shows it in 3D with its real size, and keeps a library of models worth keeping. Success is that looking at a 3D printing file on an iPhone feels as immediate as looking at a photo: tap it anywhere, and it's there.
+Facets is a free viewer for STL, 3MF and OBJ files on iPhone and iPad. It opens a model from anywhere on the device, shows it in 3D with its real size, and keeps a library of models worth keeping. Success is that looking at a 3D printing file on an iPhone feels as immediate as looking at a photo: tap it anywhere, and it's there.
 
 ## Positioning
 

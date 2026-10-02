@@ -62,4 +62,27 @@ enum Format {
             return "\((mm3 / 16_387.064).formatted(.number.precision(.fractionLength(2)))) in³"
         }
     }
+
+    /// "1 h 23 min", "48 min", "under a minute".
+    static func duration(seconds: Int) -> String {
+        if seconds < 60 { return "under a minute" }
+        let minutes = (seconds + 30) / 60
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = minutes >= 60 ? [.hour, .minute] : [.minute]
+        formatter.unitsStyle = .short
+        return formatter.string(from: TimeInterval(minutes * 60)) ?? "\(minutes) min"
+    }
+
+    /// "6.5 g"; whole grams from 100 up.
+    static func grams(_ grams: Float) -> String {
+        grams >= 100 ? "\(Int(grams.rounded())) g" : String(format: "%.1f g", grams)
+    }
+
+    /// Filament length: "2.13 m", or feet in inch mode.
+    static func filamentLength(_ meters: Float, units: MeasurementUnits) -> String {
+        switch units {
+        case .millimetres: String(format: "%.2f m", meters)
+        case .inches: String(format: "%.1f ft", meters * 3.28084)
+        }
+    }
 }

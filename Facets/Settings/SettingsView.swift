@@ -33,6 +33,9 @@ struct SettingsView: View {
                     Picker("Units", selection: $settings.units) {
                         ForEach(MeasurementUnits.allCases) { Text($0.title).tag($0) }
                     }
+                    Picker("Filament for Weight", selection: $settings.material) {
+                        ForEach(FilamentMaterial.allCases) { Text($0.title).tag($0) }
+                    }
                 }
 
                 Section {
@@ -143,13 +146,13 @@ private struct AboutView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Facets")
                         .font(.title2.bold())
-                    Text("A small, fast viewer for 3D printing files. Open STL and 3MF models from anywhere on your iPhone or iPad, keep a library of them, and preview them right in the Files app.")
+                    Text("A small, fast viewer for 3D printing files. Open STL, 3MF and OBJ models from anywhere on your iPhone or iPad, keep a library of them, and preview them right in the Files app.")
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
             }
             Section("Opening Files") {
-                Label("Tap an STL or 3MF in Files, Mail or Messages and choose Facets.", systemImage: "doc")
+                Label("Tap an STL, 3MF or OBJ in Files, Mail or Messages and choose Facets.", systemImage: "doc")
                 Label("In the Files app, Facets keeps its library under On My iPhone › Facets.", systemImage: "folder")
                 Label("To look through a folder without importing, add it under Library › Browse.", systemImage: "folder.badge.plus")
                 Label("Long-press a model in Files for a 3D Quick Look preview.", systemImage: "eye")

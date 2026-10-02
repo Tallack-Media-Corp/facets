@@ -7,7 +7,10 @@ extension UTType {
     /// Bambu Studio's identifier, which other 3MF apps on Apple platforms share.
     static let threeMFModel = UTType(importedAs: "com.bambulab.3mf")
 
-    static let models: [UTType] = [.stlModel, .threeMFModel]
+    /// Wavefront OBJ, declared by the system.
+    static let objModel = UTType(importedAs: "public.geometry-definition-format")
+
+    static let models: [UTType] = [.stlModel, .threeMFModel, .objModel]
 }
 
 extension EnvironmentValues {

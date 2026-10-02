@@ -2,6 +2,36 @@ import MeshKit
 import Observation
 import SwiftUI
 
+/// Filament for weight estimates on models a slicer hasn't sliced.
+enum FilamentMaterial: String, CaseIterable, Identifiable {
+    case pla, petg, abs, asa, tpu, nylon
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .pla: "PLA"
+        case .petg: "PETG"
+        case .abs: "ABS"
+        case .asa: "ASA"
+        case .tpu: "TPU"
+        case .nylon: "Nylon"
+        }
+    }
+
+    /// Grams per cubic centimetre, typical of each maker's spec sheets.
+    var density: Float {
+        switch self {
+        case .pla: 1.24
+        case .petg: 1.27
+        case .abs: 1.04
+        case .asa: 1.07
+        case .tpu: 1.21
+        case .nylon: 1.14
+        }
+    }
+}
+
 enum MeasurementUnits: String, CaseIterable, Identifiable {
     case millimetres, inches
 
@@ -45,6 +75,11 @@ final class ViewerSettings {
 
     var showsGrid: Bool {
         didSet { defaults.set(showsGrid, forKey: "viewer.grid") }
+    }
+
+    /// For the "weight if solid" estimate.
+    var material: FilamentMaterial {
+        didSet { defaults.set(material.rawValue, forKey: "viewer.material") }
     }
 
     /// Off for anyone who just wants the dimensions: no printer line, outline or menu.
@@ -107,6 +142,7 @@ final class ViewerSettings {
         usesFileColors = defaults.object(forKey: "viewer.fileColors") as? Bool ?? true
         showsGrid = defaults.object(forKey: "viewer.grid") as? Bool ?? true
         checksFit = defaults.object(forKey: "viewer.checksFit") as? Bool ?? true
+        material = FilamentMaterial(rawValue: defaults.string(forKey: "viewer.material") ?? "") ?? .pla
         let savedBed = defaults.string(forKey: "viewer.bed")
         bedID = savedBed
         recentBedIDs = defaults.stringArray(forKey: "viewer.bed.recents") ?? savedBed.map { [$0] } ?? []

@@ -25,6 +25,34 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
     /// Called while the user moves the camera, for hiding chrome or dismissing hints.
     public var onInteraction: (() -> Void)?
 
+    /// What a single tap on the model does.
+    public enum Tool: Sendable, Equatable {
+        /// Nothing: taps are ignored (a double tap still frames the model).
+        case none
+        /// Picks points, snapping to a nearby corner of the face.
+        case measure
+        /// Picks a face, for laying it flat.
+        case face
+    }
+
+    public var tool: Tool = .none
+
+    /// A tap landed on the model while a tool is active. For `.measure` the point is
+    /// snapped to a corner within reach of the finger.
+    public var onSurfaceTap: ((SurfaceHit, SIMD3<Float>) -> Void)?
+
+    /// Points drawn over the model (world space): a dot each, and a line between each
+    /// pair in turn. Used for measuring.
+    public var markers: [SIMD3<Float>] = [] {
+        didSet {
+            guard markers != oldValue else { return }
+            updateMarkers()
+        }
+    }
+    private let markerHalo = CAShapeLayer()
+    private let markerLine = CAShapeLayer()
+    private let markerDots = CAShapeLayer()
+
     /// How much of the view's height a sheet covers from the bottom (0 to 1). The
     /// model glides up to stay centred in what's left.
     public var bottomObscured: CGFloat = 0 {
@@ -67,6 +95,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
         accessibilityTraits = [.image]
         accessibilityLabel = "3D model"
         installAccessibilityActions()
+        installMarkerLayers()
     }
 
     @available(*, unavailable)
@@ -84,11 +113,20 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
         setNeedsDisplay()
     }
 
+    /// Swaps in a rearranged version of the same model (turned or laid flat), keeping
+    /// the viewing angle and easing to the new framing.
+    public func replaceModel(_ model: Model3D?) {
+        renderer?.setModel(model)
+        renderer?.appearance = appearance
+        frameModel(animated: true)
+        setNeedsDisplay()
+    }
+
     /// Frames what's visible without changing the viewing angle.
     public func frameModel(animated: Bool) {
         guard let renderer, bounds.width > 0, bounds.height > 0 else { needsFit = true; return }
         var next = camera
-        next.fitTightly(renderer.visibleParts, aspect: aspect, fill: 0.72, recenter: false)
+        next.fitTightly(renderer.visibleParts, aspect: aspect, fill: 0.72, recenter: false, including: bedCorners)
         move(to: next, animated: animated)
         needsFit = false
     }
@@ -97,8 +135,22 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
         guard let renderer else { return }
         var next = camera
         next.apply(preset)
-        next.fitTightly(renderer.visibleParts, aspect: aspect, fill: 0.72, recenter: false)
+        next.fitTightly(renderer.visibleParts, aspect: aspect, fill: 0.72, recenter: false, including: bedCorners)
         move(to: next, animated: animated)
+    }
+
+    /// The bed's corners, when framing should show the whole bed: the model doesn't
+    /// fit (so the overhang is in view), or it covers much of the bed. A small part
+    /// on a big bed is framed on its own, or it would be a speck.
+    private var bedCorners: [SIMD3<Float>] {
+        guard let renderer, appearance.showsGrid, let bed = appearance.bed else { return [] }
+        let footprint = renderer.focusBounds
+        guard !footprint.isEmpty else { return [] }
+        let bedSpan = max(bed.max.x - bed.min.x, bed.max.y - bed.min.y)
+        let modelSpan = max(footprint.size.x, footprint.size.y)
+        guard !bed.fits || modelSpan > bedSpan * 0.5 else { return [] }
+        let z = footprint.min.z
+        return [SIMD3(bed.min.x, bed.min.y, z), SIMD3(bed.max.x, bed.min.y, z), SIMD3(bed.max.x, bed.max.y, z), SIMD3(bed.min.x, bed.max.y, z)]
     }
 
     public func resetView() {
@@ -178,6 +230,128 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
         encoder.endEncoding()
         commands.present(drawable)
         commands.commit()
+        if !markers.isEmpty { updateMarkers() }
+    }
+
+    // MARK: Picking and markers
+
+    private var viewProjection: simd_float4x4? {
+        guard let renderer, bounds.width > 0, bounds.height > 0 else { return nil }
+        return renderer.viewProjection(camera: camera, aspect: aspect, verticalShift: verticalShift)
+    }
+
+    /// Where a world point lands on screen, in points; nil behind the camera.
+    public func screenPoint(of world: SIMD3<Float>) -> CGPoint? {
+        guard let viewProjection else { return nil }
+        let clip = viewProjection * SIMD4(world, 1)
+        guard clip.w > 0 else { return nil }
+        let ndc = SIMD2(clip.x, clip.y) / clip.w
+        return CGPoint(x: CGFloat((ndc.x + 1) / 2) * bounds.width, y: CGFloat((1 - ndc.y) / 2) * bounds.height)
+    }
+
+    /// The ray from the eye through a point on screen.
+    private func ray(through point: CGPoint) -> (origin: SIMD3<Float>, direction: SIMD3<Float>)? {
+        guard let viewProjection else { return nil }
+        let inverse = viewProjection.inverse
+        let x = Float(point.x / bounds.width) * 2 - 1
+        let y = 1 - Float(point.y / bounds.height) * 2
+        let near = inverse * SIMD4(x, y, 0, 1)
+        let far = inverse * SIMD4(x, y, 1, 1)
+        guard near.w != 0, far.w != 0 else { return nil }
+        let a = SIMD3(near.x, near.y, near.z) / near.w
+        let b = SIMD3(far.x, far.y, far.z) / far.w
+        let direction = b - a
+        guard simd_length(direction) > 0 else { return nil }
+        return (a, simd_normalize(direction))
+    }
+
+    /// What's under a point on screen; respects the cross-section, so a cut-away top
+    /// can't be picked.
+    public func surface(at point: CGPoint) -> SurfaceHit? {
+        guard let renderer, let model = renderer.model, let ray = ray(through: point) else { return nil }
+        let appearance = renderer.appearance
+        guard let cut = appearance.sectionHeight else {
+            return model.hit(origin: ray.origin, direction: ray.direction, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
+        }
+        // Step past hits in the removed part until one lies below the cut.
+        var origin = ray.origin
+        for _ in 0..<32 {
+            guard let hit = model.hit(origin: origin, direction: ray.direction, plateID: appearance.plateID, hidden: appearance.hiddenObjects) else { return nil }
+            if hit.point.z <= cut + 0.001 { return hit }
+            origin = hit.point + ray.direction * max(renderer.focusBounds.radius * 1e-5, 1e-4)
+        }
+        return nil
+    }
+
+    @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
+        guard tool != .none else { return }
+        let location = gesture.location(in: self)
+        guard let hit = surface(at: location) else { return }
+        var point = hit.point
+        if tool == .measure {
+            // A corner within a fingertip wins: measuring edge to edge is the usual job.
+            var best: CGFloat = 22
+            for corner in hit.corners {
+                guard let screen = screenPoint(of: corner) else { continue }
+                let d = hypot(screen.x - location.x, screen.y - location.y)
+                if d < best {
+                    best = d
+                    point = corner
+                }
+            }
+        }
+        onSurfaceTap?(hit, point)
+    }
+
+    private func installMarkerLayers() {
+        for layer in [markerHalo, markerLine, markerDots] {
+            layer.fillColor = nil
+            layer.lineCap = .round
+            layer.lineJoin = .round
+            layer.actions = ["path": NSNull(), "position": NSNull(), "bounds": NSNull()]
+            self.layer.addSublayer(layer)
+        }
+        // Ink on a halo: the model is often the accent colour, so the accent alone
+        // would vanish against it.
+        markerHalo.lineWidth = 6
+        markerLine.lineWidth = 2
+        markerDots.lineWidth = 2.5
+        updateMarkerColors()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ModelCanvasView, _: UITraitCollection) in
+            view.updateMarkerColors()
+        }
+    }
+
+    private func updateMarkerColors() {
+        let ink = UIColor.label.resolvedColor(with: traitCollection).cgColor
+        let halo = UIColor.systemBackground.resolvedColor(with: traitCollection).withAlphaComponent(0.85).cgColor
+        markerHalo.strokeColor = halo
+        markerLine.strokeColor = ink
+        markerDots.strokeColor = ink
+        markerDots.fillColor = halo
+    }
+
+    private func updateMarkers() {
+        markerHalo.frame = bounds
+        markerLine.frame = bounds
+        markerDots.frame = bounds
+        let screen = markers.map { screenPoint(of: $0) }
+        let line = UIBezierPath()
+        var index = 0
+        while index + 1 < screen.count {
+            if let a = screen[index], let b = screen[index + 1] {
+                line.move(to: a)
+                line.addLine(to: b)
+            }
+            index += 2
+        }
+        let dots = UIBezierPath()
+        for case let point? in screen {
+            dots.append(UIBezierPath(ovalIn: CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)))
+        }
+        markerHalo.path = line.cgPath
+        markerLine.path = line.cgPath
+        markerDots.path = dots.cgPath
     }
 
     // MARK: Gestures
@@ -204,6 +378,10 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         addGestureRecognizer(doubleTap)
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        tap.require(toFail: doubleTap)
+        addGestureRecognizer(tap)
     }
 
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
@@ -337,12 +515,18 @@ public struct ModelCanvas: UIViewRepresentable {
     let controller: ModelCanvasController?
     let onInteraction: (() -> Void)?
     let bottomObscured: CGFloat
+    let tool: ModelCanvasView.Tool
+    let markers: [SIMD3<Float>]
+    let onSurfaceTap: ((SurfaceHit, SIMD3<Float>) -> Void)?
 
-    public init(model: Model3D?, appearance: RenderAppearance, controller: ModelCanvasController? = nil, bottomObscured: CGFloat = 0, onInteraction: (() -> Void)? = nil) {
+    public init(model: Model3D?, appearance: RenderAppearance, controller: ModelCanvasController? = nil, bottomObscured: CGFloat = 0, tool: ModelCanvasView.Tool = .none, markers: [SIMD3<Float>] = [], onSurfaceTap: ((SurfaceHit, SIMD3<Float>) -> Void)? = nil, onInteraction: (() -> Void)? = nil) {
         self.model = model
         self.appearance = appearance
         self.controller = controller
         self.bottomObscured = bottomObscured
+        self.tool = tool
+        self.markers = markers
+        self.onSurfaceTap = onSurfaceTap
         self.onInteraction = onInteraction
     }
 
@@ -350,6 +534,7 @@ public struct ModelCanvas: UIViewRepresentable {
 
     public final class Coordinator {
         var modelID: UUID?
+        var sourceID: UUID?
     }
 
     public func makeUIView(context: Context) -> ModelCanvasView {
@@ -357,6 +542,7 @@ public struct ModelCanvas: UIViewRepresentable {
         view.appearance = appearance
         view.setModel(model)
         context.coordinator.modelID = model?.id
+        context.coordinator.sourceID = model?.sourceID
         controller?.view = view
         view.onInteraction = onInteraction
         return view
@@ -364,15 +550,25 @@ public struct ModelCanvas: UIViewRepresentable {
 
     public func updateUIView(_ view: ModelCanvasView, context: Context) {
         if context.coordinator.modelID != model?.id {
+            let sameFile = model != nil && context.coordinator.sourceID == model?.sourceID
             context.coordinator.modelID = model?.id
+            context.coordinator.sourceID = model?.sourceID
             view.appearance = appearance
-            view.setModel(model)
+            if sameFile {
+                // Turned or laid flat: keep the camera's angle and reframe.
+                view.replaceModel(model)
+            } else {
+                view.setModel(model)
+            }
         } else {
             view.appearance = appearance
         }
         controller?.view = view
         view.onInteraction = onInteraction
         view.bottomObscured = bottomObscured
+        view.tool = tool
+        view.markers = markers
+        view.onSurfaceTap = onSurfaceTap
     }
 }
 #endif

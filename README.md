@@ -1,6 +1,6 @@
 # Facets
 
-A small, fast viewer for 3D printing files on iPhone and iPad. Open STL and 3MF models from anywhere, keep a library of them, and preview them in 3D right in the Files app.
+A small, fast viewer for 3D printing files on iPhone and iPad. Open STL, 3MF and OBJ models from anywhere, keep a library of them, and preview them in 3D right in the Files app.
 
 Free and open source (MIT). No accounts, no network access, no tracking.
 
@@ -12,10 +12,10 @@ Free and open source (MIT). No accounts, no network access, no tracking.
 - **Browse**: next to Library, add any folder from iCloud Drive, On My iPhone or a storage app in Files and look through it without importing. Folders are kept as security-scoped bookmarks (iOS only lets an app see what the user picks), iCloud files that aren't downloaded yet show a cloud and download when opened, and a plus beside Share saves a copy to the library.
 - **Recents**: models opened from other apps are remembered with security-scoped bookmarks, so they reopen without picking them again.
 - **iOS integration**:
-  - STL and 3MF open in Facets from Files, Mail, Messages, Safari downloads and share sheets, in place where possible.
+  - STL, 3MF and OBJ open in Facets from Files, Mail, Messages, Safari downloads and share sheets, in place where possible.
   - The Facets library is a real folder in the Files app (On My iPhone › Facets).
   - A Quick Look extension shows a live, rotatable 3D preview wherever the system previews files.
-  - A thumbnail extension draws STL and 3MF thumbnails in Files.
+  - A thumbnail extension draws STL, 3MF and OBJ thumbnails in Files.
 - Liquid Glass throughout, light and dark.
 
 ## Requirements

@@ -28,6 +28,7 @@
 			<array>
 				<string>public.standard-tesselated-geometry-format</string>
 				<string>com.bambulab.3mf</string>
+				<string>public.geometry-definition-format</string>
 			</array>
 			<key>QLThumbnailMinimumDimension</key>
 			<integer>0</integer>

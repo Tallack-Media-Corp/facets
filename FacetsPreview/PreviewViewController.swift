@@ -2,7 +2,7 @@ import MeshKit
 import QuickLook
 import UIKit
 
-/// Quick Look for STL and 3MF: long-press a model in Files, or tap one in Mail or
+/// Quick Look for STL, 3MF and OBJ: long-press a model in Files, or tap one in Mail or
 /// Messages, and it turns in 3D right there.
 final class PreviewViewController: UIViewController, QLPreviewingController {
     private let canvas = ModelCanvasView()
