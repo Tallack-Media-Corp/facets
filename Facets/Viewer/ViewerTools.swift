@@ -49,6 +49,9 @@ struct ToolPanel: View {
     let resetOrientation: () -> Void
     let close: () -> Void
 
+    /// With VoiceOver on, the model takes direct touch while a tool is open, so the
+    /// instructions say how to use it that way.
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     /// VoiceOver lands on the panel when it opens, so its instructions are read.
     @AccessibilityFocusState private var titleFocused: Bool
 
@@ -113,18 +116,29 @@ struct ToolPanel: View {
                 .buttonStyle(.glass)
             }
         } else {
-            Text(points.isEmpty ? "Tap a point on the model. Points snap to a nearby corner." : "Tap a second point.")
+            Text(measureHint)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
+    private var measureHint: String {
+        if voiceOver {
+            return points.isEmpty
+                ? "Touch the model directly and lift your finger where the first point goes. Points snap to a nearby corner."
+                : "Touch the model again and lift your finger on the second point."
+        }
+        return points.isEmpty ? "Tap a point on the model. Points snap to a nearby corner." : "Tap a second point."
+    }
+
     // MARK: Lay flat
 
     private var layFlat: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Tap a face to rest the model on it, or turn it a quarter at a time.")
+            Text(voiceOver
+                 ? "Touch the model directly and lift your finger on a face to rest the model on it, or use the turn buttons below."
+                 : "Tap a face to rest the model on it, or turn it a quarter at a time.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
