@@ -3,13 +3,15 @@ import MeshKit
 import Observation
 
 /// One entry in a library folder.
-struct LibraryItem: Identifiable, Hashable {
+struct LibraryItem: Identifiable, Hashable, Sendable {
     let url: URL
     let isFolder: Bool
     let size: Int64?
     let modified: Date?
     /// Models and subfolders inside a folder.
-    let childCount: Int?
+    /// Nil until counted: counting means listing every subfolder, which is slow in
+    /// iCloud, so a folder's list shows first and the counts follow.
+    var childCount: Int?
     /// False for an iCloud file that's only a placeholder on this device.
     var isDownloaded = true
 
@@ -80,6 +82,13 @@ final class FileLibrary {
     }
 
     func items(in folder: URL, sort: LibrarySort) -> [LibraryItem] {
+        Self.withChildCounts(Self.scan(folder, sort: sort, root: root))
+    }
+
+    /// Lists a folder's models and subfolders, without counting what's in the
+    /// subfolders. Doesn't touch the main actor, so it runs in the background.
+    nonisolated static func scan(_ folder: URL, sort: LibrarySort, root: URL) -> [LibraryItem] {
+        let fileManager = FileManager.default
         let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey, .ubiquitousItemDownloadingStatusKey]
         // Hidden files aren't skipped by the enumerator, because an iCloud file that
         // isn't downloaded can appear as a hidden ".Name.stl.icloud" placeholder.
@@ -102,7 +111,7 @@ final class FileLibrary {
             if values?.isDirectory == true {
                 // iOS manages Inbox; it's never a place to browse.
                 if folder == root, name == "Inbox" { continue }
-                items.append(LibraryItem(url: realURL, isFolder: true, size: nil, modified: values?.contentModificationDate, childCount: childCount(of: realURL)))
+                items.append(LibraryItem(url: realURL, isFolder: true, size: nil, modified: values?.contentModificationDate, childCount: nil))
                 continue
             }
             guard ModelLoader.isSupported(realURL) else { continue }
@@ -123,8 +132,18 @@ final class FileLibrary {
         }
     }
 
-    private func childCount(of folder: URL) -> Int {
-        let urls = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
+    /// Fills in how many models and subfolders each folder holds.
+    nonisolated static func withChildCounts(_ items: [LibraryItem]) -> [LibraryItem] {
+        items.map { item in
+            guard item.isFolder, item.childCount == nil else { return item }
+            var counted = item
+            counted.childCount = childCount(of: item.url)
+            return counted
+        }
+    }
+
+    nonisolated private static func childCount(of folder: URL) -> Int {
+        let urls = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
         return urls.filter { url in
             let name = url.lastPathComponent
             if name.hasPrefix(".") {

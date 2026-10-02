@@ -40,6 +40,8 @@ struct FolderView: View {
     @State private var moving: LibraryItem?
     @State private var failure: (title: String, message: String)?
     @State private var watcher: FolderWatcher?
+    /// Bumped per reload, so a slow read finishing late can't replace a newer one.
+    @State private var loadGeneration = 0
     @State private var dropTargeted = false
     /// Browsed models copied to the library this visit, on top of `hasCopy`.
     @State private var saved: Set<URL> = []
@@ -63,6 +65,13 @@ struct FolderView: View {
                         .strokeBorder(.tint, style: StrokeStyle(lineWidth: 3, dash: [10, 6]))
                         .padding(12)
                         .allowsHitTesting(false)
+                }
+            }
+            .overlay {
+                if !loaded {
+                    ProgressView()
+                        .controlSize(.large)
+                        .accessibilityLabel("Loading folder")
                 }
             }
             .onAppear(perform: reload)
@@ -307,9 +316,27 @@ struct FolderView: View {
         renaming = item
     }
 
+    /// Reads the folder in the background, so a slow one (iCloud Drive, a big
+    /// Downloads) never freezes the screen; a frozen screen queues taps that then
+    /// land on whatever row appears under them. Names show first, counts after.
     private func reload() {
-        items = library.items(in: folder, sort: sort)
-        loaded = true
+        loadGeneration += 1
+        let generation = loadGeneration
+        let folder = folder, sort = sort, root = library.root
+        Task {
+            let listed = await Task.detached(priority: .userInitiated) {
+                FileLibrary.scan(folder, sort: sort, root: root)
+            }.value
+            guard generation == loadGeneration else { return }
+            items = listed
+            loaded = true
+            guard listed.contains(where: \.isFolder) else { return }
+            let counted = await Task.detached(priority: .utility) {
+                FileLibrary.withChildCounts(listed)
+            }.value
+            guard generation == loadGeneration else { return }
+            items = counted
+        }
     }
 
     /// Runs a file operation; if it fails, says which one and why in plain words.
@@ -486,7 +513,7 @@ struct LibraryRow: View {
 
     static func subtitle(for item: LibraryItem) -> String {
         if item.isFolder {
-            let count = item.childCount ?? 0
+            guard let count = item.childCount else { return "Folder" }
             return count == 1 ? "1 item" : "\(count) items"
         }
         return [item.fileExtension, Format.fileSize(item.size), Format.date(item.modified)]
