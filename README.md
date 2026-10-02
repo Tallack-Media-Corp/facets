@@ -2,7 +2,7 @@
 
 A small, fast viewer for 3D printing files on iPhone and iPad. Open STL, 3MF and OBJ models from anywhere, keep a library of them, and preview them in 3D right in the Files app.
 
-Free and open source (MIT). No accounts, no network access, no tracking.
+Free and open source (MIT). No accounts, no tracking, and no network connections of its own: the library lives in your iCloud Drive (or on the device without iCloud), and the OS syncs it.
 
 ## Features
 

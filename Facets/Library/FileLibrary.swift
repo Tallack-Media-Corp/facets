@@ -34,19 +34,41 @@ enum LibrarySort: String, CaseIterable, Identifiable {
     }
 }
 
-/// The app's Documents folder, which the Files app shows as "On My iPhone › Facets".
-/// Only STL, 3MF and OBJ files and folders are listed; everything else is left alone.
+/// The library folder: the app's folder in iCloud Drive, or on the device without
+/// iCloud (see `LibraryLocation`). Only STL, 3MF and OBJ files and folders are
+/// listed; everything else is left alone.
 @MainActor
 @Observable
 final class FileLibrary {
-    let root: URL
+    private(set) var root: URL
+    private(set) var location: LibraryLocation.Kind
     /// Bumped after every change made through the app, so open folders reload.
     private(set) var revision = 0
 
     private let fileManager = FileManager.default
 
     init() {
-        root = URL.documentsDirectory.standardizedFileURL
+        root = LibraryLocation.current
+        location = LibraryLocation.kind
+    }
+
+    /// Finds iCloud Drive and moves the library there, bringing any models saved on
+    /// the device along. Falls back to the device folder when iCloud is off.
+    func connectToICloud() async {
+        if let cloud = await LibraryLocation.resolveICloud() {
+            let moved = await LibraryLocation.moveDeviceFiles(into: cloud)
+            LibraryLocation.use(cloud, kind: .iCloud)
+            if root != cloud || moved > 0 {
+                root = cloud
+                location = .iCloud
+                revision += 1
+            }
+        } else if location == .iCloud {
+            LibraryLocation.use(LibraryLocation.deviceRoot, kind: .device)
+            root = LibraryLocation.deviceRoot
+            location = .device
+            revision += 1
+        }
     }
 
     func contains(_ url: URL) -> Bool {
@@ -54,7 +76,7 @@ final class FileLibrary {
     }
 
     func isInInbox(_ url: URL) -> Bool {
-        url.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root.appending(path: "Inbox").resolvingSymlinksInPath().path + "/")
+        url.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(LibraryLocation.deviceRoot.appending(path: "Inbox").resolvingSymlinksInPath().path + "/")
     }
 
     func items(in folder: URL, sort: LibrarySort) -> [LibraryItem] {

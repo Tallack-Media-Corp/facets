@@ -17,6 +17,7 @@ struct FacetsApp: App {
                 .environment(locations)
                 .environment(settings)
                 .task { library.purgeExpired() }
+                .task { await library.connectToICloud() }
         }
         #if os(macOS)
         .defaultSize(width: 1100, height: 760)
@@ -50,6 +51,7 @@ private struct ModelWindow: View {
         NavigationStack {
             ViewerScreen(file: file)
         }
+        .formStyle(.grouped)
         // The toast host reads the toast centre, so it goes inside it.
         .toastHost(clearance: 24)
         .environment(router)
@@ -69,6 +71,8 @@ private struct SceneRoot: View {
 
     var body: some View {
         RootView()
+            // Inset grouped settings and sheets on the Mac too, not two-column forms.
+            .formStyle(.grouped)
             .environment(router)
             .environment(toasts)
             // Files, Mail, Messages and the share sheet hand files over here.

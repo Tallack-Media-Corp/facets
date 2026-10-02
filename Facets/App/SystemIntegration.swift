@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// The library as Spotlight and Shortcuts see it: models by their path below the
 /// library folder, which stays the same across launches.
 enum LibraryIndex {
-    static var root: URL { URL.documentsDirectory.standardizedFileURL }
+    static var root: URL { LibraryLocation.current }
 
     /// Every model in the library, skipping the share sheet's Inbox.
     static func models() -> [URL] {

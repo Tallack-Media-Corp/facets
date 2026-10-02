@@ -45,9 +45,28 @@ targets:
         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIcon-Mesh
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_PREPROCESS: YES
+        INFOPLIST_PREPROCESSOR_DEFINITIONS: FACETS_ICLOUD_CONTAINER=iCloud.$(FACETS_BUNDLE_ID)
+    entitlements:
+      path: Facets/Facets.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.$(FACETS_BUNDLE_ID)
+        com.apple.developer.icloud-services:
+          - CloudDocuments
+        com.apple.developer.ubiquity-container-identifiers:
+          - iCloud.$(FACETS_BUNDLE_ID)
     info:
       path: Facets/Info.plist
       properties:
+        # The library's folder in iCloud Drive, shown as "Facets" in Files and Finder.
+        # The key is the container id; the preprocessor fills it in, since Xcode
+        # doesn't expand build settings in keys.
+        NSUbiquitousContainers:
+          FACETS_ICLOUD_CONTAINER:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerName: Facets
+            NSUbiquitousContainerSupportedFolderLevels: Any
         CFBundleDisplayName: Facets
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -197,12 +216,20 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         COMBINE_HIDPI_IMAGES: YES
         ENABLE_HARDENED_RUNTIME: YES
+        INFOPLIST_PREPROCESS: YES
+        INFOPLIST_PREPROCESSOR_DEFINITIONS: FACETS_ICLOUD_CONTAINER=iCloud.$(FACETS_BUNDLE_ID)
     entitlements:
       path: FacetsMac/FacetsMac.entitlements
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.files.user-selected.read-write: true
         com.apple.security.files.bookmarks.app-scope: true
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.$(FACETS_BUNDLE_ID)
+        com.apple.developer.icloud-services:
+          - CloudDocuments
+        com.apple.developer.ubiquity-container-identifiers:
+          - iCloud.$(FACETS_BUNDLE_ID)
     info:
       path: FacetsMac/Info.plist
       properties:
@@ -210,6 +237,14 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSPrincipalClass: NSApplication
+        # The library's folder in iCloud Drive, shown as "Facets" in Files and Finder.
+        # The key is the container id; the preprocessor fills it in, since Xcode
+        # doesn't expand build settings in keys.
+        NSUbiquitousContainers:
+          FACETS_ICLOUD_CONTAINER:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerName: Facets
+            NSUbiquitousContainerSupportedFolderLevels: Any
         LSApplicationCategoryType: public.app-category.utilities
         ITSAppUsesNonExemptEncryption: false
         CFBundleDocumentTypes:

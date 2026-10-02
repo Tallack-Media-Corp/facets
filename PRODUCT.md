@@ -16,7 +16,7 @@ Facets is a free viewer for STL, 3MF and OBJ files on iPhone and iPad. It opens 
 
 ## Positioning
 
-- **Free, open source, private.** MIT licence, public repository (github.com/Tallack-Media-Corp/facets), no accounts, no network access, nothing collected.
+- **Free, open source, private.** MIT licence, public repository (github.com/Tallack-Media-Corp/facets), no accounts, no network connections of its own (the library syncs through the user's iCloud Drive), nothing collected.
 - **Fast and lightweight.** No dependencies; its own readers and Metal renderer open multi-million-triangle 3MF projects in about a second.
 - **Lives inside iOS.** The library is a real folder in Files, files open in place from other apps, Quick Look shows a live 3D preview, and Files shows rendered thumbnails.
 - **Understands slicer projects.** Bambu Studio and Orca 3MF plates, filament colours, multi-part objects and hidden modifiers, not just raw meshes.

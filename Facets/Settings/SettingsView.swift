@@ -13,6 +13,16 @@ enum AppInfo {
 
 struct SettingsView: View {
     @Environment(ViewerSettings.self) private var settings
+    @Environment(FileLibrary.self) private var library
+
+    /// Where the library is when it isn't in iCloud.
+    private static var deviceName: String {
+        #if os(macOS)
+        "On This Mac"
+        #else
+        UIDevice.current.userInterfaceIdiom == .pad ? "On This iPad" : "On This iPhone"
+        #endif
+    }
     @State private var cacheSize: Int64?
 
     var body: some View {
@@ -62,6 +72,12 @@ struct SettingsView: View {
                 #endif
 
                 Section {
+                    LabeledContent("Library", value: library.location == .iCloud ? "iCloud Drive" : Self.deviceName)
+                    #if os(macOS)
+                    Button("Show in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([library.root])
+                    }
+                    #endif
                     NavigationLink {
                         RecentlyDeletedView()
                     } label: {
@@ -76,8 +92,13 @@ struct SettingsView: View {
                 } header: {
                     Text("Storage")
                 } footer: {
-                    if let cacheSize {
-                        Text("Thumbnails use \(Format.fileSize(cacheSize)). They're redrawn when needed.")
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(library.location == .iCloud
+                             ? "The library is the Facets folder in iCloud Drive, shared by your iPhone, iPad and Mac."
+                             : "To share the library between your devices, sign in to iCloud and turn on iCloud Drive for Facets. Models here move to iCloud Drive when you do.")
+                        if let cacheSize {
+                            Text("Thumbnails use \(Format.fileSize(cacheSize)). They're redrawn when needed.")
+                        }
                     }
                 }
 
@@ -94,7 +115,7 @@ struct SettingsView: View {
                 } header: {
                     Text("About")
                 } footer: {
-                    Text("Facets is free and open source. It has no network access and collects nothing.")
+                    Text("Facets is free and open source. It makes no network connections of its own and collects nothing; your library syncs through your own iCloud Drive.")
                 }
             }
             .navigationTitle("Settings")

@@ -24,7 +24,10 @@ struct LibraryTab: View {
         NavigationStack(path: $path) {
             Group {
                 switch section {
-                case .library: FolderView(folder: library.root, title: "Library")
+                case .library:
+                    FolderView(folder: library.root, title: "Library")
+                        // Moving to iCloud Drive changes the folder underneath.
+                        .id(library.root)
                 case .browse: BrowseView(path: $path)
                 }
             }
