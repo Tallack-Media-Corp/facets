@@ -64,6 +64,12 @@ struct ViewerScreen: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
+        viewerStage
+            .modifier(ViewerLifecycle(screen: self))
+    }
+
+    /// The model, its chips and panels, and the toolbar.
+    private var viewerStage: some View {
         ZStack {
             ViewerBackground(pureBlack: settings.pureBlack)
             switch phase {
@@ -117,66 +123,10 @@ struct ViewerScreen: View {
                     .accessibilityHint("Swipe up or down to turn the model or change the view.")
             }
         }
-        .overlay(alignment: .top) {
-            if let model = shownModel {
-                VStack(spacing: 10) {
-                    ViewerChips(
-                        model: model,
-                        plateID: $appearance.plateID,
-                        dimensions: Format.dimensions(visibleBounds(model).size, units: settings.units),
-                        spokenDimensions: Format.spokenDimensions(visibleBounds(model).size, units: settings.units),
-                        fitNote: fitNote(for: model),
-                        checksFit: settings.checksFit,
-                        hasPrinter: settings.fitBed != nil,
-                        unsureOfUnits: !unitSuggestions.isEmpty,
-                        choosePrinter: { choosingPrinter = true }
-                    )
-                    // Stacked under the readout it qualifies, so larger text can't
-                    // push the two into each other.
-                    if !unitSuggestions.isEmpty {
-                        UnitSuggestionCard(
-                            size: model.bounds.size,
-                            suggestions: unitSuggestions,
-                            units: settings.units,
-                            choose: { applyUnit($0) },
-                            keep: { keepUnit() }
-                        )
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-                }
-                // Overlays on the model stop growing at the first accessibility
-                // size; beyond that they'd cover what they describe.
-                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                .padding(.top, 8)
-            }
-        }
+        .overlay(alignment: .top) { topOverlay }
         .animation(.snappy(duration: 0.25), value: unitSuggestions)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewHeight = max($0, 1) }
-        .overlay(alignment: dockedPanel ? .bottomTrailing : .bottom) {
-            if let tool, let model = shownModel {
-                ToolPanel(
-                    tool: tool,
-                    units: settings.units,
-                    points: measurePoints,
-                    sectionFraction: $sectionFraction,
-                    sectionHeight: sectionHeight(in: model) ?? visibleBounds(model).max.z,
-                    isTurned: arranged != nil,
-                    clearPoints: { measurePoints = [] },
-                    turn: { axis in reorient(by: quarterTurn(about: axis)) },
-                    resetOrientation: resetOrientation,
-                    close: { closeTool() }
-                )
-                .frame(maxWidth: dockedPanel ? 340 : nil)
-                .padding(.bottom, 8)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else if showingHint {
-                GestureHint(stage: shownHintStage ?? 0)
-                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                    .padding(.bottom, 12)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            }
-        }
+        .overlay(alignment: dockedPanel ? .bottomTrailing : .bottom) { bottomOverlay }
         // Small confirmations for changes that happen out of the finger's sight.
         .sensoryFeedback(.selection, trigger: appearance.plateID)
         .sensoryFeedback(.selection, trigger: appearance.wireframe)
@@ -186,6 +136,12 @@ struct ViewerScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .hidesTabBar()
         .toolbar { toolbar }
+    }
+
+    /// Sheets, alerts and the reactions to changes, kept apart from the stage so the
+    /// compiler can type-check each half.
+    fileprivate func lifecycle(_ content: some View) -> some View {
+        content
         // A sheet on iPhone, where the model glides up above it; an inspector beside
         // the model on iPad and Mac, so hiding an object shows what changed.
         .modifier(InfoPresentation(asInspector: infoAsInspector, isPresented: $showingInfo) { infoSheet })
@@ -207,6 +163,7 @@ struct ViewerScreen: View {
             measurePoints = []
         }
         .onChange(of: tool) { panelHeight = 0 }
+        .onChange(of: unitSuggestions) { panelHeight = 0 }
         .alert("Couldn't Save", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -358,8 +315,9 @@ struct ViewerScreen: View {
                 printerSection
             }
         } label: {
-            // A view-options glyph: the menu holds the printer as well as the grid.
-            Label("Display", systemImage: "slider.horizontal.3")
+            // A view-options glyph, or the printer once one is chosen: the menu
+            // holds the printer as well as the grid.
+            Label("Display", systemImage: settings.checksFit && settings.bed != nil ? "printer" : "slider.horizontal.3")
         }
     }
 
@@ -432,6 +390,73 @@ struct ViewerScreen: View {
         guard Spoken.isVoiceOverRunning, let model = shownModel,
               let note = fitNote(for: model) else { return }
         Spoken.announce(note.text)
+    }
+
+    /// The size readout and plate picker over the top of the model.
+    @ViewBuilder
+    private var topOverlay: some View {
+        if let model = shownModel {
+            let size = visibleBounds(model).size
+            ViewerChips(
+                model: model,
+                plateID: $appearance.plateID,
+                dimensions: Format.dimensions(size, units: settings.units),
+                spokenDimensions: Format.spokenDimensions(size, units: settings.units),
+                fitNote: fitNote(for: model),
+                checksFit: settings.checksFit,
+                hasPrinter: settings.fitBed != nil,
+                unsureOfUnits: !unitSuggestions.isEmpty,
+                choosePrinter: { choosingPrinter = true }
+            )
+            // Overlays on the model stop growing at the first accessibility
+            // size; beyond that they'd cover what they describe.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .padding(.top, 8)
+        }
+    }
+
+    /// Above the bottom toolbar: the unit question, the open tool's panel, or the
+    /// gesture hint, in that order.
+    @ViewBuilder
+    private var bottomOverlay: some View {
+        if !unitSuggestions.isEmpty, let model = shownModel {
+            // Down where a thumb can answer it; the model reframes above it, as
+            // it does for a tool panel.
+            UnitSuggestionCard(
+                size: model.bounds.size,
+                suggestions: unitSuggestions,
+                units: settings.units,
+                choose: { applyUnit($0) },
+                keep: { keepUnit() }
+            )
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .frame(maxWidth: dockedPanel ? 360 : nil)
+            .padding(.bottom, 8)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else if let tool, let model = shownModel {
+            ToolPanel(
+                tool: tool,
+                units: settings.units,
+                points: measurePoints,
+                sectionFraction: $sectionFraction,
+                sectionHeight: sectionHeight(in: model) ?? visibleBounds(model).max.z,
+                isTurned: arranged != nil,
+                clearPoints: { measurePoints = [] },
+                turn: { axis in reorient(by: quarterTurn(about: axis)) },
+                resetOrientation: resetOrientation,
+                close: { closeTool() }
+            )
+            .frame(maxWidth: dockedPanel ? 340 : nil)
+            .padding(.bottom, 8)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else if showingHint {
+            GestureHint(stage: shownHintStage ?? 0)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .padding(.bottom, 12)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        }
     }
 
     @ViewBuilder
@@ -588,7 +613,8 @@ struct ViewerScreen: View {
     /// How much of the canvas is covered from the bottom: the Info sheet on iPhone,
     /// or the tool panel. The model reframes into what's left.
     private var obscured: CGFloat {
-        let panel = tool != nil && !dockedPanel ? min((panelHeight + 8) / viewHeight, 0.45) : 0
+        let bottomCard = tool != nil || !unitSuggestions.isEmpty
+        let panel = bottomCard && !dockedPanel ? min((panelHeight + 8) / viewHeight, 0.45) : 0
         return max(obscuredBySheet, panel)
     }
 
@@ -874,5 +900,13 @@ private struct InfoPresentation<Info: View>: ViewModifier {
         } else {
             content.sheet(isPresented: $isPresented) { info() }
         }
+    }
+}
+
+private struct ViewerLifecycle: ViewModifier {
+    let screen: ViewerScreen
+
+    func body(content: Content) -> some View {
+        screen.lifecycle(content)
     }
 }

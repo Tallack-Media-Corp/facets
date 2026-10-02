@@ -25,22 +25,11 @@ struct LibraryTab: View {
             Group {
                 switch section {
                 case .library:
-                    FolderView(folder: library.root, title: "Library")
+                    FolderView(folder: library.root, title: "Library", showsSectionPicker: true)
                         // Moving to iCloud Drive changes the folder underneath.
                         .id(library.root)
                 case .browse: BrowseView(path: $path)
                 }
-            }
-            // Under the large title, like the other tabs, rather than in its place.
-            .safeAreaBar(edge: .top) {
-                Picker("Section", selection: $section) {
-                    ForEach(Section.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 320)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
             }
             .navigationDestination(for: LibraryRoute.self) { route in
                 switch route {
@@ -53,5 +42,31 @@ struct LibraryTab: View {
         }
         .presentsModels()
         .environment(\.zoomNamespace, zoom)
+    }
+}
+
+/// Library | Browse, at the top of each root list's own content, under the large
+/// title. It scrolls with the list, so pulling to refresh moves it with the title
+/// instead of leaving it pinned above the spinner.
+struct LibrarySectionPicker: View {
+    @AppStorage("library.section") private var section: LibraryTab.Section = .library
+
+    var body: some View {
+        Picker("Section", selection: $section) {
+            ForEach(LibraryTab.Section.allCases) { Text($0.rawValue).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(maxWidth: 320)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+extension View {
+    /// The section picker as a list's first row: no background, no separator.
+    func sectionPickerRow() -> some View {
+        listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16))
     }
 }

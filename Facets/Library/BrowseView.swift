@@ -16,6 +16,9 @@ struct BrowseView: View {
 
     var body: some View {
         List {
+            Section {
+                LibrarySectionPicker().sectionPickerRow()
+            }
             if !locations.locations.isEmpty {
                 Section("Locations") {
                     ForEach(locations.locations) { location in

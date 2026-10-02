@@ -19,6 +19,8 @@ struct FolderView: View {
     /// Outside the library (Browse): no renaming, moving or deleting someone else's
     /// files, and models open with Save to Library.
     var isBrowsing = false
+    /// The library's root: Library | Browse sits at the top of the content.
+    var showsSectionPicker = false
 
     @Environment(FileLibrary.self) private var library
     @Environment(ToastCenter.self) private var toasts
@@ -108,6 +110,9 @@ struct FolderView: View {
             ContentUnavailableView("No Models Here", systemImage: "cube.transparent", description: Text("This folder has no STL, 3MF or OBJ files. Subfolders show up here too."))
         } else if items.isEmpty, loaded {
             ScrollView {
+                if showsSectionPicker {
+                    LibrarySectionPicker().padding(.horizontal)
+                }
                 ContentUnavailableView {
                     Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: "cube.transparent")
                 } description: {
@@ -123,6 +128,11 @@ struct FolderView: View {
         } else if layout == .grid, !dynamicTypeSize.isAccessibilitySize {
             // At accessibility text sizes two columns can't hold a name; rows can.
             ScrollView {
+                if showsSectionPicker {
+                    LibrarySectionPicker()
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
+                }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 16, alignment: .top)], spacing: 20) {
                     ForEach(items) { item in
                         open(item) {
@@ -146,6 +156,9 @@ struct FolderView: View {
             .background(Color.groupedBackground)
         } else {
             List {
+                if showsSectionPicker {
+                    LibrarySectionPicker().sectionPickerRow()
+                }
                 ForEach(items) { item in
                     open(item) {
                         LibraryRow(item: item)
