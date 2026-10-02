@@ -160,3 +160,47 @@ import simd
         #expect(simd_distance(layFlatRotation(for: [0, 0, 1]) * SIMD3(0, 0, 1), SIMD3(0, 0, -1)) < 0.001)
     }
 }
+
+// MARK: - Shape-based print estimate
+
+@Suite struct PrintEstimateTests {
+    @Test func matchesTheCalibration() throws {
+        // Medicine Drawer plate 1, as measured for calibration; Bambu Studio said
+        // 118.65 g and 13605 s (3 h 47 min).
+        var surface = SurfaceStats()
+        surface.side = 63211.824
+        surface.up = 27360.168
+        surface.down = 27360.113
+        let estimate = try #require(PrintEstimate(volume: 196681.55, surface: surface, height: 45.54792, parts: 1, density: 1.24))
+        #expect(abs(estimate.grams - 123.65) < 0.1)
+        #expect(abs(estimate.seconds - 13473) < 5)
+    }
+
+    @Test func thinPartsAreAllShell() throws {
+        // A 1 mm thick, 100 × 100 mm plate: walls and skins would be more than the
+        // solid, so it prints solid and weighs (nearly) its volume.
+        let box = cubeTriangles.flatMap { $0.flatMap { [$0.x * 100, $0.y * 100, $0.z * 1] } }
+        let model = Model3D(format: .stl, parts: [ModelPart(id: 0, name: "p", geometry: MeshGeometry(positions: box))], objects: [])
+        let estimate = try #require(model.shapeEstimate(plateID: nil, hidden: [], density: 1.24))
+        let solid: Float = 10_000 * 1.24 / 1000
+        #expect(estimate.grams <= solid && estimate.grams > solid * 0.8)
+    }
+
+    @Test func chunkyPartsAreMostlyInfill() throws {
+        // A 60 mm cube: far lighter than solid.
+        let box = cubeTriangles.flatMap { $0.flatMap { [$0.x * 60, $0.y * 60, $0.z * 60] } }
+        let model = Model3D(format: .stl, parts: [ModelPart(id: 0, name: "c", geometry: MeshGeometry(positions: box))], objects: [])
+        let estimate = try #require(model.shapeEstimate(plateID: nil, hidden: [], density: 1.24))
+        let solid: Float = 216_000 * 1.24 / 1000
+        #expect(estimate.grams < solid * 0.4)
+    }
+
+    @Test func surfaceSplitsByFacing() {
+        // A 10 × 20 × 30 box: sides 2·(10·30 + 20·30) = 1800, top and bottom 200 each.
+        let box = cubeTriangles.flatMap { $0.flatMap { [$0.x * 10, $0.y * 20, $0.z * 30] } }
+        let s = MeshGeometry(positions: box).surface
+        #expect(abs(s.side - 1800) < 0.01)
+        #expect(abs(s.up - 200) < 0.01)
+        #expect(abs(s.down - 200) < 0.01)
+    }
+}

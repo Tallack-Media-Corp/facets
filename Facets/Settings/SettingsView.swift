@@ -43,7 +43,7 @@ struct SettingsView: View {
                     Picker("Units", selection: $settings.units) {
                         ForEach(MeasurementUnits.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Filament for Weight", selection: $settings.material) {
+                    Picker("Filament for Estimates", selection: $settings.material) {
                         ForEach(FilamentMaterial.allCases) { Text($0.title).tag($0) }
                     }
                 }

@@ -31,6 +31,42 @@ public struct Bounds: Sendable, Hashable {
     }
 }
 
+/// A mesh's surface split by which way it faces, in mm². What a slicer does with a
+/// surface depends on that: walls go round the sides, solid skins go on what faces
+/// up or down. Each is projected: `side` is area × the horizontal part of the normal
+/// (per layer that's the perimeter's length), `up` and `down` are area × the vertical
+/// part (the footprint of the skins).
+public struct SurfaceStats: Sendable, Equatable {
+    public var side: Float = 0
+    public var up: Float = 0
+    public var down: Float = 0
+    public var total: Float = 0
+
+    public init() {}
+
+    public static func + (a: SurfaceStats, b: SurfaceStats) -> SurfaceStats {
+        var s = SurfaceStats()
+        s.side = a.side + b.side
+        s.up = a.up + b.up
+        s.down = a.down + b.down
+        s.total = a.total + b.total
+        return s
+    }
+
+    /// Adds a triangle. Winding can't be trusted for up versus down, so the side the
+    /// triangle faces is judged from the volume's sign the caller passes (`outward`).
+    mutating func add(_ a: SIMD3<Double>, _ b: SIMD3<Double>, _ c: SIMD3<Double>, outward: Double) {
+        let n = simd_cross(b - a, c - a) * outward
+        let length = simd_length(n)
+        guard length > 0 else { return }
+        let area = length / 2
+        let nz = n.z / length
+        total += Float(area)
+        side += Float(area * (1 - nz * nz).squareRoot())
+        if nz > 0 { up += Float(area * nz) } else { down += Float(area * -nz) }
+    }
+}
+
 /// Triangles in model units (millimetres). Positions are packed xyz floats so they
 /// upload to the GPU as they are. Immutable once built, so it's shared freely between
 /// parts that place the same mesh more than once.
@@ -41,6 +77,8 @@ public final class MeshGeometry: Sendable {
     public let bounds: Bounds
     /// Signed volume in cubic model units; positive for outward-facing triangles.
     public let volume: Float
+    /// Surface by facing, in the mesh's own coordinates.
+    public let surface: SurfaceStats
 
     public var vertexCount: Int { positions.count / 3 }
     public var triangleCount: Int { (indices?.count ?? vertexCount) / 3 }
@@ -81,6 +119,42 @@ public final class MeshGeometry: Sendable {
         }
         self.bounds = bounds
         self.volume = Float(volume / 6)
+        self.surface = Self.surface(positions: positions, indices: indices, transform: nil, outward: volume < 0 ? -1 : 1)
+    }
+
+    /// Surface stats, optionally after a transform. A second pass over the triangles,
+    /// as cheap as the volume pass, and only for meshes that are placed turned.
+    static func surface(positions: [Float], indices: [UInt32]?, transform: simd_float4x4?, outward: Double) -> SurfaceStats {
+        var stats = SurfaceStats()
+        let m = transform.map { t in
+            simd_double4x4(SIMD4<Double>(t.columns.0), SIMD4<Double>(t.columns.1), SIMD4<Double>(t.columns.2), SIMD4<Double>(t.columns.3))
+        }
+        positions.withUnsafeBufferPointer { p in
+            let count = p.count / 3
+            func vertex(_ i: Int) -> SIMD3<Double> {
+                let v = SIMD3(Double(p[i * 3]), Double(p[i * 3 + 1]), Double(p[i * 3 + 2]))
+                guard let m else { return v }
+                let w = m * SIMD4(v, 1)
+                return SIMD3(w.x, w.y, w.z)
+            }
+            if let indices {
+                indices.withUnsafeBufferPointer { idx in
+                    var t = 0
+                    while t + 2 < idx.count {
+                        let a = Int(idx[t]), b = Int(idx[t + 1]), c = Int(idx[t + 2])
+                        if a < count, b < count, c < count { stats.add(vertex(a), vertex(b), vertex(c), outward: outward) }
+                        t += 3
+                    }
+                }
+            } else {
+                var t = 0
+                while t + 2 < count {
+                    stats.add(vertex(t), vertex(t + 1), vertex(t + 2), outward: outward)
+                    t += 3
+                }
+            }
+        }
+        return stats
     }
 }
 
@@ -96,6 +170,8 @@ public struct ModelPart: Sendable, Identifiable {
     public var objectID: Int
     /// World-space bounds of the transformed triangles.
     public let bounds: Bounds
+    /// World-space surface by facing, for print estimates.
+    public let surface: SurfaceStats
 
     public init(id: Int, name: String, geometry: MeshGeometry, transform: simd_float4x4 = matrix_identity_float4x4, color: SIMD4<Float>? = nil, objectID: Int = 0) {
         self.id = id
@@ -104,6 +180,18 @@ public struct ModelPart: Sendable, Identifiable {
         self.transform = transform
         self.color = color
         self.objectID = objectID
+        let linear = simd_float3x3(
+            SIMD3(transform.columns.0.x, transform.columns.0.y, transform.columns.0.z),
+            SIMD3(transform.columns.1.x, transform.columns.1.y, transform.columns.1.z),
+            SIMD3(transform.columns.2.x, transform.columns.2.y, transform.columns.2.z)
+        )
+        // Moved but not turned or scaled: the mesh's own surface stats hold.
+        if linear == matrix_identity_float3x3 {
+            surface = geometry.surface
+        } else {
+            let outward: Double = geometry.volume * simd_determinant(linear) < 0 ? -1 : 1
+            surface = MeshGeometry.surface(positions: geometry.positions, indices: geometry.indices, transform: transform, outward: outward)
+        }
         if transform == matrix_identity_float4x4 {
             bounds = geometry.bounds
         } else {

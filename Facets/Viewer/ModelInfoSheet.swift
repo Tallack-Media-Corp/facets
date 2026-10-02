@@ -114,16 +114,14 @@ struct ModelInfoSheet: View {
                      ? "From the slicer, for every plate together, as of when the project was last sliced."
                      : "From the slicer, as of when the project was last sliced.")
             }
-        } else {
-            let volume = abs(shownParts.reduce(0) { $0 + $1.volume })
-            if volume > 0 {
-                Section {
-                    LabeledContent("Weight if Solid", value: "\(Format.grams(volume / 1000 * material.density)) of \(material.title)")
-                } header: {
-                    Text("Print Estimate")
-                } footer: {
-                    Text("An upper limit: printed parts are mostly infill, so they usually weigh much less. A project saved after slicing in Bambu Studio or Orca shows the slicer's time and filament here instead. Choose the material in Settings.")
-                }
+        } else if let estimate = model.shapeEstimate(plateID: appearance.plateID, hidden: appearance.hiddenObjects, density: material.density) {
+            Section {
+                LabeledContent("Print Time", value: "about \(Format.duration(seconds: estimate.seconds))")
+                LabeledContent("Filament", value: "about \(Format.grams(estimate.grams)) · \(Format.filamentLength(estimate.meters, units: units))")
+            } header: {
+                Text("Print Estimate")
+            } footer: {
+                Text("Worked out from the model's shape, assuming 0.2 mm layers, two walls and 15% \(material.title) infill on a fast printer such as a Bambu Lab. Expect the slicer to differ by around a fifth either way, more with supports. A project saved after slicing in Bambu Studio or Orca shows the slicer's own figures here.")
             }
         }
     }

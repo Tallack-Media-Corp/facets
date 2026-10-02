@@ -77,7 +77,7 @@ final class ViewerSettings {
         didSet { defaults.set(showsGrid, forKey: "viewer.grid") }
     }
 
-    /// For the "weight if solid" estimate.
+    /// The filament the shape-based print estimate assumes.
     var material: FilamentMaterial {
         didSet { defaults.set(material.rawValue, forKey: "viewer.material") }
     }
