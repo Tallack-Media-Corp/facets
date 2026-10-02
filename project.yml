@@ -50,6 +50,9 @@ targets:
     entitlements:
       path: Facets/Facets.entitlements
       properties:
+        # Shared with the Quick Look preview, for Pure Black.
+        com.apple.security.application-groups:
+          - group.$(FACETS_BUNDLE_ID)
         com.apple.developer.icloud-container-identifiers:
           - iCloud.$(FACETS_BUNDLE_ID)
         com.apple.developer.icloud-services:
@@ -59,6 +62,7 @@ targets:
     info:
       path: Facets/Info.plist
       properties:
+        FacetsAppGroup: group.$(FACETS_BUNDLE_ID)
         # The library's folder in iCloud Drive, shown as "Facets" in Files and Finder.
         # The key is the container id; the preprocessor fills it in, since Xcode
         # doesn't expand build settings in keys.
@@ -151,9 +155,15 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(FACETS_BUNDLE_ID).preview
+    entitlements:
+      path: FacetsPreview/FacetsPreview.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.$(FACETS_BUNDLE_ID)
     info:
       path: FacetsPreview/Info.plist
       properties:
+        FacetsAppGroup: group.$(FACETS_BUNDLE_ID)
         CFBundleDisplayName: Facets Preview
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)

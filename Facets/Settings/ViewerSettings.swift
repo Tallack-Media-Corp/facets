@@ -79,7 +79,10 @@ final class ViewerSettings {
 
     /// True black at the darkest points in dark mode, for OLED screens.
     var pureBlack: Bool {
-        didSet { defaults.set(pureBlack, forKey: "display.pureBlack") }
+        didSet {
+            defaults.set(pureBlack, forKey: "display.pureBlack")
+            SharedSettings.pureBlack = pureBlack
+        }
     }
 
     /// The filament the shape-based print estimate assumes.
@@ -157,6 +160,8 @@ final class ViewerSettings {
         customBedHeight = defaults.object(forKey: "viewer.bed.height") as? Float ?? 256
         units = MeasurementUnits(rawValue: defaults.string(forKey: "viewer.units") ?? "")
             ?? (Locale.current.measurementSystem == .us ? .inches : .millimetres)
+        // Earlier builds kept Pure Black only here; let Quick Look see it too.
+        SharedSettings.pureBlack = pureBlack
     }
 
     var color: Color {

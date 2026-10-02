@@ -32,8 +32,9 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
 
     private func updateColors() {
         let dark = traitCollection.userInterfaceStyle == .dark
-        // The app's Stage, so Quick Look and the viewer look the same.
-        backdrop.colors = [Palette.stage.top, Palette.stage.floor].map { $0.resolvedColor(with: traitCollection).cgColor }
+        // The app's Stage, Pure Black included, so Quick Look and the viewer match.
+        let stage = Palette.stage(pureBlack: SharedSettings.pureBlack)
+        backdrop.colors = [stage.top, stage.floor].map { $0.resolvedColor(with: traitCollection).cgColor }
         canvas.renderAppearance.gridColor = RenderAppearance.gridColor(dark: dark)
     }
 
