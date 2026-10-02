@@ -3,6 +3,9 @@ import SwiftUI
 struct RootView: View {
     @Environment(Router.self) private var router
     @Environment(\.horizontalSizeClass) private var sizeClass
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
     var body: some View {
         @Bindable var router = router
@@ -20,6 +23,7 @@ struct RootView: View {
                 SearchView()
             }
         }
+        #if os(iOS)
         .tabBarMinimizeBehavior(.onScrollDown)
         // iPhone's tab bar is at the bottom; iPad's is at the top.
         .toastHost(clearance: sizeClass == .compact ? 88 : 24)
@@ -29,5 +33,15 @@ struct RootView: View {
             }
             .toastHost(clearance: 80)
         }
+        #else
+        .tabViewStyle(.sidebarAdaptable)
+        .toastHost(clearance: 24)
+        // On the Mac a model from Finder or another app opens in a window of its own.
+        .onChange(of: router.presented) { _, file in
+            guard let file else { return }
+            openWindow(value: file)
+            router.presented = nil
+        }
+        #endif
     }
 }

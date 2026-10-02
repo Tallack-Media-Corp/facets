@@ -55,9 +55,11 @@ struct SettingsView: View {
                          : "The viewer shows the model's dimensions only.")
                 }
 
+                #if os(iOS)
                 Section("App Icon") {
                     AppIconPicker()
                 }
+                #endif
 
                 Section {
                     NavigationLink {

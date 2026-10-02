@@ -35,6 +35,7 @@ struct LibraryTab: View {
                     ForEach(Section.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .frame(maxWidth: 320)
                 .padding(.horizontal)
                 .padding(.bottom, 8)

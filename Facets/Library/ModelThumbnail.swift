@@ -10,7 +10,7 @@ struct ModelThumbnail: View {
     @Environment(\.displayScale) private var displayScale
     /// Optional: a context-menu preview is drawn outside the app's environment.
     @Environment(ViewerSettings.self) private var settings: ViewerSettings?
-    @State private var image: UIImage?
+    @State private var image: PlatformImage?
     @State private var failed = false
 
     var body: some View {
@@ -21,7 +21,7 @@ struct ModelThumbnail: View {
             ZStack {
                 Rectangle().fill(.thumbnailBackground)
                 if let image = image ?? ThumbnailStore.shared.cached(key) {
-                    Image(uiImage: image)
+                    Image(platformImage: image)
                         .resizable()
                         .scaledToFit()
                         .padding(geometry.size.width * 0.08)

@@ -8,6 +8,12 @@ enum LibraryLayout: String {
 /// One folder: models and subfolders as a grid of rendered cards or a list. In the
 /// library it can be changed; while browsing a folder elsewhere it's look-and-save.
 struct FolderView: View {
+    #if os(macOS)
+    private static let emptyHint = "Import STL, 3MF and OBJ files, or drag them here from the Finder."
+    #else
+    private static let emptyHint = "Import STL, 3MF and OBJ files, or save them to Facets from the Files app, Mail or any app's share sheet."
+    #endif
+
     let folder: URL
     let title: String
     /// Outside the library (Browse): no renaming, moving or deleting someone else's
@@ -105,7 +111,7 @@ struct FolderView: View {
                 ContentUnavailableView {
                     Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: "cube.transparent")
                 } description: {
-                    Text("Import STL, 3MF and OBJ files, or save them to Facets from the Files app, Mail or any app's share sheet.")
+                    Text(Self.emptyHint)
                         .frame(maxWidth: 480)
                 } actions: {
                     Button("Import Files") { importing = true }
@@ -137,7 +143,7 @@ struct FolderView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 24)
             }
-            .background(Color(.systemGroupedBackground))
+            .background(Color.groupedBackground)
         } else {
             List {
                 ForEach(items) { item in

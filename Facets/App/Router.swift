@@ -3,7 +3,7 @@ import Observation
 
 /// A model file to show, and whether it lives outside the app (opened in place from
 /// Files or another app), which means it needs security-scoped access.
-struct ModelFileRef: Identifiable, Hashable {
+struct ModelFileRef: Identifiable, Hashable, Codable {
     let url: URL
     let isExternal: Bool
 

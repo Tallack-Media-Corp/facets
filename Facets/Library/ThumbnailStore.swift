@@ -2,7 +2,11 @@ import CryptoKit
 import Foundation
 import ImageIO
 import MeshKit
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 import UniformTypeIdentifiers
 
 /// Renders and caches model thumbnails. One at a time, so a folder of large models
@@ -12,7 +16,7 @@ actor ThumbnailStore {
     static let shared = ThumbnailStore()
 
     // NSCache is thread-safe; read without hopping onto the actor.
-    nonisolated(unsafe) private let memory = NSCache<NSString, UIImage>()
+    nonisolated(unsafe) private let memory = NSCache<NSString, PlatformImage>()
     private var snapshotter: ModelSnapshotter?
     private let directory: URL
 
@@ -34,15 +38,15 @@ actor ThumbnailStore {
     }
 
     /// The cached picture, without rendering. Cheap enough to call from a view body.
-    nonisolated func cached(_ key: String) -> UIImage? {
+    nonisolated func cached(_ key: String) -> PlatformImage? {
         memory.object(forKey: key as NSString)
     }
 
-    func thumbnail(for url: URL, size: Int64?, modified: Date?, pixelSize: Int, look: Look) async -> UIImage? {
+    func thumbnail(for url: URL, size: Int64?, modified: Date?, pixelSize: Int, look: Look) async -> PlatformImage? {
         let key = Self.key(for: url, size: size, modified: modified, pixelSize: pixelSize, look: look)
         if let image = memory.object(forKey: key as NSString) { return image }
         let file = directory.appending(path: "\(key).png")
-        if let image = UIImage(contentsOfFile: file.path) {
+        if let image = PlatformImage(contentsOfFile: file.path) {
             memory.setObject(image, forKey: key as NSString)
             return image
         }
@@ -56,7 +60,7 @@ actor ThumbnailStore {
         var appearance = RenderAppearance(baseColor: RenderAppearance.linearColor(hex: look.colorHex) ?? RenderAppearance.defaultColor)
         appearance.usesFileColors = look.usesFileColors
         guard let cgImage = snapshotter?.image(of: model, pixelSize: pixelSize, appearance: appearance) else { return nil }
-        let image = UIImage(cgImage: cgImage)
+        let image = PlatformImage.from(cgImage)
         memory.setObject(image, forKey: key as NSString)
         if let destination = CGImageDestinationCreateWithURL(file as CFURL, UTType.png.identifier as CFString, 1, nil) {
             CGImageDestinationAddImage(destination, cgImage, nil)

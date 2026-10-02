@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 import UIKit
 
@@ -69,3 +70,4 @@ struct AppIconPicker: View {
         }
     }
 }
+#endif

@@ -32,19 +32,19 @@ struct PrinterBedPicker: View {
                     LabeledContent("Width") {
                         TextField("Width", value: lengthBinding($settings.customBedWidth), format: .number.precision(.fractionLength(0...1)))
                             .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
+                            .decimalKeyboard()
                         Text(settings.units.symbol).foregroundStyle(.secondary)
                     }
                     LabeledContent("Depth") {
                         TextField("Depth", value: lengthBinding($settings.customBedDepth), format: .number.precision(.fractionLength(0...1)))
                             .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
+                            .decimalKeyboard()
                         Text(settings.units.symbol).foregroundStyle(.secondary)
                     }
                     LabeledContent("Height") {
                         TextField("Height", value: lengthBinding($settings.customBedHeight), format: .number.precision(.fractionLength(0...1)))
                             .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
+                            .decimalKeyboard()
                         Text(settings.units.symbol).foregroundStyle(.secondary)
                     }
                 }

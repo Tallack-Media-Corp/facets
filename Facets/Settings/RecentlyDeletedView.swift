@@ -49,16 +49,16 @@ struct RecentlyDeletedView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !items.isEmpty {
-                ToolbarItem(placement: .bottomBar) {
+                ToolbarItem(placement: .bottomControls) {
                     Button("Restore All") { restore(items) }
                 }
-                ToolbarSpacer(.flexible, placement: .bottomBar)
-                ToolbarItem(placement: .bottomBar) {
+                ToolbarSpacer(.flexible, placement: .bottomControls)
+                ToolbarItem(placement: .bottomControls) {
                     Button("Delete All", role: .destructive) { confirmingEmpty = true }
                 }
             }
         }
-        .toolbar(.hidden, for: .tabBar)
+        .hidesTabBar()
         .confirmationDialog("Delete \(items.count == 1 ? "this item" : "all \(items.count) items") for good?", isPresented: $confirmingEmpty, titleVisibility: .visible) {
             Button("Delete All", role: .destructive) { purge(items) }
         } message: {

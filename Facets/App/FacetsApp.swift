@@ -18,9 +18,45 @@ struct FacetsApp: App {
                 .environment(settings)
                 .task { library.purgeExpired() }
         }
+        #if os(macOS)
+        .defaultSize(width: 1100, height: 760)
+        #endif
         .commands { ViewerCommands() }
+
+        #if os(macOS)
+        // A model opened from Finder, another app, Spotlight or a Shortcut.
+        WindowGroup("Model", for: ModelFileRef.self) { $file in
+            if let file {
+                ModelWindow(file: file)
+                    .environment(library)
+                    .environment(recents)
+                    .environment(locations)
+                    .environment(settings)
+            }
+        }
+        .defaultSize(width: 900, height: 700)
+        #endif
     }
 }
+
+#if os(macOS)
+/// A viewer window, with the per-window state a viewer expects around it.
+private struct ModelWindow: View {
+    let file: ModelFileRef
+    @State private var router = Router()
+    @State private var toasts = ToastCenter()
+
+    var body: some View {
+        NavigationStack {
+            ViewerScreen(file: file)
+        }
+        // The toast host reads the toast centre, so it goes inside it.
+        .toastHost(clearance: 24)
+        .environment(router)
+        .environment(toasts)
+    }
+}
+#endif
 
 /// One window's worth of app: its own tab, open model and toasts, so two iPad
 /// windows don't mirror each other.

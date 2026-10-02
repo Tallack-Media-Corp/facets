@@ -2,6 +2,7 @@ name: Facets
 options:
   deploymentTarget:
     iOS: "26.0"
+    macOS: "26.0"
   createIntermediateGroups: true
   xcodeVersion: "27.0"
 
@@ -174,7 +175,102 @@ targets:
               - com.bambulab.3mf
               - public.geometry-definition-format
 
+  # The Mac app: the same sources against the macOS SDK, under the same bundle id as
+  # a macOS build of the same App Store record (universal purchase). Platform
+  # differences go through Facets/UI/Platform.swift and #if os(macOS).
+  FacetsMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: Facets
+        excludes:
+          # Copied as a resource, App Store Connect reads it as a second bundle.
+          - Info.plist
+      - path: Shared
+    dependencies:
+      - package: MeshKit
+    settings:
+      base:
+        PRODUCT_NAME: Facets
+        PRODUCT_BUNDLE_IDENTIFIER: $(FACETS_BUNDLE_ID)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        COMBINE_HIDPI_IMAGES: YES
+        ENABLE_HARDENED_RUNTIME: YES
+    entitlements:
+      path: FacetsMac/FacetsMac.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
+    info:
+      path: FacetsMac/Info.plist
+      properties:
+        CFBundleDisplayName: Facets
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSPrincipalClass: NSApplication
+        LSApplicationCategoryType: public.app-category.utilities
+        ITSAppUsesNonExemptEncryption: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: STL Model
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Default
+            LSItemContentTypes:
+              - public.standard-tesselated-geometry-format
+          - CFBundleTypeName: 3MF Model
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Default
+            LSItemContentTypes:
+              - com.bambulab.3mf
+          - CFBundleTypeName: OBJ Model
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.geometry-definition-format
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: public.standard-tesselated-geometry-format
+            UTTypeDescription: STL Model
+            UTTypeConformsTo:
+              - public.data
+              - public.3d-content
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - stl
+              public.mime-type:
+                - model/stl
+                - application/sla
+          - UTTypeIdentifier: com.bambulab.3mf
+            UTTypeDescription: 3MF Model
+            UTTypeConformsTo:
+              - public.data
+              - public.3d-content
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - 3mf
+              public.mime-type:
+                - model/3mf
+                - application/vnd.ms-package.3dmanufacturing-3dmodel+xml
+          - UTTypeIdentifier: public.geometry-definition-format
+            UTTypeDescription: OBJ Model
+            UTTypeConformsTo:
+              - public.data
+              - public.3d-content
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - obj
+              public.mime-type:
+                - model/obj
+
 schemes:
+  FacetsMac:
+    build:
+      targets:
+        FacetsMac: all
+    run:
+      config: Debug
+    archive:
+      config: Release
   Facets:
     build:
       targets:

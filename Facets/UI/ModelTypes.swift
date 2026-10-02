@@ -30,10 +30,14 @@ extension View {
 
     @ViewBuilder
     func zoomDestination(id: some Hashable, in namespace: Namespace.ID?) -> some View {
+        #if os(iOS)
         if let namespace {
             navigationTransition(.zoom(sourceID: id, in: namespace))
         } else {
             self
         }
+        #else
+        self
+        #endif
     }
 }

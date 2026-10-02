@@ -158,7 +158,7 @@ struct ViewerScreen: View {
         .sensoryFeedback(.selection, trigger: settings.bedID)
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
+        .hidesTabBar()
         .toolbar { toolbar }
         .sheet(isPresented: $showingInfo) {
             if let model = shownModel {
@@ -244,12 +244,12 @@ struct ViewerScreen: View {
         }
 
         if case .loaded = phase {
-            ToolbarItem(placement: .bottomBar) {
+            ToolbarItem(placement: .bottomControls) {
                 Button("Fit to Screen", systemImage: "arrow.down.left.and.arrow.up.right.rectangle") {
                     controller.frameModel()
                 }
             }
-            ToolbarItem(placement: .bottomBar) {
+            ToolbarItem(placement: .bottomControls) {
                 Menu {
                     ForEach(OrbitCamera.Preset.allCases) { preset in
                         Button(preset.title, systemImage: symbol(for: preset)) { controller.show(preset) }
@@ -258,15 +258,15 @@ struct ViewerScreen: View {
                     Label("Preset Views", systemImage: "view.3d")
                 }
             }
-            ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) {
+            ToolbarSpacer(.flexible, placement: .bottomControls)
+            ToolbarItem(placement: .bottomControls) {
                 toolsMenu
             }
-            ToolbarItem(placement: .bottomBar) {
+            ToolbarItem(placement: .bottomControls) {
                 buildPlateMenu
             }
-            ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) {
+            ToolbarSpacer(.flexible, placement: .bottomControls)
+            ToolbarItem(placement: .bottomControls) {
                 Button("Info", systemImage: "info.circle") { showingInfo = true }
             }
         }
@@ -396,9 +396,9 @@ struct ViewerScreen: View {
 
     /// A plate or printer change rewrites the verdict where VoiceOver can't see it.
     private func announceFit() {
-        guard UIAccessibility.isVoiceOverRunning, let model = shownModel,
+        guard Spoken.isVoiceOverRunning, let model = shownModel,
               let note = fitNote(for: model) else { return }
-        UIAccessibility.post(notification: .announcement, argument: note.text)
+        Spoken.announce(note.text)
     }
 
     // MARK: Tools
@@ -435,7 +435,7 @@ struct ViewerScreen: View {
             measurePoints.append(point)
             if measurePoints.count == 2 {
                 let distance = Format.dimension(simd_distance(measurePoints[0], measurePoints[1]), units: settings.units)
-                UIAccessibility.post(notification: .announcement, argument: distance)
+                Spoken.announce(distance)
             }
         case .layFlat:
             reorient(by: layFlatRotation(for: hit.normal))
@@ -471,10 +471,10 @@ struct ViewerScreen: View {
 
     /// After a turn: the new size, and the fit when there's a printer.
     private func announceArrangement(_ model: Model3D) {
-        guard UIAccessibility.isVoiceOverRunning else { return }
+        guard Spoken.isVoiceOverRunning else { return }
         var text = "Now \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))"
         if let note = fitNote(for: model) { text += ". \(note.text)" }
-        UIAccessibility.post(notification: .announcement, argument: text)
+        Spoken.announce(text)
     }
 
     /// What the model as shown makes of a bed, for marking the printer list.
@@ -530,7 +530,7 @@ struct ViewerScreen: View {
     /// pinch, then double-tap to fit (the way back when the model's lost off-screen).
     private func offerGestureHint() {
         if hintStage == 0, legacyInteractions >= 2 { hintStage = 1 }
-        guard hintStage < 2, !UIAccessibility.isVoiceOverRunning else { return }
+        guard hintStage < 2, !Spoken.isVoiceOverRunning else { return }
         shownHintStage = hintStage
         Task {
             try? await Task.sleep(for: .seconds(0.6))

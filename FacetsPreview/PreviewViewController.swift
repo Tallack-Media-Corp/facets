@@ -34,14 +34,14 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
         let dark = traitCollection.userInterfaceStyle == .dark
         // The app's Stage, so Quick Look and the viewer look the same.
         backdrop.colors = [Palette.stage.top, Palette.stage.floor].map { $0.resolvedColor(with: traitCollection).cgColor }
-        canvas.appearance.gridColor = RenderAppearance.gridColor(dark: dark)
+        canvas.renderAppearance.gridColor = RenderAppearance.gridColor(dark: dark)
     }
 
     func preparePreviewOfFile(at url: URL) async throws {
         let model = try await Task.detached(priority: .userInitiated) {
             try ModelLoader.load(url)
         }.value
-        canvas.appearance.plateID = model.plates.first?.id
+        canvas.renderAppearance.plateID = model.plates.first?.id
         canvas.setModel(model)
     }
 }
