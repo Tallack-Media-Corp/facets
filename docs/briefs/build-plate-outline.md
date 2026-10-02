@@ -10,7 +10,7 @@ Confirmed with the maintainer, 1 October 2026 (Impeccable shape). Built the same
    - Bambu Lab: A1 mini 180×180; A1, P1S, P2S, X1C 256×256; H2D 350×320.
    - Prusa: MINI+ 180×180; MK4S 250×210; Core One 250×220; XL 360×360.
    - Creality and others: Ender-3 V3 220×220; K1 220×220; K2 Plus 350×350; Elegoo Neptune 4 Pro 225×225; Voron 2.4 350×350.
-   - **These sizes are from memory: verify each against the manufacturer's published spec before shipping.**
+   - **Verified October 2026** against each maker's product page (Prusa, Creality, Elegoo) and, for the Voron 2.4 350, the official Klipper config (Z 310, not the 340 first listed). Bambu sizes come from the printers' own project files.
 4. **Placement.** STLs and plain 3MFs are centred on the bed. Bambu Studio and Orca projects keep their real plate positions, so the outline matches the slicer, one plate at a time.
 5. **Fit.** Width, depth and height (revised after the second critique: a too-tall part was the likeliest false "Fits"). A loose model may be turned a quarter turn to fit; a slicer project's layout is fixed, and on its own bed parts that hang off the plate are reported. With "All Plates" selected the outline hides, because several plates can't share one bed.
 6. **States.** No bed (today's grid, unchanged); fits; too big; custom bed; all plates; light and dark; VoiceOver announces "Fits on the Bambu A1 bed" or "Too big for the Bambu A1 by 12 millimetres".

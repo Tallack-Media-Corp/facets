@@ -13,9 +13,9 @@ struct PrinterBed: Identifiable, Hashable {
     var title: String { id == Self.customID ? "custom bed" : "\(make) \(name)" }
 
     /// Bambu Lab sizes, heights included, are the `printable_area` and
-    /// `printable_height` those printers write into their own project files. Check the
-    /// others against each maker's published spec before a release
-    /// (docs/briefs/build-plate-outline.md).
+    /// `printable_height` those printers write into their own project files. The others
+    /// are each maker's published build volume (product pages, checked October 2026);
+    /// the Voron is its official Klipper config's axis limits for the 350 build.
     static let presets: [PrinterBed] = [
         .init(id: "bambu-a1mini", make: "Bambu Lab", name: "A1 mini", width: 180, depth: 180, height: 180),
         .init(id: "bambu-a1", make: "Bambu Lab", name: "A1", width: 256, depth: 256, height: 256),
@@ -33,7 +33,7 @@ struct PrinterBed: Identifiable, Hashable {
         .init(id: "creality-k1", make: "Creality", name: "K1", width: 220, depth: 220, height: 250),
         .init(id: "creality-k2plus", make: "Creality", name: "K2 Plus", width: 350, depth: 350, height: 350),
         .init(id: "elegoo-n4pro", make: "Elegoo", name: "Neptune 4 Pro", width: 225, depth: 225, height: 265),
-        .init(id: "voron-24-350", make: "Voron", name: "2.4 (350)", width: 350, depth: 350, height: 340),
+        .init(id: "voron-24-350", make: "Voron", name: "2.4 (350)", width: 350, depth: 350, height: 310),
     ]
 
     /// Presets grouped by make, in list order.
