@@ -47,6 +47,14 @@ final class ViewerSettings {
         didSet { defaults.set(showsGrid, forKey: "viewer.grid") }
     }
 
+    /// Off for anyone who just wants the dimensions: no printer line, outline or menu.
+    var checksFit: Bool {
+        didSet { defaults.set(checksFit, forKey: "viewer.checksFit") }
+    }
+
+    /// The bed the viewer measures against: the chosen printer, while fit checks are on.
+    var fitBed: PrinterBed? { checksFit ? bed : nil }
+
     var units: MeasurementUnits {
         didSet { defaults.set(units.rawValue, forKey: "viewer.units") }
     }
@@ -98,6 +106,7 @@ final class ViewerSettings {
         colorHex = (saved == nil || saved == "#F2802E") ? Palette.filamentOrange : saved!
         usesFileColors = defaults.object(forKey: "viewer.fileColors") as? Bool ?? true
         showsGrid = defaults.object(forKey: "viewer.grid") as? Bool ?? true
+        checksFit = defaults.object(forKey: "viewer.checksFit") as? Bool ?? true
         let savedBed = defaults.string(forKey: "viewer.bed")
         bedID = savedBed
         recentBedIDs = defaults.stringArray(forKey: "viewer.bed.recents") ?? savedBed.map { [$0] } ?? []

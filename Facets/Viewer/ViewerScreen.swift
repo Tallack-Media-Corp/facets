@@ -92,7 +92,8 @@ struct ViewerScreen: View {
                     dimensions: Format.dimensions(visibleBounds(model).size, units: settings.units),
                     spokenDimensions: Format.spokenDimensions(visibleBounds(model).size, units: settings.units),
                     fitNote: fitNote(for: model),
-                    hasPrinter: settings.bed != nil,
+                    checksFit: settings.checksFit,
+                    hasPrinter: settings.fitBed != nil,
                     choosePrinter: { choosingPrinter = true }
                 )
                 // Overlays on the model stop growing at the first accessibility
@@ -250,7 +251,18 @@ struct ViewerScreen: View {
 
     /// The grid and the printer, in the bottom bar where a thumb can reach them.
     /// Printers used lately are one tap away; the full list is behind "Other Printer…".
+    @ViewBuilder
     private var buildPlateMenu: some View {
+        if settings.checksFit {
+            printerMenu
+        } else {
+            Toggle(isOn: $appearance.showsGrid) {
+                Label("Build Plate Grid", systemImage: "grid")
+            }
+        }
+    }
+
+    private var printerMenu: some View {
         Menu {
             Toggle(isOn: $appearance.showsGrid) {
                 Label("Build Plate Grid", systemImage: "grid")
@@ -273,7 +285,7 @@ struct ViewerScreen: View {
     /// The appearance with the chosen bed placed under what's showing.
     private func staged(_ appearance: RenderAppearance, for model: Model3D) -> RenderAppearance {
         var staged = appearance
-        if let bed = settings.bed {
+        if let bed = settings.fitBed {
             staged.bed = model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
         }
         return staged
@@ -284,7 +296,7 @@ struct ViewerScreen: View {
     /// "Too tall for the Bambu Lab A1 by 12.0 mm", or for a slicer project laid out
     /// partly off its plate, "Fits the Bambu Lab A1, but runs off the plate as arranged".
     private func fitNote(for model: Model3D) -> (text: String, tooBig: Bool)? {
-        guard let bed = settings.bed,
+        guard let bed = settings.fitBed,
               let fit = model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects) else { return nil }
         let name = bed.id == PrinterBed.customID ? "your custom bed" : "the \(bed.title)"
         let units = settings.units
@@ -413,6 +425,8 @@ private struct ViewerChips: View {
     let spokenDimensions: String
     let fitNote: (text: String, tooBig: Bool)?
     /// No printer chosen yet: offer one, quietly, for the first few models.
+    /// Off: the readout is just the dimensions.
+    let checksFit: Bool
     /// Without a printer the readout says so, and tapping it picks one.
     let hasPrinter: Bool
     let choosePrinter: () -> Void
@@ -453,13 +467,20 @@ private struct ViewerChips: View {
                 // The readout is also the printer control: it says which printer the
                 // model's measured against (or that none is chosen), and tapping it
                 // picks another.
-                Button(action: choosePrinter) { readout }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(readoutLabel)
-                    .accessibilityHint(hasPrinter ? "Changes the printer" : "Chooses a printer to check the model fits")
-                    .accessibilityAddTraits(.isButton)
+                if checksFit {
+                    Button(action: choosePrinter) { readout }
+                        .buttonStyle(.plain)
+                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(readoutLabel)
+                        .accessibilityHint(hasPrinter ? "Changes the printer" : "Chooses a printer to check the model fits")
+                        .accessibilityAddTraits(.isButton)
+                } else {
+                    readout
+                        .glassEffect(.regular, in: .capsule)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(readoutLabel)
+                }
             }
         }
     }
@@ -482,15 +503,17 @@ private struct ViewerChips: View {
                     }
                     .font((wide ? Font.footnote : .caption).weight(.medium).monospacedDigit())
                     .multilineTextAlignment(.center)
-                } else if !hasPrinter {
+                } else if checksFit, !hasPrinter {
                     Label("No printer selected", systemImage: "printer")
                         .font((wide ? Font.footnote : .caption).weight(.medium))
                         .foregroundStyle(Color.secondary)
                 }
             }
-            Image(systemName: "chevron.down")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(Color.secondary)
+            if checksFit {
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.secondary)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -499,7 +522,7 @@ private struct ViewerChips: View {
     }
 
     private var readoutLabel: String {
-        "Size: \(spokenDimensions)\(fitNote.map { ". \($0.text)" } ?? (hasPrinter ? "" : ". No printer selected"))"
+        "Size: \(spokenDimensions)\(fitNote.map { ". \($0.text)" } ?? (hasPrinter || !checksFit ? "" : ". No printer selected"))"
     }
 
     private var plateTitle: String {

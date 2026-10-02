@@ -30,14 +30,26 @@ struct SettingsView: View {
 
                 Section("Viewer") {
                     Toggle("Show Build Plate Grid", isOn: $settings.showsGrid)
-                    NavigationLink {
-                        PrinterBedPicker()
-                    } label: {
-                        LabeledContent("Printer Bed", value: settings.bed?.title ?? "None")
-                    }
                     Picker("Units", selection: $settings.units) {
                         ForEach(MeasurementUnits.allCases) { Text($0.title).tag($0) }
                     }
+                }
+
+                Section {
+                    Toggle("Check Fit Against a Printer", isOn: $settings.checksFit.animation())
+                    if settings.checksFit {
+                        NavigationLink {
+                            PrinterBedPicker()
+                        } label: {
+                            LabeledContent("Printer Bed", value: settings.bed?.title ?? "None")
+                        }
+                    }
+                } header: {
+                    Text("Printer")
+                } footer: {
+                    Text(settings.checksFit
+                         ? "The viewer outlines the printer's bed under each model and says whether it fits."
+                         : "The viewer shows the model's dimensions only.")
                 }
 
                 Section("App Icon") {
