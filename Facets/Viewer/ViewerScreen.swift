@@ -47,6 +47,12 @@ struct ViewerScreen: View {
     @State private var measurePoints: [SIMD3<Float>] = []
     /// The model turned or laid flat by the user; nil while it's as the file has it.
     @State private var arranged: Model3D?
+    /// The model as the file has it, before any change of unit.
+    @State private var original: Model3D?
+    /// The scale applied for a file saved in metres or inches (1: as saved).
+    @State private var unitScale: Float = 1
+    /// Units to offer when the model looks too small to be in millimetres.
+    @State private var unitSuggestions: [UnitGuess] = []
     /// Cross-section height as a fraction of the model's height.
     @State private var sectionFraction = 1.0
     /// Bumped per turn, so a slow turn finishing late doesn't undo a newer one.
@@ -125,6 +131,21 @@ struct ViewerScreen: View {
                     .padding(.top, 8)
             }
         }
+        .overlay(alignment: .top) {
+            if !unitSuggestions.isEmpty, let model = shownModel {
+                UnitSuggestionCard(
+                    size: model.bounds.size,
+                    suggestions: unitSuggestions,
+                    units: settings.units,
+                    choose: { applyUnit($0) },
+                    keep: { keepUnit() }
+                )
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .padding(.top, 76)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: unitSuggestions)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewHeight = max($0, 1) }
         .overlay(alignment: dockedPanel ? .bottomTrailing : .bottom) {
             if let tool, let model = shownModel {
@@ -162,7 +183,7 @@ struct ViewerScreen: View {
         .toolbar { toolbar }
         .sheet(isPresented: $showingInfo) {
             if let model = shownModel {
-                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material, printer: settings.bed, appearance: $appearance, detent: $infoDetent)
+                ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material, printer: settings.bed, scaledFrom: UnitGuess.allCases.first { $0.factor == unitScale }, resetScale: resetUnit, appearance: $appearance, detent: $infoDetent)
             }
         }
         .background { escapeKey }
@@ -401,6 +422,49 @@ struct ViewerScreen: View {
         Spoken.announce(note.text)
     }
 
+    // MARK: Units
+
+    private var unitKey: String { UnitChoices.key(for: file, size: fileSize) }
+
+    /// STL and OBJ don't say their unit. A model under 2 mm across was almost
+    /// certainly saved in metres or inches: apply what the user chose before, or ask.
+    private func checkUnits(of model: Model3D) {
+        guard [.stl, .asciiSTL, .obj].contains(model.format) else { return }
+        if let factor = UnitChoices.factor(for: unitKey) {
+            if factor != 1 { rescale(to: factor) }
+            return
+        }
+        unitSuggestions = UnitGuess.suggestions(for: model.bounds.size)
+        if let first = unitSuggestions.first {
+            Spoken.announce("This model is very small. It may be in \(first.title.lowercased()). Options are below the size.")
+        }
+    }
+
+    private func applyUnit(_ unit: UnitGuess) {
+        UnitChoices.set(unit.factor, for: unitKey)
+        unitSuggestions = []
+        rescale(to: unit.factor)
+    }
+
+    private func keepUnit() {
+        UnitChoices.set(1, for: unitKey)
+        unitSuggestions = []
+    }
+
+    /// Back to the size the file says, from the Info sheet.
+    private func resetUnit() {
+        UnitChoices.set(1, for: unitKey)
+        rescale(to: 1)
+    }
+
+    private func rescale(to factor: Float) {
+        guard let original else { return }
+        unitScale = factor
+        arranged = nil
+        measurePoints = []
+        phase = .loaded(factor == 1 ? original : original.scaled(by: factor))
+    }
+
     // MARK: Tools
 
     private func open(_ option: ViewerTool) {
@@ -576,7 +640,9 @@ struct ViewerScreen: View {
             }.value
             // A multi-plate project opens on its first plate, like the slicer.
             appearance.plateID = model.plates.first?.id
+            original = model
             phase = .loaded(model)
+            checkUnits(of: model)
             offerGestureHint()
             #if DEBUG
             if ProcessInfo.processInfo.environment["FACETS_INFO"] == "1" { showingInfo = true }

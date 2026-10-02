@@ -218,3 +218,23 @@ import simd
         #expect(abs(raised.surface.supportVolume(bedZ: 0) - 500) < 0.01)
     }
 }
+
+@Suite struct UnitGuessTests {
+    @Test func tinyModelsSuggestAnotherUnit() {
+        // kako.stl from MakerWorld: 0.34 × 0.055 × 0.28, in metres.
+        #expect(UnitGuess.suggestions(for: [0.34, 0.055, 0.28]) == [.metres, .inches])
+        // A 2-inch part saved in inches.
+        #expect(UnitGuess.suggestions(for: [2.0 - 0.1, 1, 0.5]).first == .inches)
+        #expect(UnitGuess.suggestions(for: [20, 10, 5]).isEmpty)
+    }
+
+    @Test func scalingKeepsTheModelOnTheBed() throws {
+        let box = cubeTriangles.flatMap { $0.flatMap { [$0.x * 0.3, $0.y * 0.05, $0.z * 0.28] } }
+        let model = Model3D(format: .stl, parts: [ModelPart(id: 0, name: "k", geometry: MeshGeometry(positions: box))], objects: [])
+        let scaled = model.scaled(by: 1000)
+        #expect(abs(scaled.bounds.size.x - 300) < 0.01)
+        #expect(abs(scaled.bounds.min.z) < 0.001)
+        #expect(scaled.sourceID == model.sourceID)
+        #expect(abs(scaled.volume - model.volume * 1e9) / scaled.volume < 1e-4)
+    }
+}

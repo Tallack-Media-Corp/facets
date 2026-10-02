@@ -554,6 +554,21 @@ public struct Model3D: Sendable, Identifiable {
         return Model3D(format: format, parts: turned, objects: objects, plates: plates, title: title, application: application, slicerBed: nil, estimates: estimates, sourceID: sourceID)
     }
 
+    /// The same model scaled up or down by `factor` (for a file saved in metres or
+    /// inches rather than millimetres). Everything scales from the origin, so a
+    /// model resting on the bed still does. The slicer's bed doesn't carry over.
+    public func scaled(by factor: Float) -> Model3D {
+        guard factor > 0, factor != 1 else { return self }
+        var scale = matrix_identity_float4x4
+        scale.columns.0.x = factor
+        scale.columns.1.y = factor
+        scale.columns.2.z = factor
+        let resized = parts.map { part in
+            ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: scale * part.transform, color: part.color, objectID: part.objectID)
+        }
+        return Model3D(format: format, parts: resized, objects: objects, plates: plates, title: title, application: application, slicerBed: nil, estimates: estimates, sourceID: sourceID)
+    }
+
     /// Where a ray first meets what's showing, in world space.
     public func hit(origin: SIMD3<Float>, direction: SIMD3<Float>, plateID: Int?, hidden: Set<Int>) -> SurfaceHit? {
         var best: SurfaceHit?

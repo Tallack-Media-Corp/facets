@@ -11,6 +11,9 @@ struct ModelInfoSheet: View {
     let material: FilamentMaterial
     /// The printer chosen in Facets, for the estimate's speeds.
     let printer: PrinterBed?
+    /// The unit the file was taken to be in, when it was scaled up to millimetres.
+    let scaledFrom: UnitGuess?
+    let resetScale: () -> Void
     @Binding var appearance: RenderAppearance
     @Binding var detent: PresentationDetent
 
@@ -65,6 +68,10 @@ struct ModelInfoSheet: View {
                 Section("File") {
                     LabeledContent("Name", value: file.url.lastPathComponent)
                     LabeledContent("Format", value: model.format.rawValue)
+                    if let scaledFrom {
+                        LabeledContent("Scale", value: "From \(scaledFrom.title.lowercased()), ×\(scaledFrom.factor.formatted())")
+                        Button("Show at the File's Own Size", action: resetScale)
+                    }
                     if let fileSize {
                         LabeledContent("Size", value: Format.fileSize(fileSize))
                     }
