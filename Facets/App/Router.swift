@@ -16,9 +16,6 @@ struct ModelFileRef: Identifiable, Hashable {
 @MainActor
 @Observable
 final class Router {
-    /// The one router, shared with Shortcuts so "Open Model" can show a file.
-    static let shared = Router()
-
     enum Tab: Hashable {
         case library, recents, settings, search
     }
@@ -37,4 +34,13 @@ final class Router {
         }
         presented = ModelFileRef(url: url, isExternal: !library.contains(url))
     }
+}
+
+/// A model a Shortcut asked to open, waiting for the window in front to show it.
+/// Each window has its own `Router`, so intents can't reach one directly.
+@MainActor
+@Observable
+final class PendingOpen {
+    static let shared = PendingOpen()
+    var file: ModelFileRef?
 }

@@ -19,7 +19,7 @@ enum ViewerTool: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .measure: "ruler"
-        case .layFlat: "square.and.arrow.down"
+        case .layFlat: "rotate.right"
         case .section: "square.split.1x2"
         }
     }
@@ -49,13 +49,16 @@ struct ToolPanel: View {
     let resetOrientation: () -> Void
     let close: () -> Void
 
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    /// VoiceOver lands on the panel when it opens, so its instructions are read.
+    @AccessibilityFocusState private var titleFocused: Bool
 
     var body: some View {
         VStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Label(tool.title, systemImage: tool.symbol)
                     .font(.subheadline.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityFocused($titleFocused)
                 Spacer()
                 Button("Done", systemImage: "xmark", action: close)
                     .labelStyle(.iconOnly)
@@ -74,6 +77,8 @@ struct ToolPanel: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 24))
         .padding(.horizontal, 12)
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        .onAppear { titleFocused = true }
+        .onChange(of: tool) { titleFocused = true }
     }
 
     @ViewBuilder
@@ -101,8 +106,10 @@ struct ToolPanel: View {
                 }
                 .accessibilityElement(children: .combine)
                 Spacer()
-                Button("Clear", action: clearPoints)
-                    .buttonStyle(.glass)
+                Button(action: clearPoints) {
+                    Text("Clear").frame(minHeight: 44).padding(.horizontal, 4)
+                }
+                .buttonStyle(.glass)
             }
         } else {
             Text(points.isEmpty ? "Tap a point on the model. Points snap to a nearby corner." : "Tap a second point.")

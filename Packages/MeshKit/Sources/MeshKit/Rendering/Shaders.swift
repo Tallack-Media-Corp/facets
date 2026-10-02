@@ -21,7 +21,7 @@ enum ShaderSource {
     struct Part {
         float4x4 model;
         float4 color;
-        float4 options; // x: 1 for wireframe lines
+        float4 options; // x: 1 for wireframe lines, y: 1 when the transform mirrors
     };
 
     struct MeshOut {
@@ -43,25 +43,12 @@ enum ShaderSource {
         return out;
     }
 
-    fragment float4 mesh_fragment(MeshOut in [[stage_in]],
-                                  bool frontFacing [[front_facing]],
-                                  constant Frame &frame [[buffer(1)]],
-                                  constant Part &part [[buffer(2)]]) {
-        bool cutting = frame.clip.y > 0.5;
-        if (cutting && in.worldZ > frame.clip.x) {
-            discard_fragment();
-        }
-        float3 base = part.color.rgb;
-        // With the top cut away, the far side of a wall shows from inside: shade it
-        // dark so walls and cavities read against the outer surface.
-        if (cutting && !frontFacing) {
-            base = base * 0.28 + 0.03;
-        }
+    static float4 shade(float3 base, float3 viewPosition, constant Part &part) {
         if (part.options.x > 0.5) {
             return float4(base * 0.85 + 0.05, 1.0);
         }
-        float3 n = normalize(cross(dfdx(in.viewPosition), dfdy(in.viewPosition)));
-        float3 v = normalize(-in.viewPosition);
+        float3 n = normalize(cross(dfdx(viewPosition), dfdy(viewPosition)));
+        float3 v = normalize(-viewPosition);
         if (dot(n, v) < 0.0) { n = -n; }
 
         // A studio rig in view space: key from upper left, soft fill from the right,
@@ -77,6 +64,31 @@ enum ShaderSource {
 
         float3 lit = base * (0.14 + 0.20 * sky + 0.70 * keyLight + 0.22 * fillLight + rim) + specular;
         return float4(lit, 1.0);
+    }
+
+    fragment float4 mesh_fragment(MeshOut in [[stage_in]],
+                                  constant Part &part [[buffer(2)]]) {
+        return shade(part.color.rgb, in.viewPosition, part);
+    }
+
+    // The cross-section, a pipeline of its own: a fragment function that can discard
+    // costs every draw its early depth test, so only the cut view pays for it.
+    fragment float4 mesh_fragment_cut(MeshOut in [[stage_in]],
+                                      bool frontFacing [[front_facing]],
+                                      constant Frame &frame [[buffer(1)]],
+                                      constant Part &part [[buffer(2)]]) {
+        if (in.worldZ > frame.clip.x) {
+            discard_fragment();
+        }
+        float3 base = part.color.rgb;
+        // With the top cut away, the far side of a wall shows from inside: shade it
+        // dark so walls and cavities read against the outer surface. A mirroring
+        // transform flips which side faces out.
+        bool outside = part.options.y > 0.5 ? !frontFacing : frontFacing;
+        if (!outside) {
+            base = base * 0.28 + 0.03;
+        }
+        return shade(base, in.viewPosition, part);
     }
 
     struct Grid {

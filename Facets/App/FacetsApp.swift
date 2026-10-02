@@ -3,42 +3,64 @@ import SwiftUI
 
 @main
 struct FacetsApp: App {
+    // Files and settings are the same in every window.
     @State private var library = FileLibrary()
     @State private var recents = RecentsStore()
     @State private var locations = LocationsStore()
-    @State private var toasts = ToastCenter()
     @State private var settings = ViewerSettings()
-    @State private var router = Router.shared
-    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            SceneRoot()
                 .environment(library)
                 .environment(recents)
                 .environment(locations)
-                .environment(toasts)
-                .task { library.purgeExpired() }
                 .environment(settings)
-                .environment(router)
-                // Files, Mail, Messages and the share sheet hand files over here.
-                .onOpenURL { url in
-                    router.open(url, library: library)
-                }
-                // A library model picked from a Spotlight search.
-                .onContinueUserActivity(CSSearchableItemActionType) { activity in
-                    if let url = SpotlightIndexer.url(for: activity) {
-                        router.presented = ModelFileRef(url: url, isExternal: false)
-                    }
-                }
-                .task { SpotlightIndexer.reindex() }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .background { SpotlightIndexer.reindex() }
-                }
-                #if DEBUG
-                .task { openFromLaunchEnvironment() }
-                #endif
+                .task { library.purgeExpired() }
         }
+        .commands { ViewerCommands() }
+    }
+}
+
+/// One window's worth of app: its own tab, open model and toasts, so two iPad
+/// windows don't mirror each other.
+private struct SceneRoot: View {
+    @State private var router = Router()
+    @State private var toasts = ToastCenter()
+    @Environment(FileLibrary.self) private var library
+    @Environment(\.scenePhase) private var scenePhase
+    private let pending = PendingOpen.shared
+
+    var body: some View {
+        RootView()
+            .environment(router)
+            .environment(toasts)
+            // Files, Mail, Messages and the share sheet hand files over here.
+            .onOpenURL { url in
+                router.open(url, library: library)
+            }
+            // A library model picked from a Spotlight search.
+            .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                if let url = SpotlightIndexer.url(for: activity) {
+                    router.presented = ModelFileRef(url: url, isExternal: false)
+                }
+            }
+            // A model a Shortcut asked to open: the window in front takes it.
+            .onChange(of: pending.file) { claimPendingOpen() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { claimPendingOpen() }
+                if phase == .background { SpotlightIndexer.reindex() }
+            }
+            .task { SpotlightIndexer.reindex() }
+            #if DEBUG
+            .task { openFromLaunchEnvironment() }
+            #endif
+    }
+
+    private func claimPendingOpen() {
+        guard scenePhase == .active, let file = pending.file else { return }
+        pending.file = nil
+        router.presented = file
     }
 
     #if DEBUG

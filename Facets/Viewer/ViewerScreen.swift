@@ -49,6 +49,12 @@ struct ViewerScreen: View {
     @State private var arranged: Model3D?
     /// Cross-section height as a fraction of the model's height.
     @State private var sectionFraction = 1.0
+    /// Bumped per turn, so a slow turn finishing late doesn't undo a newer one.
+    @State private var turnGeneration = 0
+    /// The tool panel's height and the screen's, for keeping the model above it.
+    @State private var panelHeight: CGFloat = 0
+    @State private var viewHeight: CGFloat = 1
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
         ZStack {
@@ -89,7 +95,7 @@ struct ViewerScreen: View {
                     model: model,
                     appearance: staged(appearance, for: model),
                     controller: controller,
-                    bottomObscured: obscuredBySheet,
+                    bottomObscured: obscured,
                     tool: tool?.canvasTool ?? .none,
                     markers: tool == .measure ? measurePoints : [],
                     onSurfaceTap: { hit, point in surfaceTapped(hit, point, in: model) }
@@ -119,7 +125,8 @@ struct ViewerScreen: View {
                     .padding(.top, 8)
             }
         }
-        .overlay(alignment: .bottom) {
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewHeight = max($0, 1) }
+        .overlay(alignment: dockedPanel ? .bottomTrailing : .bottom) {
             if let tool, let model = shownModel {
                 ToolPanel(
                     tool: tool,
@@ -133,7 +140,9 @@ struct ViewerScreen: View {
                     resetOrientation: resetOrientation,
                     close: { closeTool() }
                 )
+                .frame(maxWidth: dockedPanel ? 340 : nil)
                 .padding(.bottom, 8)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if showingHint {
                 GestureHint(stage: shownHintStage ?? 0)
@@ -156,13 +165,16 @@ struct ViewerScreen: View {
                 ModelInfoSheet(model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material, appearance: $appearance, detent: $infoDetent)
             }
         }
-        .background { keyboardShortcuts }
+        .background { escapeKey }
+        .focusedSceneValue(\.viewerActions, isLoaded ? viewerActions : nil)
         .animation(.snappy(duration: 0.25), value: tool)
         .onChange(of: appearance.plateID) {
             // Another plate is another arrangement: start it as the file has it.
             arranged = nil
+            turnGeneration += 1
             measurePoints = []
         }
+        .onChange(of: tool) { panelHeight = 0 }
         .alert("Couldn't Save", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -177,7 +189,7 @@ struct ViewerScreen: View {
         }
         .sheet(isPresented: $choosingPrinter) {
             NavigationStack {
-                PrinterBedPicker(fits: shownModel.map { model in { bed in fits(model, on: bed) } })
+                PrinterBedPicker(verdict: shownModel.map { model in { bed in verdict(model, on: bed) } })
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
                             Button("Done", systemImage: "checkmark") { choosingPrinter = false }
@@ -264,11 +276,8 @@ struct ViewerScreen: View {
     private var toolsMenu: some View {
         Menu {
             ForEach(ViewerTool.allCases) { option in
-                Button {
-                    open(option)
-                } label: {
+                Toggle(isOn: Binding(get: { tool == option }, set: { _ in open(option) })) {
                     Label(option.title, systemImage: option.symbol)
-                    if option == tool { Text("Open") }
                 }
             }
         } label: {
@@ -435,57 +444,77 @@ struct ViewerScreen: View {
         }
     }
 
-    /// Turns what's showing, keeping each turn on top of the last.
+    /// Turns what's showing, keeping each turn on top of the last. The new
+    /// arrangement is worked out off the main thread: every vertex moves.
     private func reorient(by rotation: simd_float3x3) {
         guard let model = shownModel else { return }
-        arranged = model.reoriented(by: rotation, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
-        measurePoints = []
-        announceFit()
+        turnGeneration += 1
+        let generation = turnGeneration
+        let plateID = appearance.plateID, hidden = appearance.hiddenObjects
+        Task {
+            let turned = await Task.detached(priority: .userInitiated) {
+                model.reoriented(by: rotation, plateID: plateID, hidden: hidden)
+            }.value
+            guard generation == turnGeneration else { return }
+            arranged = turned
+            measurePoints = []
+            announceArrangement(turned)
+        }
     }
 
     private func resetOrientation() {
+        turnGeneration += 1
         arranged = nil
         measurePoints = []
-        announceFit()
+        if let model = shownModel { announceArrangement(model) }
     }
 
-    /// Whether the model as shown fits a bed, for marking the printer list.
-    private func fits(_ model: Model3D, on bed: PrinterBed) -> Bool? {
-        model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects)?.fits
+    /// After a turn: the new size, and the fit when there's a printer.
+    private func announceArrangement(_ model: Model3D) {
+        guard UIAccessibility.isVoiceOverRunning else { return }
+        var text = "Now \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))"
+        if let note = fitNote(for: model) { text += ". \(note.text)" }
+        UIAccessibility.post(notification: .announcement, argument: text)
     }
 
-    /// Keyboard commands for iPad (and anything with a keyboard), listed in the
-    /// Command-key overlay. Invisible buttons carry them.
-    private var keyboardShortcuts: some View {
-        Group {
-            if isLoaded {
-                Button("Fit to Screen") { controller.frameModel() }
-                    .keyboardShortcut("0", modifiers: .command)
-                ForEach(Array(OrbitCamera.Preset.allCases.enumerated()), id: \.element) { index, preset in
-                    Button("\(preset.title) View") { controller.show(preset) }
-                        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
-                }
-                Button("Info") { showingInfo = true }
-                    .keyboardShortcut("i", modifiers: .command)
-                Button("Build Plate Grid") { appearance.showsGrid.toggle() }
-                    .keyboardShortcut("g", modifiers: .command)
-                Button("Wireframe") { appearance.wireframe.toggle() }
-                    .keyboardShortcut("w", modifiers: [.command, .shift])
-                Button("Measure") { open(.measure) }
-                    .keyboardShortcut("m", modifiers: [.command, .shift])
-                Button("Lay Flat") { open(.layFlat) }
-                    .keyboardShortcut("l", modifiers: [.command, .shift])
-                Button("Cross-Section") { open(.section) }
-                    .keyboardShortcut("x", modifiers: [.command, .shift])
-            }
-            if tool != nil {
-                Button("Close Tool") { closeTool() }
-                    .keyboardShortcut(.escape, modifiers: [])
-            } else if showsCloseButton {
-                Button("Close") { dismiss() }
-                    .keyboardShortcut("w", modifiers: .command)
-            }
+    /// What the model as shown makes of a bed, for marking the printer list.
+    private func verdict(_ model: Model3D, on bed: PrinterBed) -> BedFit.Verdict? {
+        model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects)?.verdict
+    }
+
+    /// The panel sits at the side, not the bottom, when height is short (iPhone in
+    /// landscape), so it doesn't cover the model.
+    private var dockedPanel: Bool { verticalSizeClass == .compact }
+
+    /// How much of the canvas is covered from the bottom: the Info sheet on iPhone,
+    /// or the tool panel. The model reframes into what's left.
+    private var obscured: CGFloat {
+        let panel = tool != nil && !dockedPanel ? min((panelHeight + 8) / viewHeight, 0.45) : 0
+        return max(obscuredBySheet, panel)
+    }
+
+    private var viewerActions: ViewerActions {
+        ViewerActions(
+            fit: { controller.frameModel() },
+            show: { controller.show($0) },
+            info: { showingInfo = true },
+            toggleGrid: { appearance.showsGrid.toggle() },
+            toggleWireframe: { appearance.wireframe.toggle() },
+            toggleTool: { open($0) },
+            openTool: tool,
+            showsGrid: appearance.showsGrid,
+            wireframe: appearance.wireframe
+        )
+    }
+
+    /// Escape closes the open tool, or a viewer opened from another app. The rest of
+    /// the keyboard commands are in the menu bar's Model menu (ViewerCommands).
+    private var escapeKey: some View {
+        Button(tool != nil ? "Close Tool" : "Close") {
+            if tool != nil { closeTool() } else if showsCloseButton { dismiss() }
         }
+        .keyboardShortcut(.escape, modifiers: [])
+        .disabled(tool == nil && !showsCloseButton)
         .opacity(0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)

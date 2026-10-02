@@ -35,7 +35,15 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
         case face
     }
 
-    public var tool: Tool = .none
+    public var tool: Tool = .none {
+        didSet {
+            guard tool != oldValue else { return }
+            // A tool that needs taps on the model lets VoiceOver users touch it
+            // directly; otherwise swipes keep reaching the camera actions.
+            accessibilityTraits = tool == .none ? [.image] : [.image, .allowsDirectInteraction]
+            accessibilityHint = tool == .none ? nil : "Touch the model directly to pick a point."
+        }
+    }
 
     /// A tap landed on the model while a tool is active. For `.measure` the point is
     /// snapped to a corner within reach of the finger.
@@ -266,27 +274,38 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate, UIGestureRecognize
     }
 
     /// What's under a point on screen; respects the cross-section, so a cut-away top
-    /// can't be picked.
-    public func surface(at point: CGPoint) -> SurfaceHit? {
+    /// can't be picked. Runs off the main thread: a big mesh is millions of triangles.
+    public func surface(at point: CGPoint) async -> SurfaceHit? {
         guard let renderer, let model = renderer.model, let ray = ray(through: point) else { return nil }
         let appearance = renderer.appearance
-        guard let cut = appearance.sectionHeight else {
-            return model.hit(origin: ray.origin, direction: ray.direction, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
-        }
-        // Step past hits in the removed part until one lies below the cut.
-        var origin = ray.origin
-        for _ in 0..<32 {
-            guard let hit = model.hit(origin: origin, direction: ray.direction, plateID: appearance.plateID, hidden: appearance.hiddenObjects) else { return nil }
-            if hit.point.z <= cut + 0.001 { return hit }
-            origin = hit.point + ray.direction * max(renderer.focusBounds.radius * 1e-5, 1e-4)
-        }
-        return nil
+        let step = max(renderer.focusBounds.radius * 1e-5, 1e-4)
+        return await Task.detached(priority: .userInitiated) {
+            guard let cut = appearance.sectionHeight else {
+                return model.hit(origin: ray.origin, direction: ray.direction, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
+            }
+            // Step past hits in the removed part until one lies below the cut.
+            var origin = ray.origin
+            for _ in 0..<32 {
+                guard let hit = model.hit(origin: origin, direction: ray.direction, plateID: appearance.plateID, hidden: appearance.hiddenObjects) else { return nil }
+                if hit.point.z <= cut + 0.001 { return hit }
+                origin = hit.point + ray.direction * step
+            }
+            return nil
+        }.value
     }
 
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
         guard tool != .none else { return }
         let location = gesture.location(in: self)
-        guard let hit = surface(at: location) else { return }
+        let modelID = renderer?.model?.id
+        Task { @MainActor in
+            guard let hit = await surface(at: location), renderer?.model?.id == modelID else { return }
+            pick(hit, near: location)
+        }
+    }
+
+    private func pick(_ hit: SurfaceHit, near location: CGPoint) {
+        guard tool != .none else { return }
         var point = hit.point
         if tool == .measure {
             // A corner within a fingertip wins: measuring edge to edge is the usual job.

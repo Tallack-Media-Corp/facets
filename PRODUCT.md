@@ -29,8 +29,8 @@ Facets is a free viewer for STL, 3MF and OBJ files on iPhone and iPad. It opens 
 
 ## Capabilities and Constraints
 
-- Formats: binary and ASCII STL; 3MF (core, production extension, base materials and colour groups, Bambu/Orca metadata). Units shown in millimetres or inches.
-- Viewer: orbit, pan, pinch, twist, double-tap to fit, preset views, wireframe, build-plate grid, dimensions, volume, triangle count, per-object visibility, plate picker.
+- Formats: binary and ASCII STL; 3MF (core, production extension, base materials and colour groups, Bambu/Orca metadata and slice estimates); OBJ. Units shown in millimetres or inches.
+- Viewer: orbit, pan, pinch, twist, double-tap to fit, preset views, wireframe, build-plate grid, printer bed fit check, dimensions, volume, triangle count, per-object visibility, plate picker; tools to measure, lay flat and cut a cross-section; slicer print estimates.
 - Library: folders, import, rename, duplicate, move, delete, drag and drop on iPad, search, recents; Browse for folders outside the library with Save to Library.
 - iPhone and iPad, iOS 26 and later, SwiftUI and Swift 6; Quick Look preview and thumbnail extensions have tight memory limits on device.
 - Copy is in English only for now, using Canadian spelling (colour, licence).

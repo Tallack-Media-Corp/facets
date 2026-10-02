@@ -10,6 +10,8 @@ public final class RenderContext: @unchecked Sendable {
     public let device: MTLDevice
     let queue: MTLCommandQueue
     let meshPipeline: MTLRenderPipelineState
+    /// The cross-section: same mesh, cut at a height.
+    let meshCutPipeline: MTLRenderPipelineState
     let gridPipeline: MTLRenderPipelineState
     let depthWrite: MTLDepthStencilState
     let depthReadOnly: MTLDepthStencilState
@@ -33,6 +35,9 @@ public final class RenderContext: @unchecked Sendable {
         mesh.depthAttachmentPixelFormat = Self.depthFormat
         mesh.rasterSampleCount = Self.sampleCount
         meshPipeline = try device.makeRenderPipelineState(descriptor: mesh)
+        mesh.label = "Mesh (cut)"
+        mesh.fragmentFunction = library.makeFunction(name: "mesh_fragment_cut")
+        meshCutPipeline = try device.makeRenderPipelineState(descriptor: mesh)
 
         let grid = MTLRenderPipelineDescriptor()
         grid.label = "Grid"

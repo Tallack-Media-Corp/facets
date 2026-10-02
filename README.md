@@ -7,6 +7,9 @@ Free and open source (MIT). No accounts, no network access, no tracking.
 ## Features
 
 - **Viewer**: orbit, pan, pinch and twist; double tap to fit; front, back, side, top, bottom and isometric views; wireframe; a millimetre build-plate grid; size readout in mm or inches.
+- **Fit check**: pick your printer (Bambu Lab, Prusa, Creality, Elegoo, Voron or a custom bed) and the viewer outlines its bed under the model and says whether it fits, turned if need be. It can be turned off for dimensions only.
+- **Tools**: measure between two points (snapping to corners), lay a model flat on any face or turn it a quarter at a time, and cut a cross-section to see walls and cavities.
+- **Print estimates**: a project saved sliced from Bambu Studio or Orca shows the slicer's print time and filament per plate; anything else shows its weight if printed solid.
 - **3MF projects**: Bambu Studio and Orca plates (pick one or show all), filament colours, multi-part objects, modifiers hidden, per-object visibility, and 3MF base material colours.
 - **Library**: a folder of models with rendered thumbnails, subfolders, import, rename, duplicate, move, delete, drag and drop on iPad, and search across every folder.
 - **Browse**: next to Library, add any folder from iCloud Drive, On My iPhone or a storage app in Files and look through it without importing. Folders are kept as security-scoped bookmarks (iOS only lets an app see what the user picks), iCloud files that aren't downloaded yet show a cloud and download when opened, and a plus beside Share saves a copy to the library.
@@ -16,6 +19,8 @@ Free and open source (MIT). No accounts, no network access, no tracking.
   - The Facets library is a real folder in the Files app (On My iPhone › Facets).
   - A Quick Look extension shows a live, rotatable 3D preview wherever the system previews files.
   - A thumbnail extension draws STL, 3MF and OBJ thumbnails in Files.
+  - Library models show up in Spotlight, and Shortcuts can open a model or get its dimensions.
+  - Keyboard commands on iPad for views, tools, the grid and info.
 - Liquid Glass throughout, light and dark.
 
 ## Requirements

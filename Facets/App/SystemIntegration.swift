@@ -65,6 +65,8 @@ enum SpotlightIndexer {
             let index = CSSearchableIndex.default()
             try? await index.deleteSearchableItems(withDomainIdentifiers: [domain])
             try? await index.indexSearchableItems(items)
+            // Siri phrases that name a model ("Open Benchy in Facets") need the names.
+            FacetsShortcuts.updateAppShortcutParameters()
         }
     }
 
@@ -139,14 +141,14 @@ struct OpenModelIntent: OpenIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        Router.shared.presented = ModelFileRef(url: target.url, isExternal: false)
+        PendingOpen.shared.file = ModelFileRef(url: target.url, isExternal: false)
         return .result()
     }
 }
 
 struct GetModelDimensionsIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Model Dimensions"
-    static let description = IntentDescription("Gives a model's width, depth and height, in the units set in Facets.")
+    static let description = IntentDescription("Gives a model's width, depth and height, in the units set in Facets. For a project with several plates, it's the first plate, as Facets opens it.")
 
     @Parameter(title: "Model")
     var model: ModelEntity
@@ -159,9 +161,13 @@ struct GetModelDimensionsIntent: AppIntent {
         let url = model.url
         let loaded = try await Task.detached(priority: .userInitiated) { try ModelLoader.load(url) }.value
         let units = MeasurementUnits(rawValue: UserDefaults.standard.string(forKey: "viewer.units") ?? "") ?? .millimetres
-        let size = loaded.bounds.size
+        // A multi-plate project is laid out across several plates; measure the one
+        // the viewer opens on, not the whole layout.
+        let plate = loaded.plates.first?.id
+        let size = loaded.bounds(of: loaded.visibleParts(plateID: plate, hidden: [])).size
         let text = Format.dimensions(size, units: units)
-        return .result(value: text, dialog: "\(model.name) is \(Format.spokenDimensions(size, units: units)).")
+        let subject = plate == nil ? model.name : "Plate \(plate!) of \(model.name)"
+        return .result(value: text, dialog: "\(subject) is \(Format.spokenDimensions(size, units: units)).")
     }
 }
 

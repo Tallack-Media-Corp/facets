@@ -480,7 +480,9 @@ struct MoveSheet: View {
         NavigationStack {
             List(library.allFolders(), id: \.self) { folder in
                 let isCurrent = folder.standardizedFileURL == item.url.deletingLastPathComponent().standardizedFileURL
-                let isSelf = item.isFolder && folder.path.hasPrefix(item.url.standardizedFileURL.path)
+                // The folder itself or anything inside it; "Parts 2" isn't inside "Parts".
+                let moving = item.url.standardizedFileURL.path
+                let isSelf = item.isFolder && (folder.standardizedFileURL.path == moving || folder.standardizedFileURL.path.hasPrefix(moving + "/"))
                 Button {
                     onMove(folder)
                     dismiss()

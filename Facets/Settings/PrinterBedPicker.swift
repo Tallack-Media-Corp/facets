@@ -1,10 +1,11 @@
+import MeshKit
 import SwiftUI
 
 /// Settings › Printer Bed: which bed the viewer outlines under a model.
 struct PrinterBedPicker: View {
-    /// Opened from the viewer: whether the model there fits each bed, so the list
+    /// Opened from the viewer: what the model there makes of each bed, so the list
     /// can say which printers would take it.
-    var fits: ((PrinterBed) -> Bool?)? = nil
+    var verdict: ((PrinterBed) -> BedFit.Verdict?)? = nil
 
     @Environment(ViewerSettings.self) private var settings
 
@@ -14,14 +15,14 @@ struct PrinterBedPicker: View {
             Section {
                 row(title: "None", id: nil)
             } footer: {
-                Text(fits == nil
+                Text(verdict == nil
                      ? "Pick your printer to see its bed under every model, and whether the model fits."
                      : "Each printer says whether the model you're viewing fits it, as it's oriented now.")
             }
             ForEach(PrinterBed.byMake, id: \.make) { group in
                 Section(group.make) {
                     ForEach(group.beds) { bed in
-                        row(title: bed.name, detail: size(bed.width, bed.depth, bed.height), id: bed.id, fits: fits?(bed))
+                        row(title: bed.name, detail: size(bed.width, bed.depth, bed.height), id: bed.id, verdict: verdict?(bed))
                     }
                 }
             }
@@ -55,18 +56,19 @@ struct PrinterBedPicker: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func row(title: String, detail: String? = nil, id: String?, fits: Bool? = nil) -> some View {
-        Button {
+    private func row(title: String, detail: String? = nil, id: String?, verdict: BedFit.Verdict? = nil) -> some View {
+        let note = verdict.map(Self.note(for:))
+        return Button {
             settings.bedID = id
         } label: {
             HStack {
                 // Colour, not hierarchical styles: inside a button those resolve to the tint.
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).foregroundStyle(Color.primary)
-                    if let fits {
+                    if let note {
                         HStack(spacing: 4) {
-                            Image(systemName: fits ? "checkmark.circle" : "exclamationmark.triangle.fill")
-                            Text(fits ? "Fits" : "Too small")
+                            Image(systemName: note.symbol)
+                            Text(note.text)
                         }
                         .font(.caption)
                         .foregroundStyle(Color.secondary)
@@ -83,7 +85,17 @@ struct PrinterBedPicker: View {
             .contentShape(.rect)
         }
         .accessibilityAddTraits(settings.bedID == id ? .isSelected : [])
-        .accessibilityValue(fits.map { $0 ? "Fits" : "Too small" } ?? "")
+        .accessibilityValue(note?.text ?? "")
+    }
+
+    /// The short form of a fit verdict, for a row in the list.
+    private static func note(for verdict: BedFit.Verdict) -> (text: String, symbol: String) {
+        switch verdict {
+        case .fits: ("Fits", "checkmark.circle")
+        case .fitsTurned: ("Fits turned 90°", "checkmark.circle")
+        case .tooBig: ("Too small", "exclamationmark.triangle.fill")
+        case .offPlate: ("Fits, but runs off the plate as arranged", "exclamationmark.triangle.fill")
+        }
     }
 
     /// "256 × 256 × 250 mm": whole millimetres, since beds are specified that way.

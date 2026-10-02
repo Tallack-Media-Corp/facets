@@ -150,7 +150,7 @@ public final class SceneRenderer {
             clip: SIMD4(appearance.sectionHeight ?? 0, appearance.sectionHeight == nil ? 0 : 1, 0, 0)
         )
 
-        encoder.setRenderPipelineState(context.meshPipeline)
+        encoder.setRenderPipelineState(appearance.sectionHeight == nil ? context.meshPipeline : context.meshCutPipeline)
         encoder.setDepthStencilState(context.depthWrite)
         encoder.setCullMode(.none)
         // STL and 3MF wind outward faces counter-clockwise; the section view relies on
@@ -164,7 +164,8 @@ public final class SceneRenderer {
             guard let gpu = geometries[ObjectIdentifier(part.geometry)] else { continue }
             var color = appearance.baseColor
             if appearance.usesFileColors, let fileColor = part.color { color = fileColor }
-            var uniforms = PartUniforms(model: part.transform, color: color, options: SIMD4(appearance.wireframe ? 1 : 0, 0, 0, 0))
+            let mirrored = simd_determinant(part.transform) < 0
+            var uniforms = PartUniforms(model: part.transform, color: color, options: SIMD4(appearance.wireframe ? 1 : 0, mirrored ? 1 : 0, 0, 0))
             encoder.setVertexBuffer(gpu.positions, offset: 0, index: 0)
             encoder.setVertexBytes(&uniforms, length: MemoryLayout<PartUniforms>.stride, index: 2)
             encoder.setFragmentBytes(&uniforms, length: MemoryLayout<PartUniforms>.stride, index: 2)
