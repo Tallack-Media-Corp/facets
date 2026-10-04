@@ -20,19 +20,18 @@ private struct ModelPresenter: ViewModifier {
     @Environment(\.zoomNamespace) private var zoom
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
+    #else
+    @Environment(Router.self) private var router
     #endif
-    @State private var viewing: ModelFileRef?
 
     func body(content: Content) -> some View {
         #if os(iOS)
+        // Through the scene's router, the same cover files from other apps use, with
+        // this tab's card as the zoom source.
         content
-            .environment(\.openModel) { viewing = $0 }
-            .fullScreenCover(item: $viewing) { file in
-                NavigationStack {
-                    ViewerScreen(file: file, showsCloseButton: true)
-                }
-                .toastHost(clearance: 80)
-                .zoomDestination(id: file.url, in: zoom)
+            .environment(\.openModel) { file in
+                router.zoomSource = zoom
+                router.presented = file
             }
         #else
         content

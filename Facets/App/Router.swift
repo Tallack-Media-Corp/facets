@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Observation
 
 /// A model file to show, and whether it lives outside the app (opened in place from
@@ -21,11 +22,17 @@ final class Router {
     }
 
     var tab: Tab = .library
-    /// Shown full screen over everything.
+    /// Shown full screen over everything. The one place a viewer is presented from,
+    /// so a file from Files, Spotlight or a Shortcut replaces an open one rather than
+    /// meeting a second, competing cover.
     var presented: ModelFileRef?
+    /// The zoom source the viewer grows from: a library card, or none for a file
+    /// handed over from elsewhere.
+    var zoomSource: Namespace.ID?
 
     func open(_ url: URL, library: FileLibrary) {
         guard url.isFileURL else { return }
+        zoomSource = nil
         // "Copy to Facets" from a share sheet lands in Documents/Inbox, which iOS owns
         // and empties. Move it into the library proper so it stays.
         if library.isInInbox(url), let moved = try? library.adoptFromInbox(url) {

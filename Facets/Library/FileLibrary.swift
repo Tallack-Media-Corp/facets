@@ -154,33 +154,28 @@ final class FileLibrary {
         }.count
     }
 
-    /// Every model in the library, for search.
-    func allModels() -> [LibraryItem] {
-        let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
-        guard let enumerator = fileManager.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { return [] }
+    /// Every model in the library, for search, including ones only in iCloud. Walks
+    /// the whole tree, so callers run it off the main thread.
+    nonisolated static func allModels(in root: URL) -> [LibraryItem] {
         var result: [LibraryItem] = []
-        for case let url as URL in enumerator {
-            if url.lastPathComponent == "Inbox", url.deletingLastPathComponent().standardizedFileURL == root {
-                enumerator.skipDescendants()
-                continue
+        var pending = [root]
+        while let folder = pending.popLast() {
+            for item in scan(folder, sort: .name, root: root) {
+                if item.isFolder { pending.append(item.url) } else { result.append(item) }
             }
-            guard ModelLoader.isSupported(url) else { continue }
-            let values = try? url.resourceValues(forKeys: Set(keys))
-            result.append(LibraryItem(url: url, isFolder: false, size: values?.fileSize.map(Int64.init), modified: values?.contentModificationDate, childCount: nil))
         }
         return result
     }
 
     /// Every folder in the library, root first, for choosing where to move things.
-    func allFolders() -> [URL] {
-        guard let enumerator = fileManager.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { return [root] }
+    nonisolated static func allFolders(in root: URL) -> [URL] {
         var folders: [URL] = []
-        for case let url as URL in enumerator where (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-            if url.lastPathComponent == "Inbox", url.deletingLastPathComponent().standardizedFileURL == root {
-                enumerator.skipDescendants()
-                continue
+        var pending = [root]
+        while let folder = pending.popLast() {
+            for item in scan(folder, sort: .name, root: root) where item.isFolder {
+                folders.append(item.url.standardizedFileURL)
+                pending.append(item.url)
             }
-            folders.append(url.standardizedFileURL)
         }
         return [root] + folders.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
@@ -233,7 +228,17 @@ final class FileLibrary {
     }
 
     /// Outside Documents, so the Files app never shows it.
-    private var trash: URL { URL.applicationSupportDirectory.appending(path: "Recently Deleted", directoryHint: .isDirectory) }
+    /// Recently Deleted: inside the library when it's in iCloud Drive (hidden), so a
+    /// delete is a move within iCloud that needs no download, works offline and
+    /// syncs; on the device otherwise.
+    private var trash: URL {
+        location == .iCloud
+            ? root.appending(path: ".recently-deleted", directoryHint: .isDirectory)
+            : deviceTrash
+    }
+    /// Where Recently Deleted always was before iCloud; still read, so nothing in it
+    /// is lost.
+    private var deviceTrash: URL { URL.applicationSupportDirectory.appending(path: "Recently Deleted", directoryHint: .isDirectory) }
     static let keepDeletedFor: TimeInterval = 30 * 24 * 60 * 60
 
     /// Moves items to Recently Deleted. Returns what's needed to put them back.
@@ -246,7 +251,12 @@ final class FileLibrary {
             let slot = trash.appending(path: UUID().uuidString, directoryHint: .isDirectory)
             try fileManager.createDirectory(at: slot, withIntermediateDirectories: true)
             let stored = slot.appending(path: item.url.lastPathComponent)
-            try fileManager.moveItem(at: item.url, to: stored)
+            var coordinatorError: NSError?
+            var moveError: Error?
+            NSFileCoordinator().coordinate(writingItemAt: item.url, options: .forMoving, writingItemAt: stored, options: .forReplacing, error: &coordinatorError) { from, to in
+                do { try fileManager.moveItem(at: from, to: to) } catch { moveError = error }
+            }
+            if let error = coordinatorError ?? moveError { throw error }
             try Data(item.url.path.utf8).write(to: slot.appending(path: ".origin"))
             deleted.append(DeletedItem(stored: stored, original: item.url, deletedAt: .now, isFolder: item.isFolder))
         }
@@ -261,6 +271,12 @@ final class FileLibrary {
         var restored: [URL] = []
         for item in items where fileManager.fileExists(atPath: item.stored.path) {
             var folder = item.original.deletingLastPathComponent()
+            // Deleted before the library moved to iCloud Drive: back into the library
+            // as it is now, not the old device folder.
+            let devicePath = LibraryLocation.deviceRoot.path
+            if location == .iCloud, folder.path == devicePath || folder.path.hasPrefix(devicePath + "/") {
+                folder = root.appending(path: String(folder.path.dropFirst(devicePath.count)))
+            }
             if !fileManager.fileExists(atPath: folder.path) { folder = root }
             let destination = uniqueURL(for: item.original.lastPathComponent, in: folder)
             try fileManager.moveItem(at: item.stored, to: destination)
@@ -272,7 +288,8 @@ final class FileLibrary {
     }
 
     func recentlyDeleted() -> [DeletedItem] {
-        let slots = (try? fileManager.contentsOfDirectory(at: trash, includingPropertiesForKeys: [.creationDateKey])) ?? []
+        let folders = trash == deviceTrash ? [trash] : [trash, deviceTrash]
+        let slots = folders.flatMap { (try? fileManager.contentsOfDirectory(at: $0, includingPropertiesForKeys: [.creationDateKey])) ?? [] }
         return slots.compactMap { slot -> DeletedItem? in
             guard let originPath = try? String(contentsOf: slot.appending(path: ".origin"), encoding: .utf8),
                   let stored = (try? fileManager.contentsOfDirectory(at: slot, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]))?.first else { return nil }
@@ -299,19 +316,30 @@ final class FileLibrary {
 
     /// True if the library root already has a file with this name and size, so a
     /// browsed model shows as saved.
-    func hasCopy(of url: URL) -> Bool {
+    /// `size` is the browsed file's, already read when its folder was listed, so this
+    /// touches only the library's side (the other may be slow storage).
+    func hasCopy(of url: URL, size: Int64?) -> Bool {
         let candidate = root.appending(path: url.lastPathComponent)
-        guard let mine = try? candidate.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-              let theirs = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return false }
-        return mine == theirs
+        guard let size, let mine = try? candidate.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return false }
+        return Int64(mine) == size
     }
 
+    /// Off the main thread and coordinated, so a model that's only in iCloud
+    /// downloads before it's copied.
     @discardableResult
-    func duplicate(_ item: LibraryItem) throws -> URL {
+    func duplicate(_ item: LibraryItem) async throws -> URL {
         let base = item.url.deletingPathExtension().lastPathComponent
         let name = item.isFolder ? "\(item.url.lastPathComponent) copy" : "\(base) copy.\(item.url.pathExtension)"
         let destination = uniqueURL(for: name, in: item.url.deletingLastPathComponent())
-        try fileManager.copyItem(at: item.url, to: destination)
+        let source = item.url
+        try await Task.detached(priority: .userInitiated) {
+            var coordinatorError: NSError?
+            var copyError: Error?
+            NSFileCoordinator().coordinate(readingItemAt: source, options: [], writingItemAt: destination, options: .forReplacing, error: &coordinatorError) { readURL, writeURL in
+                do { try FileManager.default.copyItem(at: readURL, to: writeURL) } catch { copyError = error }
+            }
+            if let error = coordinatorError ?? copyError { throw error }
+        }.value
         revision += 1
         return destination
     }
@@ -319,37 +347,48 @@ final class FileLibrary {
     func move(_ items: [LibraryItem], to folder: URL) throws {
         for item in items where item.url.deletingLastPathComponent().standardizedFileURL != folder.standardizedFileURL {
             // A folder can't go inside itself.
-            if item.isFolder, folder.standardizedFileURL.path.hasPrefix(item.url.standardizedFileURL.path) { continue }
+            let target = folder.standardizedFileURL.path, source = item.url.standardizedFileURL.path
+            if item.isFolder, target == source || target.hasPrefix(source + "/") {
+                throw CocoaError(.fileWriteInvalidFileName, userInfo: [NSLocalizedDescriptionKey: "A folder can't go inside itself."])
+            }
             try fileManager.moveItem(at: item.url, to: uniqueURL(for: item.url.lastPathComponent, in: folder))
         }
         revision += 1
     }
 
     /// Copies files picked from elsewhere into a library folder. Returns the copies.
+    /// Off the main thread and coordinated: a source that's only in iCloud or a
+    /// storage provider downloads first, without freezing the screen.
     @discardableResult
-    func importFiles(_ urls: [URL], into folder: URL) throws -> [URL] {
+    func importFiles(_ urls: [URL], into folder: URL) async throws -> [URL] {
+        let result = await Task.detached(priority: .userInitiated) {
+            Self.copyIn(urls, to: folder)
+        }.value
+        revision += 1
+        if result.copied.isEmpty, let error = result.error { throw error }
+        return result.copied
+    }
+
+    nonisolated private static func copyIn(_ urls: [URL], to folder: URL) -> (copied: [URL], error: Error?) {
+        let fileManager = FileManager.default
         var copied: [URL] = []
         var firstError: Error?
         for url in urls {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            do {
-                let destination = uniqueURL(for: url.lastPathComponent, in: folder)
-                // Coordinate, so an iCloud file is downloaded before it's copied.
-                var coordinatorError: NSError?
-                var copyError: Error?
-                NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinatorError) { readURL in
-                    do { try fileManager.copyItem(at: readURL, to: destination) } catch { copyError = error }
-                }
-                if let error = coordinatorError ?? copyError { throw error }
-                copied.append(destination)
-            } catch {
+            let destination = uniqueURL(for: url.lastPathComponent, in: folder)
+            var coordinatorError: NSError?
+            var copyError: Error?
+            NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinatorError) { readURL in
+                do { try fileManager.copyItem(at: readURL, to: destination) } catch { copyError = error }
+            }
+            if let error = coordinatorError ?? copyError {
                 firstError = firstError ?? error
+            } else {
+                copied.append(destination)
             }
         }
-        revision += 1
-        if copied.isEmpty, let firstError { throw firstError }
-        return copied
+        return (copied, firstError)
     }
 
     func adoptFromInbox(_ url: URL) throws -> URL {
@@ -366,6 +405,11 @@ final class FileLibrary {
 
     /// "Name.stl", then "Name 2.stl", "Name 3.stl"…
     func uniqueURL(for fileName: String, in folder: URL) -> URL {
+        Self.uniqueURL(for: fileName, in: folder)
+    }
+
+    nonisolated static func uniqueURL(for fileName: String, in folder: URL) -> URL {
+        let fileManager = FileManager.default
         let candidate = folder.appending(path: fileName)
         guard fileManager.fileExists(atPath: candidate.path) else { return candidate }
         let ext = (fileName as NSString).pathExtension

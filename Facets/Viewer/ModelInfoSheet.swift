@@ -79,10 +79,13 @@ struct ModelInfoSheet: View {
                 Section {
                     LabeledContent("Name", value: file.url.lastPathComponent)
                     LabeledContent("Format", value: model.format.rawValue)
-                    Picker("File Units", selection: Binding(get: { unitScale }, set: setUnitScale)) {
-                        Text("As Saved · \(largestSide(1))").tag(Float(1))
-                        ForEach(UnitGuess.allCases) { unit in
-                            Text("\(unit.title) · \(largestSide(unit.factor))").tag(unit.factor)
+                    // 3MF states its units, so only STL and OBJ can be read at the wrong scale.
+                    if model.format != .threeMF {
+                        Picker("File Units", selection: Binding(get: { unitScale }, set: { setUnitScale($0) })) {
+                            Text("As Saved · \(largestSide(1))").tag(Float(1))
+                            ForEach(UnitGuess.allCases) { unit in
+                                Text("\(unit.title) · \(largestSide(unit.factor))").tag(unit.factor)
+                            }
                         }
                     }
                     if let fileSize {
@@ -98,7 +101,9 @@ struct ModelInfoSheet: View {
                 } header: {
                     Text("File")
                 } footer: {
-                    Text("File Units sets what one unit in the file means, for a model saved in metres, centimetres or inches. Facets remembers it for this file; the file itself isn't changed.")
+                    if model.format != .threeMF {
+                        Text("File Units sets what one unit in the file means, for a model saved in metres, centimetres or inches. Facets remembers it for this file; the file itself isn't changed.")
+                    }
                 }
             }
             .navigationTitle(file.displayName)
@@ -153,10 +158,19 @@ struct ModelInfoSheet: View {
                 LabeledContent("Print Time", value: "about \(Format.roughDuration(seconds: estimate.seconds))")
                 LabeledContent("Filament", value: "about \(Format.roughGrams(estimate.grams))")
             } header: {
-                Text("Print Estimate")
+                Text(model.plates.count > 1 && appearance.plateID == nil ? "Print Estimate, All Plates" : "Print Estimate")
             } footer: {
-                Text("Estimated from the model's shape for \(printerName), with typical settings: 0.2 mm layers, two walls and 15% \(material.title) infill. Your slicer will usually be within 10% on filament and 20% on time, more if the model needs supports.\(fitsPrinter == false ? " It doesn't fit this printer as it sits." : "")")
+                Text("Estimated from the model's shape for \(printerName), with typical settings: 0.2 mm layers, two walls and 15% \(material.title) infill. Your slicer will typically be within 10% on filament and \(timeMargin)% on time, more if the model needs supports.\(fitsPrinter == false ? " It doesn't fit this printer as it sits." : "")")
             }
+        }
+    }
+
+    /// The median time error for this kind of printer (docs/print-estimates.md), rounded.
+    private var timeMargin: Int {
+        switch printer?.machine ?? .bambuCoreXY {
+        case .bambuCoreXY, .bambuBedSlinger: 15
+        case .coreXY: 20
+        default: 25
         }
     }
 

@@ -104,7 +104,7 @@ struct BrowseView: View {
                         }
                     } icon: {
                         Image(systemName: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(.tint)
                     }
                 }
             }

@@ -14,7 +14,7 @@ struct RecentsView: View {
                     Button {
                         open(entry)
                     } label: {
-                        RecentRow(entry: entry, url: recents.resolve(entry), isAvailable: recents.isAvailable(entry))
+                        RecentRow(entry: entry)
                     }
                     .buttonStyle(.plain)
                     .swipeActions {
@@ -66,8 +66,8 @@ struct RecentsView: View {
 
 private struct RecentRow: View {
     let entry: RecentsStore.Entry
-    let url: URL?
-    let isAvailable: Bool
+    @State private var state: RecentsStore.FileState?
+    private var isAvailable: Bool { state?.isAvailable ?? true }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .headline) private var thumbnailSize: CGFloat = 52
@@ -75,11 +75,10 @@ private struct RecentRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Group {
-                if let url, isAvailable {
+                if let state, let url = state.url, state.isAvailable {
                     // Keyed on the file itself, as the library is, so the two share
                     // one cached picture and reopening doesn't redraw it.
-                    let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-                    ModelThumbnail(url: url, size: values?.fileSize.map(Int64.init), modified: values?.contentModificationDate, cornerRadius: 10, showsBackdrop: false)
+                    ModelThumbnail(url: url, size: state.size, modified: state.modified, cornerRadius: 10, showsBackdrop: false, isDownloaded: state.isDownloaded)
                 } else if !isAvailable {
                     Image(systemName: "questionmark.folder")
                         .font(.title3)
@@ -116,5 +115,9 @@ private struct RecentRow: View {
         }
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
+        .task(id: entry) {
+            let bookmark = entry.bookmark
+            state = await Task.detached(priority: .userInitiated) { RecentsStore.fileState(for: bookmark) }.value
+        }
     }
 }

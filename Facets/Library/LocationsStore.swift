@@ -25,7 +25,7 @@ final class LocationsStore {
             // to one. Ones that don't resolve stay, to show "Add it again".
             locations = saved.filter { location in
                 var stale = false
-                guard let url = try? URL(resolvingBookmarkData: location.bookmark, bookmarkDataIsStale: &stale) else { return true }
+                guard let url = try? Bookmark.resolve(location.bookmark, isStale: &stale) else { return true }
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                 return Self.isFolder(url)
@@ -51,7 +51,7 @@ final class LocationsStore {
         if let existing = locations.first(where: { self.url(for: $0)?.standardizedFileURL.path == path }) {
             return existing
         }
-        let bookmark = try url.bookmarkData()
+        let bookmark = try Bookmark.make(url)
         let location = Location(id: UUID(), name: Self.displayName(of: url), bookmark: bookmark, isCloud: Self.isCloud(url))
         locations.append(location)
         save()
@@ -62,9 +62,9 @@ final class LocationsStore {
     func url(for location: Location) -> URL? {
         if let url = open[location.id] { return url }
         var stale = false
-        guard let url = try? URL(resolvingBookmarkData: location.bookmark, bookmarkDataIsStale: &stale) else { return nil }
+        guard let url = try? Bookmark.resolve(location.bookmark, isStale: &stale) else { return nil }
         guard url.startAccessingSecurityScopedResource() else { return nil }
-        if stale, let fresh = try? url.bookmarkData(), let index = locations.firstIndex(where: { $0.id == location.id }) {
+        if stale, let fresh = try? Bookmark.make(url), let index = locations.firstIndex(where: { $0.id == location.id }) {
             locations[index].bookmark = fresh
             save()
         }

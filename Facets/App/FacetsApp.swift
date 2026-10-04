@@ -1,5 +1,6 @@
 import CoreSpotlight
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct FacetsApp: App {
@@ -22,7 +23,12 @@ struct FacetsApp: App {
         #if os(macOS)
         .defaultSize(width: 1100, height: 760)
         #endif
-        .commands { ViewerCommands() }
+        .commands {
+            ViewerCommands()
+            #if os(macOS)
+            OpenCommands(library: library)
+            #endif
+        }
 
         #if os(macOS)
         // A model opened from Finder, another app, Spotlight or a Shortcut.
@@ -36,16 +42,60 @@ struct FacetsApp: App {
             }
         }
         .defaultSize(width: 900, height: 700)
+        // A restored window would hold a bare URL without the user's permission to it.
+        .restorationBehavior(.disabled)
+
+        // Facets › Settings… (⌘,), where a Mac keeps its settings, not a sidebar tab.
+        Settings {
+            SettingsWindow()
+                .environment(library)
+                .environment(settings)
+        }
         #endif
     }
 }
 
 #if os(macOS)
+/// File › Open… (⌘O): any model on the Mac, in a window of its own.
+private struct OpenCommands: Commands {
+    let library: FileLibrary
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("Open…") {
+                let panel = NSOpenPanel()
+                panel.allowedContentTypes = UTType.models
+                panel.allowsMultipleSelection = true
+                guard panel.runModal() == .OK else { return }
+                for url in panel.urls {
+                    openWindow(value: ModelFileRef(url: url, isExternal: !library.contains(url)))
+                }
+            }
+            .keyboardShortcut("o")
+        }
+    }
+}
+
+/// The Settings window, with a toast centre of its own for Recently Deleted.
+private struct SettingsWindow: View {
+    @State private var toasts = ToastCenter()
+
+    var body: some View {
+        SettingsView()
+            .formStyle(.grouped)
+            .frame(minWidth: 460, idealWidth: 520, minHeight: 480, idealHeight: 640)
+            .toastHost(clearance: 24)
+            .environment(toasts)
+    }
+}
+
 /// A viewer window, with the per-window state a viewer expects around it.
 private struct ModelWindow: View {
     let file: ModelFileRef
     @State private var router = Router()
     @State private var toasts = ToastCenter()
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         NavigationStack {
@@ -56,6 +106,13 @@ private struct ModelWindow: View {
         .toastHost(clearance: 24)
         .environment(router)
         .environment(toasts)
+        // "Find in Files…" and "Open Another File…" ask the router for a file; here
+        // that's another window.
+        .onChange(of: router.presented) { _, next in
+            guard let next else { return }
+            openWindow(value: next)
+            router.presented = nil
+        }
     }
 }
 #endif

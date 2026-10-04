@@ -120,7 +120,7 @@ struct ViewerScreen: View {
                 }
                     // Under the bars, but beside an open inspector rather than behind it.
                     .ignoresSafeArea(edges: showingInfo && infoAsInspector ? .vertical : .all)
-                    .accessibilityLabel("\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))\(fitNote(for: model).map { ". \($0.text)" } ?? "")")
+                    .accessibilityLabel("\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))\(unitSuggestions.isEmpty ? fitNote(for: model).map { ". \($0.text)" } ?? "" : "")")
                     .accessibilityHint("Swipe up or down to turn the model or change the view.")
             }
         }
@@ -145,7 +145,7 @@ struct ViewerScreen: View {
         content
         // A sheet on iPhone, where the model glides up above it; an inspector beside
         // the model on iPad and Mac, so hiding an object shows what changed.
-        .modifier(InfoPresentation(asInspector: infoAsInspector, isPresented: $showingInfo) { infoSheet })
+        .modifier(InfoPresentation(asInspector: infoAsInspector, isPresented: $showingInfo) { infoSheet(showsDone: $0) })
         .onChange(of: showingInfo) {
             // The canvas narrows or widens with the inspector; reframe once it has.
             guard infoAsInspector else { return }
@@ -395,7 +395,8 @@ struct ViewerScreen: View {
 
     /// A plate or printer change rewrites the verdict where VoiceOver can't see it.
     private func announceFit() {
-        guard Spoken.isVoiceOverRunning, let model = shownModel,
+        // While the units are in question, the fit isn't worth saying.
+        guard Spoken.isVoiceOverRunning, unitSuggestions.isEmpty, let model = shownModel,
               let note = fitNote(for: model) else { return }
         Spoken.announce(note.text)
     }
@@ -468,7 +469,7 @@ struct ViewerScreen: View {
     }
 
     @ViewBuilder
-    private var infoSheet: some View {
+    private func infoSheet(showsDone: Bool) -> some View {
         if let model = shownModel {
             ModelInfoSheet(
                 model: model, file: file, fileSize: fileSize, units: settings.units, material: settings.material,
@@ -476,7 +477,7 @@ struct ViewerScreen: View {
                 fitsPrinter: settings.fitBed.flatMap { verdict(model, on: $0) }.map { $0 == .fits || $0 == .fitsTurned },
                 unitScale: unitScale, originalSize: original?.bounds.size ?? model.bounds.size, setUnitScale: setUnit,
                 close: { showingInfo = false },
-                showsDone: !infoAsInspector,
+                showsDone: showsDone,
                 appearance: $appearance, detent: $infoDetent
             )
         }
@@ -526,12 +527,24 @@ struct ViewerScreen: View {
         rescale(to: factor)
     }
 
+    /// Scaling a big mesh takes a moment, so it happens off the main thread; a turn
+    /// still in flight is dropped, since it was of the old size.
     private func rescale(to factor: Float) {
         guard let original else { return }
         unitScale = factor
+        turnGeneration += 1
+        let generation = turnGeneration
         arranged = nil
         measurePoints = []
-        phase = .loaded(factor == 1 ? original : original.scaled(by: factor))
+        guard factor != 1 else {
+            phase = .loaded(original)
+            return
+        }
+        Task {
+            let scaled = await Task.detached(priority: .userInitiated) { original.scaled(by: factor) }.value
+            guard generation == turnGeneration, unitScale == factor else { return }
+            phase = .loaded(scaled)
+        }
     }
 
     // MARK: Tools
@@ -734,13 +747,15 @@ struct ViewerScreen: View {
     }
 
     private func saveToLibrary() {
-        do {
-            let copies = try library.importFiles([file.url], into: library.root)
-            guard let copy = copies.first else { return }
-            withAnimation(.snappy) { isSaved = true }
-            toasts.show("Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))")
-        } catch {
-            saveError = FriendlyError(file: error).message
+        Task {
+            do {
+                let copies = try await library.importFiles([file.url], into: library.root)
+                guard let copy = copies.first else { return }
+                withAnimation(.snappy) { isSaved = true }
+                toasts.show("Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))")
+            } catch {
+                saveError = FriendlyError(file: error).message
+            }
         }
     }
 
@@ -761,6 +776,8 @@ private struct ViewerChips: View {
     /// The file's unit is in question (the unit card is up): no verdict yet.
     let unsureOfUnits: Bool
     let choosePrinter: () -> Void
+    /// The printer glyph is an image, not a symbol, so it's sized with the text by hand.
+    @ScaledMetric(relativeTo: .caption) private var glyph: CGFloat = 14
 
     /// iPad's canvas is much larger; the chips step up a size or two to match.
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -839,7 +856,14 @@ private struct ViewerChips: View {
                     .font((wide ? Font.subheadline : .caption).weight(.medium).monospacedDigit())
                     .multilineTextAlignment(.center)
                 } else if checksFit, !hasPrinter {
-                    Label("No printer selected", image: "printer3d")
+                    Label {
+                        Text("No printer selected")
+                    } icon: {
+                        Image("printer3d")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: glyph * (wide ? 1.2 : 1), height: glyph * (wide ? 1.2 : 1))
+                    }
                         .font((wide ? Font.subheadline : .caption).weight(.medium))
                         .foregroundStyle(Color.secondary)
                 }
@@ -894,20 +918,24 @@ private struct GestureHint: View {
     }
 }
 
-/// Info as a sheet on iPhone; as an inspector beside the model on iPad and Mac. Only
-/// one is attached, so the inspector's toolbar can't leak into the iPhone viewer.
+/// Info as a sheet on iPhone; as an inspector beside the model on iPad and Mac. Both
+/// are always attached, so the canvas keeps its identity when an iPad window changes
+/// size class; each only ever sees `isPresented` when it's the one in use. The
+/// inspector's copy never has a Done button, so nothing leaks into the viewer's bar.
 private struct InfoPresentation<Info: View>: ViewModifier {
     let asInspector: Bool
     @Binding var isPresented: Bool
-    @ViewBuilder let info: () -> Info
+    @ViewBuilder let info: (_ showsDone: Bool) -> Info
 
     func body(content: Content) -> some View {
-        if asInspector {
-            content.inspector(isPresented: $isPresented) {
-                info().inspectorColumnWidth(min: 320, ideal: 360, max: 440)
+        content
+            .inspector(isPresented: gated(asInspector)) {
+                info(false).inspectorColumnWidth(min: 320, ideal: 360, max: 440)
             }
-        } else {
-            content.sheet(isPresented: $isPresented) { info() }
-        }
+            .sheet(isPresented: gated(!asInspector)) { info(true) }
+    }
+
+    private func gated(_ active: Bool) -> Binding<Bool> {
+        Binding(get: { active && isPresented }, set: { if active { isPresented = $0 } })
     }
 }

@@ -54,7 +54,7 @@ actor ThumbnailStore {
         if let image = PlatformImage(contentsOfFile: file.path) {
             memory.setObject(image, forKey: key as NSString)
             // Drawn before the shared copy existed: share it now.
-            shareIfMissing(file, for: url, modified: modified, look: look)
+            shareIfMissing(file, for: url, modified: modified, pixelSize: pixelSize, look: look)
             return image
         }
         // The cell scrolled away while it waited its turn.
@@ -62,7 +62,10 @@ actor ThumbnailStore {
 
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        // Coordinated, so a file that's only in iCloud downloads first.
+        // A file that's only in iCloud downloads first, outside this actor: while it
+        // does, cached and shared pictures keep coming. At most two at a time.
+        guard await Self.ensureLocal(url), !Task.isCancelled else { return nil }
+        // Rendering stays one at a time, so only one big model is in memory.
         var model: Model3D?
         var error: NSError?
         NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { readURL in
@@ -79,8 +82,26 @@ actor ThumbnailStore {
             CGImageDestinationAddImage(destination, cgImage, nil)
             CGImageDestinationFinalize(destination)
         }
-        shareIfMissing(file, for: url, modified: modified, look: look)
+        shareIfMissing(file, for: url, modified: modified, pixelSize: pixelSize, look: look)
         return image
+    }
+
+    private static let downloads = DownloadGate(limit: 2)
+
+    /// Makes sure a file's data is on the device, downloading it from iCloud (or a
+    /// storage provider) if need be. Runs off the actor; false if it couldn't.
+    nonisolated private static func ensureLocal(_ url: URL) async -> Bool {
+        let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus
+        if status == nil || status == .current || status == .downloaded { return true }
+        await downloads.enter()
+        defer { Task { await downloads.leave() } }
+        guard !Task.isCancelled else { return false }
+        return await Task.detached(priority: .utility) {
+            // A coordinated read waits for the download; the block itself needn't read.
+            var error: NSError?
+            NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { _ in }
+            return error == nil
+        }.value
     }
 
     // MARK: Shared through iCloud
@@ -92,16 +113,17 @@ actor ThumbnailStore {
         return LibraryLocation.current.appending(path: ".thumbnails", directoryHint: .isDirectory)
     }
 
-    /// Path-free, so the same file on another device finds it: name, date and look.
-    private static func sharedKey(for url: URL, modified: Date?, look: Look) -> String {
-        let raw = "\(url.lastPathComponent)|\(Int(modified?.timeIntervalSince1970 ?? 0))|\(look.colorHex)|\(look.usesFileColors)"
+    /// Path-free, so the same file on another device finds it: name, date, size of
+    /// picture and look.
+    private static func sharedKey(for url: URL, modified: Date?, pixelSize: Int, look: Look) -> String {
+        let raw = "\(url.lastPathComponent)|\(Int(modified?.timeIntervalSince1970 ?? 0))|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
         return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     /// Copies a drawn picture into the shared folder, for library files only.
-    private func shareIfMissing(_ file: URL, for url: URL, modified: Date?, look: Look) {
+    private func shareIfMissing(_ file: URL, for url: URL, modified: Date?, pixelSize: Int, look: Look) {
         guard let shared = sharedDirectory, url.standardizedFileURL.path.hasPrefix(LibraryLocation.current.path + "/") else { return }
-        let destination = shared.appending(path: "\(Self.sharedKey(for: url, modified: modified, look: look)).png")
+        let destination = shared.appending(path: "\(Self.sharedKey(for: url, modified: modified, pixelSize: pixelSize, look: look)).png")
         guard !FileManager.default.fileExists(atPath: destination.path) else { return }
         try? FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
         var error: NSError?
@@ -113,28 +135,74 @@ actor ThumbnailStore {
     /// The picture another device drew for a model that isn't downloaded here. The
     /// thumbnail itself may still be in the cloud; reading it coordinated fetches it,
     /// and it's small.
-    func sharedThumbnail(for url: URL, modified: Date?, look: Look) async -> PlatformImage? {
+    /// Tries the size asked for, then larger (scaled down cleanly), then smaller.
+    func sharedThumbnail(for url: URL, modified: Date?, pixelSize: Int, look: Look) async -> PlatformImage? {
         guard let shared = sharedDirectory else { return nil }
-        let key = Self.sharedKey(for: url, modified: modified, look: look)
-        if let image = memory.object(forKey: "shared-\(key)" as NSString) { return image }
-        let file = shared.appending(path: "\(key).png")
-        var image: PlatformImage?
-        var error: NSError?
-        NSFileCoordinator().coordinate(readingItemAt: file, options: [], error: &error) { readURL in
-            image = PlatformImage(contentsOfFile: readURL.path)
+        let sizes = [pixelSize] + [512, 256, 128].filter { $0 > pixelSize } + [512, 256, 128].filter { $0 < pixelSize }
+        for size in sizes {
+            let key = Self.sharedKey(for: url, modified: modified, pixelSize: size, look: look)
+            if let image = memory.object(forKey: "shared-\(key)" as NSString) { return image }
+            let file = shared.appending(path: "\(key).png")
+            // Only ask for files that are there (in the cloud or not); a coordinated
+            // read of a missing one would just fail, slowly.
+            let placeholder = shared.appending(path: ".\(key).png.icloud")
+            guard FileManager.default.fileExists(atPath: file.path) || FileManager.default.fileExists(atPath: placeholder.path) else { continue }
+            var image: PlatformImage?
+            var error: NSError?
+            NSFileCoordinator().coordinate(readingItemAt: file, options: [], error: &error) { readURL in
+                image = PlatformImage(contentsOfFile: readURL.path)
+            }
+            if let image {
+                memory.setObject(image, forKey: "shared-\(key)" as NSString)
+                return image
+            }
         }
-        if let image { memory.setObject(image, forKey: "shared-\(key)" as NSString) }
-        return image
+        return nil
     }
 
+    /// Empties this device's cache and the library's shared pictures; every device
+    /// redraws what it needs.
     func clear() {
         memory.removeAllObjects()
         try? FileManager.default.removeItem(at: directory)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if let shared = sharedDirectory {
+            var error: NSError?
+            NSFileCoordinator().coordinate(writingItemAt: shared, options: .forDeleting, error: &error) { target in
+                try? FileManager.default.removeItem(at: target)
+            }
+        }
     }
 
     func diskUsage() -> Int64 {
         let urls = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey])) ?? []
         return urls.reduce(0) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+    }
+}
+
+/// Lets a few downloads run at once and queues the rest.
+private actor DownloadGate {
+    private let limit: Int
+    private var running = 0
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    init(limit: Int) {
+        self.limit = limit
+    }
+
+    func enter() async {
+        if running < limit {
+            running += 1
+            return
+        }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func leave() {
+        if waiting.isEmpty {
+            running -= 1
+        } else {
+            waiting.removeFirst().resume()
+        }
     }
 }

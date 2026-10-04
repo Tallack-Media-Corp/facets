@@ -672,8 +672,14 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         convert(event.locationInWindow, from: nil)
     }
 
+    /// A click waits out the double-click interval before it picks, so a double
+    /// click (fit) doesn't also drop a measuring point.
+    private var pendingClick: Task<Void, Never>?
+
     public override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        pendingClick?.cancel()
+        pendingClick = nil
         interrupt()
         dragStart = location(of: event)
         dragMoved = false
@@ -699,7 +705,12 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     public override func mouseUp(with event: NSEvent) {
         defer { dragStart = nil }
         guard dragStart != nil, !dragMoved, event.clickCount == 1 else { return }
-        tapped(at: location(of: event))
+        let point = location(of: event)
+        pendingClick = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(NSEvent.doubleClickInterval))
+            guard !Task.isCancelled else { return }
+            self?.tapped(at: point)
+        }
     }
 
     public override func rightMouseDown(with event: NSEvent) {

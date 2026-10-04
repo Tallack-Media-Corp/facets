@@ -63,7 +63,7 @@ struct ModelThumbnail: View {
                 if isDownloaded {
                     result = await ThumbnailStore.shared.thumbnail(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
                 } else {
-                    result = await ThumbnailStore.shared.sharedThumbnail(for: url, modified: modified, look: look)
+                    result = await ThumbnailStore.shared.sharedThumbnail(for: url, modified: modified, pixelSize: pixels, look: look)
                     // No device has drawn it yet: fetch a reasonably small file once and
                     // draw it, which shares the picture with the others too.
                     if result == nil, let size, size <= Self.fetchLimit {

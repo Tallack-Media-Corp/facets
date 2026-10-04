@@ -16,9 +16,11 @@ struct RootView: View {
             Tab("Recents", systemImage: "clock", value: Router.Tab.recents) {
                 RecentsView()
             }
+            #if os(iOS)
             Tab("Settings", systemImage: "gearshape", value: Router.Tab.settings) {
                 SettingsView()
             }
+            #endif
             Tab(value: Router.Tab.search, role: .search) {
                 SearchView()
             }
@@ -32,6 +34,7 @@ struct RootView: View {
                 ViewerScreen(file: file, showsCloseButton: true)
             }
             .toastHost(clearance: 80)
+            .zoomDestination(id: file.url, in: router.zoomSource)
         }
         #else
         .tabViewStyle(.sidebarAdaptable)

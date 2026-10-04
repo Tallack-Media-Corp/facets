@@ -52,7 +52,7 @@ struct FolderView: View {
             .toolbar { toolbar }
             .fileImporter(isPresented: $importing, allowedContentTypes: UTType.models, allowsMultipleSelection: true) { result in
                 switch result {
-                case .success(let urls): perform("Couldn't Import") { try library.importFiles(urls, into: folder) }
+                case .success(let urls): perform("Couldn't Import") { try await library.importFiles(urls, into: folder) }
                 case .failure(let error): failure = ("Couldn't Import", FriendlyError(file: error).message)
                 }
             }
@@ -77,7 +77,7 @@ struct FolderView: View {
             .onAppear(perform: reload)
             .onChange(of: library.revision) { reload() }
             .onChange(of: sort) { reload() }
-            .refreshable { reload() }
+            .refreshable { await load() }
             .task {
                 if watcher == nil {
                     watcher = FolderWatcher(url: folder) { [library] in library.noteExternalChange() }
@@ -151,7 +151,7 @@ struct FolderView: View {
                         .zoomSource(id: item.url, in: zoom)
                         .contextMenu { actions(for: item) } preview: {
                             if !item.isFolder {
-                                ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0)
+                                ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0, isDownloaded: item.isDownloaded)
                                     .frame(width: 300, height: 300)
                                     // Previews render outside this view's environment.
                                     .environment(settings)
@@ -246,7 +246,7 @@ struct FolderView: View {
     @ViewBuilder
     private func libraryActions(for item: LibraryItem) -> some View {
         Button("Rename", systemImage: "pencil") { beginRename(item) }
-        Button("Duplicate", systemImage: "plus.square.on.square") { perform("Couldn't Duplicate") { try library.duplicate(item) } }
+        Button("Duplicate", systemImage: "plus.square.on.square") { perform("Couldn't Duplicate") { try await library.duplicate(item) } }
         Button("Move…", systemImage: "folder") { moving = item }
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) { requestDelete(item) }
@@ -272,12 +272,12 @@ struct FolderView: View {
     }
 
     private func isSaved(_ item: LibraryItem) -> Bool {
-        saved.contains(item.url) || library.hasCopy(of: item.url)
+        saved.contains(item.url) || library.hasCopy(of: item.url, size: item.size)
     }
 
     private func save(_ item: LibraryItem) {
         perform("Couldn't Save to Library") {
-            guard let copy = try library.importFiles([item.url], into: library.root).first else { return }
+            guard let copy = try await library.importFiles([item.url], into: library.root).first else { return }
             saved.insert(item.url)
             toasts.show("Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))")
         }
@@ -320,17 +320,23 @@ struct FolderView: View {
     /// Downloads) never freezes the screen; a frozen screen queues taps that then
     /// land on whatever row appears under them. Names show first, counts after.
     private func reload() {
+        Task { await load() }
+    }
+
+    /// Lists the folder; returns once the list is showing (pull to refresh waits for
+    /// it), with the folder counts following on their own.
+    private func load() async {
         loadGeneration += 1
         let generation = loadGeneration
         let folder = folder, sort = sort, root = library.root
+        let listed = await Task.detached(priority: .userInitiated) {
+            FileLibrary.scan(folder, sort: sort, root: root)
+        }.value
+        guard generation == loadGeneration else { return }
+        items = listed
+        loaded = true
+        guard listed.contains(where: \.isFolder) else { return }
         Task {
-            let listed = await Task.detached(priority: .userInitiated) {
-                FileLibrary.scan(folder, sort: sort, root: root)
-            }.value
-            guard generation == loadGeneration else { return }
-            items = listed
-            loaded = true
-            guard listed.contains(where: \.isFolder) else { return }
             let counted = await Task.detached(priority: .utility) {
                 FileLibrary.withChildCounts(listed)
             }.value
@@ -345,6 +351,17 @@ struct FolderView: View {
             try action()
         } catch {
             failure = (title, FriendlyError(file: error).message)
+        }
+    }
+
+    /// The same, for work that copies files (and may wait on iCloud) in the background.
+    private func perform(_ title: String, _ action: @escaping () async throws -> Void) {
+        Task {
+            do {
+                try await action()
+            } catch {
+                failure = (title, FriendlyError(file: error).message)
+            }
         }
     }
 
@@ -364,7 +381,7 @@ struct FolderView: View {
                 if let url = await Self.stage(provider, type: type) { staged.append(url) }
             }
             var added = 0
-            if !staged.isEmpty, let copies = try? library.importFiles(staged, into: destination) {
+            if !staged.isEmpty, let copies = try? await library.importFiles(staged, into: destination) {
                 added = copies.count
             }
             for url in staged { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -510,10 +527,11 @@ struct MoveSheet: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.undoManager) private var undoManager
     @Environment(\.dismiss) private var dismiss
+    @State private var folders: [URL]?
 
     var body: some View {
         NavigationStack {
-            List(library.allFolders(), id: \.self) { folder in
+            List(folders ?? [], id: \.self) { folder in
                 let isCurrent = folder.standardizedFileURL == item.url.deletingLastPathComponent().standardizedFileURL
                 // The folder itself or anything inside it; "Parts 2" isn't inside "Parts".
                 let moving = item.url.standardizedFileURL.path
@@ -535,6 +553,11 @@ struct MoveSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .overlay { if folders == nil { ProgressView() } }
+        .task {
+            let root = library.root
+            folders = await Task.detached(priority: .userInitiated) { FileLibrary.allFolders(in: root) }.value
+        }
     }
 
     private func name(of folder: URL) -> String {

@@ -29,7 +29,7 @@ final class RecentsStore {
 
     /// Call while the URL is accessible (inside its security scope).
     func record(_ file: ModelFileRef) {
-        guard let bookmark = try? file.url.bookmarkData() else { return }
+        guard let bookmark = try? Bookmark.make(file.url) else { return }
         let path = file.url.standardizedFileURL.path
         entries.removeAll { resolve($0)?.standardizedFileURL.path == path }
         entries.insert(Entry(
@@ -46,7 +46,7 @@ final class RecentsStore {
 
     func resolve(_ entry: Entry) -> URL? {
         var stale = false
-        guard let url = try? URL(resolvingBookmarkData: entry.bookmark, bookmarkDataIsStale: &stale) else { return nil }
+        guard let url = try? Bookmark.resolve(entry.bookmark, isStale: &stale) else { return nil }
         return url
     }
 
@@ -56,6 +56,33 @@ final class RecentsStore {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    /// What a row shows about an entry's file. Resolving a bookmark and reading the
+    /// file's details can be slow (another app's storage, iCloud), so rows do it off
+    /// the main thread.
+    struct FileState: Sendable, Equatable {
+        var url: URL?
+        var isAvailable = false
+        var size: Int64?
+        var modified: Date?
+        var isDownloaded = true
+    }
+
+    nonisolated static func fileState(for bookmark: Data) -> FileState {
+        var stale = false
+        guard let url = try? Bookmark.resolve(bookmark, isStale: &stale) else { return FileState() }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let fileManager = FileManager.default
+        let placeholder = url.deletingLastPathComponent().appending(path: ".\(url.lastPathComponent).icloud")
+        if !fileManager.fileExists(atPath: url.path) {
+            return FileState(url: url, isAvailable: fileManager.fileExists(atPath: placeholder.path), isDownloaded: false)
+        }
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .ubiquitousItemDownloadingStatusKey])
+        let status = values?.ubiquitousItemDownloadingStatus
+        return FileState(url: url, isAvailable: true, size: values?.fileSize.map(Int64.init), modified: values?.contentModificationDate,
+                         isDownloaded: status == nil || status == .current || status == .downloaded)
     }
 
     func contains(fileAt url: URL) -> Bool {

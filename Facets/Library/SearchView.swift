@@ -42,8 +42,10 @@ struct SearchView: View {
             }
             .navigationTitle("Search")
             .searchable(text: $query, prompt: "Models")
-            .onAppear { all = library.allModels() }
-            .onChange(of: library.revision) { all = library.allModels() }
+            .task(id: library.revision) {
+                let root = library.root
+                all = await Task.detached(priority: .userInitiated) { FileLibrary.allModels(in: root) }.value
+            }
         }
         .presentsModels()
         .environment(\.zoomNamespace, zoom)

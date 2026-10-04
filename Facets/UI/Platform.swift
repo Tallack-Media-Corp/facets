@@ -40,6 +40,26 @@ extension Color {
     }
 }
 
+/// Bookmarks that keep the user's permission across launches. On the Mac's sandbox
+/// that takes a security-scoped bookmark; iOS bookmarks carry it already.
+enum Bookmark {
+    #if os(macOS)
+    static let creation: URL.BookmarkCreationOptions = [.withSecurityScope]
+    static let resolution: URL.BookmarkResolutionOptions = [.withSecurityScope]
+    #else
+    static let creation: URL.BookmarkCreationOptions = []
+    static let resolution: URL.BookmarkResolutionOptions = []
+    #endif
+
+    static func make(_ url: URL) throws -> Data {
+        try url.bookmarkData(options: creation)
+    }
+
+    static func resolve(_ data: Data, isStale: inout Bool) throws -> URL {
+        try URL(resolvingBookmarkData: data, options: resolution, bookmarkDataIsStale: &isStale)
+    }
+}
+
 /// VoiceOver, on either platform.
 @MainActor
 enum Spoken {

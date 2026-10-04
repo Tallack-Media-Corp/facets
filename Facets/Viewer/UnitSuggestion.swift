@@ -60,11 +60,13 @@ struct UnitSuggestionCard: View {
                     .buttonStyle(.glass)
                     .accessibilityLabel("\(unit.title), \(Format.dimension(largest * unit.factor, units: units)) across")
                 }
-                Button("Keep", action: keep)
-                    .font(.footnote.weight(.semibold))
-                    .frame(minHeight: 44)
-                    .padding(.horizontal, 6)
-                    .buttonStyle(.glass)
+                Button(action: keep) {
+                    Text("Keep")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.glass)
                     .accessibilityHint("Shows the model at the size the file says")
             }
         }
