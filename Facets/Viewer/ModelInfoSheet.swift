@@ -22,6 +22,9 @@ struct ModelInfoSheet: View {
     let setUnitScale: (Float) -> Void
     /// Closes the sheet or inspector (an inspector doesn't answer to `dismiss`).
     let close: () -> Void
+    /// A Done button: in a sheet. An inspector has none (the Info button toggles it),
+    /// since its toolbar items would land in the viewer's own bar.
+    var showsDone = true
     @Binding var appearance: RenderAppearance
     @Binding var detent: PresentationDetent
 
@@ -101,8 +104,10 @@ struct ModelInfoSheet: View {
             .navigationTitle(file.displayName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", systemImage: "checkmark", action: close)
+                if showsDone {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", systemImage: "checkmark", action: close)
+                    }
                 }
             }
         }

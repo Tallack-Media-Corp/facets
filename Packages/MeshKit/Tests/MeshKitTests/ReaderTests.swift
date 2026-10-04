@@ -312,6 +312,21 @@ let rels = """
         }
     }
 
+    @Test func lookingStraightDownKeepsTheTurn() {
+        // From the top, turning the camera should still turn the picture: the view's
+        // right-hand direction follows the yaw, not a fixed fallback.
+        var camera = OrbitCamera()
+        camera.apply(.top)
+        let before = camera.viewMatrix.columns.0.x
+        camera.yaw += .pi / 4
+        let after = camera.viewMatrix.columns.0.x
+        #expect(abs(before - after) > 0.1, "\(before) vs \(after)")
+        // And it matches the ordinary view just off the pole.
+        var near = camera
+        near.pitch = .pi / 2 - 0.05
+        #expect(simd_distance(near.basis.right, camera.basis.right) < 0.001)
+    }
+
     @Test func presetsLookFromTheRightSide() {
         var camera = OrbitCamera()
         camera.distance = 10

@@ -52,9 +52,14 @@ public struct OrbitCamera: Sendable, Equatable {
     }
 
     /// The camera's right and up directions in world space, for panning.
+    /// The camera's right and up directions in world space, for panning.
+    ///
+    /// Right comes straight from the yaw rather than from crossing the view direction
+    /// with world up: looking straight down or up those are parallel, and a fallback
+    /// up would lock the view square whichever way the model had been turned.
     public var basis: (right: SIMD3<Float>, up: SIMD3<Float>) {
         let forward = simd_normalize(target - eye)
-        let right = simd_normalize(simd_cross(forward, SIMD3(0, 0, 1)))
+        let right = SIMD3<Float>(-sin(yaw), cos(yaw), 0)
         let up = simd_cross(right, forward)
         return (right, up)
     }
@@ -62,10 +67,7 @@ public struct OrbitCamera: Sendable, Equatable {
     public var viewMatrix: simd_float4x4 {
         let eye = eye
         let f = simd_normalize(target - eye)
-        var worldUp = SIMD3<Float>(0, 0, 1)
-        if abs(simd_dot(f, worldUp)) > 0.9999 { worldUp = SIMD3(0, 1, 0) }
-        let s = simd_normalize(simd_cross(f, worldUp))
-        let u = simd_cross(s, f)
+        let (s, u) = basis
         return simd_float4x4(
             SIMD4(s.x, u.x, -f.x, 0),
             SIMD4(s.y, u.y, -f.y, 0),

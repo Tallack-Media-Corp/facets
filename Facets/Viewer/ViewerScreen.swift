@@ -64,8 +64,9 @@ struct ViewerScreen: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
-        viewerStage
-            .modifier(ViewerLifecycle(screen: self))
+        // Two halves, so the compiler can type-check each; both are this view's own
+        // methods, run in its body, so their state is live.
+        lifecycle(viewerStage)
     }
 
     /// The model, its chips and panels, and the toolbar.
@@ -140,7 +141,7 @@ struct ViewerScreen: View {
 
     /// Sheets, alerts and the reactions to changes, kept apart from the stage so the
     /// compiler can type-check each half.
-    fileprivate func lifecycle(_ content: some View) -> some View {
+    private func lifecycle(_ content: some View) -> some View {
         content
         // A sheet on iPhone, where the model glides up above it; an inspector beside
         // the model on iPad and Mac, so hiding an object shows what changed.
@@ -256,7 +257,8 @@ struct ViewerScreen: View {
             }
             ToolbarSpacer(.flexible, placement: .bottomControls)
             ToolbarItem(placement: .bottomControls) {
-                Button("Info", systemImage: "info.circle") { showingInfo = true }
+                // Toggles, so it also closes the inspector on iPad and Mac.
+                Button("Info", systemImage: "info.circle") { showingInfo.toggle() }
             }
         }
     }
@@ -317,7 +319,11 @@ struct ViewerScreen: View {
         } label: {
             // A view-options glyph, or the printer once one is chosen: the menu
             // holds the printer as well as the grid.
-            Label("Display", systemImage: settings.checksFit && settings.bed != nil ? "printer" : "slider.horizontal.3")
+            if settings.checksFit && settings.bed != nil {
+                Label("Display", image: "printer3d")
+            } else {
+                Label("Display", systemImage: "slider.horizontal.3")
+            }
         }
     }
 
@@ -331,7 +337,9 @@ struct ViewerScreen: View {
                 }
             }
             .pickerStyle(.inline)
-            Button("Other Printer…", systemImage: "printer") { choosingPrinter = true }
+            Button { choosingPrinter = true } label: {
+                Label("Other Printer…", image: "printer3d")
+            }
         }
     }
 
@@ -468,6 +476,7 @@ struct ViewerScreen: View {
                 fitsPrinter: settings.fitBed.flatMap { verdict(model, on: $0) }.map { $0 == .fits || $0 == .fitsTurned },
                 unitScale: unitScale, originalSize: original?.bounds.size ?? model.bounds.size, setUnitScale: setUnit,
                 close: { showingInfo = false },
+                showsDone: !infoAsInspector,
                 appearance: $appearance, detent: $infoDetent
             )
         }
@@ -830,7 +839,7 @@ private struct ViewerChips: View {
                     .font((wide ? Font.subheadline : .caption).weight(.medium).monospacedDigit())
                     .multilineTextAlignment(.center)
                 } else if checksFit, !hasPrinter {
-                    Label("No printer selected", systemImage: "printer")
+                    Label("No printer selected", image: "printer3d")
                         .font((wide ? Font.subheadline : .caption).weight(.medium))
                         .foregroundStyle(Color.secondary)
                 }
@@ -900,13 +909,5 @@ private struct InfoPresentation<Info: View>: ViewModifier {
         } else {
             content.sheet(isPresented: $isPresented) { info() }
         }
-    }
-}
-
-private struct ViewerLifecycle: ViewModifier {
-    let screen: ViewerScreen
-
-    func body(content: Content) -> some View {
-        screen.lifecycle(content)
     }
 }
