@@ -12,6 +12,11 @@ import UniformTypeIdentifiers
 /// Renders and caches model thumbnails. One at a time, so a folder of large models
 /// never holds more than one of them in memory. Cached on disk by path, size and date,
 /// so an edited file gets a new picture.
+///
+/// With the library in iCloud Drive, each picture is also kept in the library's own
+/// hidden `.thumbnails` folder, keyed by the file's name and date rather than its path,
+/// so it syncs: a model that's only in iCloud on this device still shows the picture
+/// another device drew.
 actor ThumbnailStore {
     static let shared = ThumbnailStore()
 
@@ -48,6 +53,8 @@ actor ThumbnailStore {
         let file = directory.appending(path: "\(key).png")
         if let image = PlatformImage(contentsOfFile: file.path) {
             memory.setObject(image, forKey: key as NSString)
+            // Drawn before the shared copy existed: share it now.
+            shareIfMissing(file, for: url, modified: modified, look: look)
             return image
         }
         // The cell scrolled away while it waited its turn.
@@ -55,7 +62,13 @@ actor ThumbnailStore {
 
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let model = try? ModelLoader.load(url) else { return nil }
+        // Coordinated, so a file that's only in iCloud downloads first.
+        var model: Model3D?
+        var error: NSError?
+        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { readURL in
+            model = try? ModelLoader.load(readURL)
+        }
+        guard let model else { return nil }
         if snapshotter == nil { snapshotter = ModelSnapshotter() }
         var appearance = RenderAppearance(baseColor: RenderAppearance.linearColor(hex: look.colorHex) ?? RenderAppearance.defaultColor)
         appearance.usesFileColors = look.usesFileColors
@@ -66,6 +79,51 @@ actor ThumbnailStore {
             CGImageDestinationAddImage(destination, cgImage, nil)
             CGImageDestinationFinalize(destination)
         }
+        shareIfMissing(file, for: url, modified: modified, look: look)
+        return image
+    }
+
+    // MARK: Shared through iCloud
+
+    /// The library's hidden thumbnail folder, when the library is in iCloud Drive.
+    /// (Files hides dot-folders, and the library list skips them.)
+    private var sharedDirectory: URL? {
+        guard LibraryLocation.kind == .iCloud else { return nil }
+        return LibraryLocation.current.appending(path: ".thumbnails", directoryHint: .isDirectory)
+    }
+
+    /// Path-free, so the same file on another device finds it: name, date and look.
+    private static func sharedKey(for url: URL, modified: Date?, look: Look) -> String {
+        let raw = "\(url.lastPathComponent)|\(Int(modified?.timeIntervalSince1970 ?? 0))|\(look.colorHex)|\(look.usesFileColors)"
+        return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Copies a drawn picture into the shared folder, for library files only.
+    private func shareIfMissing(_ file: URL, for url: URL, modified: Date?, look: Look) {
+        guard let shared = sharedDirectory, url.standardizedFileURL.path.hasPrefix(LibraryLocation.current.path + "/") else { return }
+        let destination = shared.appending(path: "\(Self.sharedKey(for: url, modified: modified, look: look)).png")
+        guard !FileManager.default.fileExists(atPath: destination.path) else { return }
+        try? FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+        var error: NSError?
+        NSFileCoordinator().coordinate(writingItemAt: destination, options: .forReplacing, error: &error) { target in
+            try? FileManager.default.copyItem(at: file, to: target)
+        }
+    }
+
+    /// The picture another device drew for a model that isn't downloaded here. The
+    /// thumbnail itself may still be in the cloud; reading it coordinated fetches it,
+    /// and it's small.
+    func sharedThumbnail(for url: URL, modified: Date?, look: Look) async -> PlatformImage? {
+        guard let shared = sharedDirectory else { return nil }
+        let key = Self.sharedKey(for: url, modified: modified, look: look)
+        if let image = memory.object(forKey: "shared-\(key)" as NSString) { return image }
+        let file = shared.appending(path: "\(key).png")
+        var image: PlatformImage?
+        var error: NSError?
+        NSFileCoordinator().coordinate(readingItemAt: file, options: [], error: &error) { readURL in
+            image = PlatformImage(contentsOfFile: readURL.path)
+        }
+        if let image { memory.setObject(image, forKey: "shared-\(key)" as NSString) }
         return image
     }
 

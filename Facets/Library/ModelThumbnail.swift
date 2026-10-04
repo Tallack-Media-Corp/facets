@@ -9,6 +9,10 @@ struct ModelThumbnail: View {
     /// The studio backdrop behind the model: on for cards, off in list rows, where
     /// the row's own background is enough.
     var showsBackdrop = true
+    /// False for a model that's only in iCloud on this device: it can't be drawn
+    /// here, so the picture comes from the library's shared thumbnails, with a cloud
+    /// badge; with none yet, a cloud stands in.
+    var isDownloaded = true
 
     @Environment(\.displayScale) private var displayScale
     /// Optional: a context-menu preview is drawn outside the app's environment.
@@ -25,11 +29,15 @@ struct ModelThumbnail: View {
                 if showsBackdrop {
                     Rectangle().fill(Palette.tileGradient(pureBlack: settings?.pureBlack ?? false))
                 }
-                if let image = image ?? ThumbnailStore.shared.cached(key) {
+                if let image = image ?? (isDownloaded ? ThumbnailStore.shared.cached(key) : nil) {
                     Image(platformImage: image)
                         .resizable()
                         .scaledToFit()
                         .padding(geometry.size.width * (showsBackdrop ? 0.08 : 0.02))
+                } else if !isDownloaded {
+                    Image(systemName: "icloud.and.arrow.down")
+                        .font(.system(size: max(14, geometry.size.width * (showsBackdrop ? 0.18 : 0.4)), weight: .light))
+                        .foregroundStyle(.secondary)
                 } else {
                     Image(systemName: failed ? "exclamationmark.triangle" : "cube.transparent")
                         .font(.system(size: max(14, geometry.size.width * (showsBackdrop ? 0.28 : 0.45)), weight: .light))
@@ -39,18 +47,42 @@ struct ModelThumbnail: View {
             }
             // Fill the slot, so the picture and placeholder sit in its centre.
             .frame(width: geometry.size.width, height: geometry.size.height)
-            .task(id: key) {
+            .overlay(alignment: .bottomTrailing) {
+                // Pictured, but not on this device: it downloads when opened.
+                if !isDownloaded, image != nil {
+                    Image(systemName: "icloud")
+                        .font(.system(size: max(9, geometry.size.width * (showsBackdrop ? 0.09 : 0.22)), weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(geometry.size.width * 0.05)
+                }
+            }
+            .task(id: "\(key)|\(isDownloaded)") {
                 image = nil
                 failed = false
-                let result = await ThumbnailStore.shared.thumbnail(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
+                var result: PlatformImage?
+                if isDownloaded {
+                    result = await ThumbnailStore.shared.thumbnail(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
+                } else {
+                    result = await ThumbnailStore.shared.sharedThumbnail(for: url, modified: modified, look: look)
+                    // No device has drawn it yet: fetch a reasonably small file once and
+                    // draw it, which shares the picture with the others too.
+                    if result == nil, let size, size <= Self.fetchLimit {
+                        result = await ThumbnailStore.shared.thumbnail(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
+                    }
+                }
                 guard !Task.isCancelled else { return }
                 image = result
                 failed = result == nil
             }
         }
         .clipShape(.rect(cornerRadius: cornerRadius))
-        .accessibilityHidden(true)
+        .accessibilityElement()
+        .accessibilityLabel(isDownloaded ? "" : "In iCloud, downloads when opened")
+        .accessibilityHidden(isDownloaded)
     }
+
+    /// The largest cloud-only file fetched just to draw its picture.
+    static let fetchLimit: Int64 = 25_000_000
 
     /// Rounded up to a few fixed sizes so list and grid share cache entries.
     static func pixelSize(for size: CGSize, scale: CGFloat) -> Int {

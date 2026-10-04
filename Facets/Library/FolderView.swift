@@ -411,10 +411,8 @@ struct LibraryCard: View {
             Group {
                 if item.isFolder {
                     FolderTile()
-                } else if !item.isDownloaded {
-                    CloudTile()
                 } else {
-                    ModelThumbnail(url: item.url, size: item.size, modified: item.modified)
+                    ModelThumbnail(url: item.url, size: item.size, modified: item.modified, isDownloaded: item.isDownloaded)
                 }
             }
             .aspectRatio(1, contentMode: .fit)
@@ -458,23 +456,6 @@ struct FolderTile: View {
     }
 }
 
-/// A model in iCloud that isn't on the device yet; it downloads when opened.
-struct CloudTile: View {
-    var showsBackdrop = true
-    @Environment(ViewerSettings.self) private var settings: ViewerSettings?
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 14)
-            .fill(showsBackdrop ? AnyShapeStyle(Palette.tileGradient(pureBlack: settings?.pureBlack ?? false)) : AnyShapeStyle(.clear))
-            .overlay {
-                Image(systemName: "icloud.and.arrow.down")
-                    .font(.system(size: 28, weight: .light))
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityLabel("In iCloud, downloads when opened")
-    }
-}
-
 struct LibraryRow: View {
     let item: LibraryItem
 
@@ -487,10 +468,8 @@ struct LibraryRow: View {
             Group {
                 if item.isFolder {
                     FolderTile(showsBackdrop: false)
-                } else if !item.isDownloaded {
-                    CloudTile(showsBackdrop: false)
                 } else {
-                    ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 10, showsBackdrop: false)
+                    ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 10, showsBackdrop: false, isDownloaded: item.isDownloaded)
                 }
             }
             .frame(width: min(thumbnailSize, 88), height: min(thumbnailSize, 88))
