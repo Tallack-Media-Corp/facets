@@ -19,11 +19,15 @@ enum FacetsTips {
     static var isOn: Bool { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
 
     static func configure() {
-        #if DEBUG
-        // Screenshots and quick checks: FACETS_TIPS=0 keeps the tour out of the way.
-        if ProcessInfo.processInfo.environment["FACETS_TIPS"] == "0" { setOn(false) }
-        #endif
         enabled = isOn
+        #if DEBUG
+        // Screenshots and quick checks: FACETS_TIPS=0 keeps the tour out of the way
+        // for this launch only (the setting itself is left alone).
+        if ProcessInfo.processInfo.environment["FACETS_TIPS"] == "0" {
+            enabled = false
+            Task { @MainActor in TipsState.shared.isOn = false }
+        }
+        #endif
         try? Tips.configure([.displayFrequency(.immediate)])
         #if DEBUG
         // FACETS_TIPS_DONE=size,fit marks those tips seen, to step through the tour.
