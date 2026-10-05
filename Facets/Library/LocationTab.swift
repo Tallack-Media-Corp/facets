@@ -7,6 +7,7 @@ struct LocationTab: View {
     let location: LocationsStore.Location
 
     @Environment(LocationsStore.self) private var locations
+    @Environment(Router.self) private var router
     @Namespace private var zoom
     @State private var path: [LibraryRoute] = []
     @State private var relinking = false
@@ -25,7 +26,10 @@ struct LocationTab: View {
                     } actions: {
                         Button("Choose the Folder Again…") { relinking = true }
                             .buttonStyle(.glassProminent)
-                        Button("Remove from Sidebar", role: .destructive) { locations.remove(location) }
+                        Button("Remove from Sidebar", role: .destructive) {
+                            router.tab = .library
+                            locations.remove(location)
+                        }
                     }
                     .navigationTitle(location.name)
                 }
@@ -43,8 +47,11 @@ struct LocationTab: View {
         .environment(\.zoomNamespace, zoom)
         .environment(\.openFolder) { path.append($0) }
         .fileImporter(isPresented: $relinking, allowedContentTypes: [.folder]) { result in
-            guard case .success(let url) = result, (try? locations.add(url)) != nil else { return }
-            locations.remove(location)
+            guard case .success(let url) = result, let fresh = try? locations.add(url) else { return }
+            // The new entry takes the old one's place, and stays the one showing.
+            router.tab = .location(fresh.id)
+            // Picking the same folder hands back this very entry: keep it.
+            if fresh.id != location.id { locations.remove(location) }
         }
     }
 }

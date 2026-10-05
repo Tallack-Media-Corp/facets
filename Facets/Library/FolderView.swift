@@ -57,6 +57,7 @@ struct FolderView: View {
     @State private var anchor: URL?
     @State private var quickLook: URL?
     @State private var columnCount = 1
+    @State private var viewportHeight: CGFloat = 0
     @FocusState private var gridFocused: Bool
     @Environment(\.openModel) private var openModel
     @Environment(\.openFolder) private var openFolder
@@ -194,16 +195,24 @@ struct FolderView: View {
                     // As the adaptive grid fits them: 150 pt minimum, 16 pt apart.
                     max(1, Int((geometry.size.width - 32 + 16) / (150 + 16)))
                 } action: { columnCount = $0 }
+                // A click on the background, between or below the cards, clears the
+                // selection. It sits behind the cards, filling the visible area, so
+                // a click on a card never reaches it.
+                .frame(maxWidth: .infinity, minHeight: viewportHeight, alignment: .top)
+                .background {
+                    Color.clear
+                        .contentShape(.rect)
+                        .onTapGesture { selection = [] }
+                }
                 #endif
             }
             .background(Color.groupedBackground)
             #if os(macOS)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
             // Keys go to the grid: arrows, Return, Space, Command-Delete, Escape.
             .focusable()
             .focused($gridFocused)
             .focusEffectDisabled()
-            // A click on the background, between or below the cards, clears the selection.
-            .onTapGesture { selection = [] }
             #endif
         } else {
             #if os(macOS)
@@ -507,9 +516,10 @@ struct LibraryCard: View {
                     .font(.subheadline.weight(.medium))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                    .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                    // Primary text on a tint wash: white on Filament Orange falls short
+                    // of 4.5:1 at this size.
                     .padding(.horizontal, isSelected ? 4 : 0)
-                    .background(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 4))
+                    .background(isSelected ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 4))
                     .padding(.horizontal, isSelected ? -4 : 0)
                 Text(LibraryRow.subtitle(for: item))
                     .font(.caption)
