@@ -78,6 +78,10 @@ struct ViewerScreen: View {
     /// Counts Fit presses that found the model already framed, for a light tap (the
     /// canvas gives a small zoom pulse; with Reduce Motion the tap is all there is).
     @State private var alreadyFitTaps = 0
+    /// Counters that each trigger one kind of haptic (see DESIGN.md).
+    @State private var feedback = ViewerFeedback()
+    /// Auto Orient is working out the best face, or just found there's no better one.
+    @State private var autoOrient = AutoOrientState.idle
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The tool panel's height and the screen's, for keeping the model above it.
     @State private var panelHeight: CGFloat = 0
@@ -155,6 +159,18 @@ struct ViewerScreen: View {
         .sensoryFeedback(.selection, trigger: appearance.showsGrid)
         .sensoryFeedback(.selection, trigger: settings.bedID)
         .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: alreadyFitTaps)
+        // The tools: a tick per point and a firmer one on a corner, a soft landing
+        // when a face is laid flat, a tick per quarter turn or preset view.
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.5), trigger: feedback.point)
+        #if os(macOS)
+        // A Force Touch trackpad's click as the point catches a corner.
+        .sensoryFeedback(.alignment, trigger: feedback.snap)
+        #else
+        .sensoryFeedback(.impact(weight: .medium, intensity: 0.9), trigger: feedback.snap)
+        #endif
+        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.8), trigger: feedback.settle)
+        .sensoryFeedback(.selection, trigger: feedback.tick)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: feedback.alreadyBest)
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
         .hidesTabBar()
@@ -280,7 +296,7 @@ struct ViewerScreen: View {
             ToolbarItem(placement: .bottomControls) {
                 Menu {
                     ForEach(OrbitCamera.Preset.allCases) { preset in
-                        Button(preset.title, systemImage: symbol(for: preset)) { controller.show(preset) }
+                        Button(preset.title, systemImage: symbol(for: preset)) { showPreset(preset) }
                     }
                 } label: {
                     Label("Preset Views", systemImage: "move.3d")
@@ -502,8 +518,14 @@ struct ViewerScreen: View {
                 sectionFraction: $sectionFraction,
                 sectionHeight: sectionHeight(in: model) ?? visibleBounds(model).max.z,
                 isTurned: arranged != nil,
+                autoState: autoOrient,
                 clearPoints: { measurePoints = [] },
-                turn: { axis in reorient(by: quarterTurn(about: axis)) },
+                // From the menu, with Lay Flat open so its answer can be seen.
+            autoOrient: {
+                if tool != .layFlat { open(.layFlat) }
+                autoOrientModel()
+            },
+                turn: { axis in reorient(by: quarterTurn(about: axis), feel: .tick) },
                 resetOrientation: resetOrientation,
                 close: { closeTool() }
             )
@@ -564,12 +586,14 @@ struct ViewerScreen: View {
     }
 
     private func applyUnit(_ unit: UnitGuess) {
+        feedback.tick += 1
         UnitChoices.set(unit.factor, for: unitKey)
         unitSuggestions = []
         rescale(to: unit.factor)
     }
 
     private func keepUnit() {
+        feedback.tick += 1
         UnitChoices.set(1, for: unitKey)
         unitSuggestions = []
     }
@@ -637,12 +661,13 @@ struct ViewerScreen: View {
             // A third tap starts a new measurement.
             if measurePoints.count >= 2 { measurePoints = [] }
             measurePoints.append(point)
+            if hit.corners.contains(point) { feedback.snap += 1 } else { feedback.point += 1 }
             if measurePoints.count == 2 {
                 let distance = Format.dimension(simd_distance(measurePoints[0], measurePoints[1]), units: settings.units)
                 Spoken.announce(distance)
             }
         case .layFlat:
-            reorient(by: layFlatRotation(for: hit.normal))
+            reorient(by: layFlatRotation(for: hit.normal), feel: .settle)
         default:
             break
         }
@@ -650,8 +675,10 @@ struct ViewerScreen: View {
 
     /// Turns what's showing, keeping each turn on top of the last. The new
     /// arrangement is worked out off the main thread: every vertex moves.
-    private func reorient(by rotation: simd_float3x3) {
+    private func reorient(by rotation: simd_float3x3, feel: TurnFeel) {
         guard !rescaling, let model = shownModel else { return }
+        if feel == .tick { feedback.tick += 1 }
+        if autoOrient == .alreadyBest { autoOrient = .idle }
         turnGeneration += 1
         let generation = turnGeneration
         let plateID = appearance.plateID, hidden = appearance.hiddenObjects
@@ -670,11 +697,52 @@ struct ViewerScreen: View {
             pendingTurn = nil
             arranged = turned
             measurePoints = []
+            // Laid on a face: felt as it lands, not as it's asked for.
+            if feel == .settle { feedback.settle += 1 }
             announceArrangement(turned)
         }
     }
 
+    private func showPreset(_ preset: OrbitCamera.Preset) {
+        feedback.tick += 1
+        controller.show(preset)
+    }
+
+    /// Auto: the face Bambu Studio and Orca Slicer would print on (see AutoOrient),
+    /// worked out off the main thread on what's showing, after any turn in flight.
+    /// When the model already sits best, the panel says so and nothing moves.
+    private func autoOrientModel() {
+        guard !rescaling, autoOrient != .working, let model = shownModel else { return }
+        autoOrient = .working
+        let generation = turnGeneration
+        let plateID = appearance.plateID, hidden = appearance.hiddenObjects
+        let previous = pendingTurn
+        Task {
+            let base = await previous?.value ?? model
+            let down = await Task.detached(priority: .userInitiated) {
+                AutoOrient.downDirection(for: base, plateID: plateID, hidden: hidden)
+            }.value
+            // Something else turned or rescaled it meanwhile: this answer is stale.
+            guard generation == turnGeneration, autoOrient == .working else {
+                autoOrient = .idle
+                return
+            }
+            if let down {
+                autoOrient = .idle
+                reorient(by: layFlatRotation(for: down), feel: .settle)
+            } else {
+                autoOrient = .alreadyBest
+                feedback.alreadyBest += 1
+                Spoken.announce("Already the best way up to print.")
+                try? await Task.sleep(for: .seconds(2.5))
+                if autoOrient == .alreadyBest { autoOrient = .idle }
+            }
+        }
+    }
+
     private func resetOrientation() {
+        feedback.tick += 1
+        autoOrient = .idle
         turnGeneration += 1
         pendingTurn = nil
         arranged = nil
@@ -710,11 +778,16 @@ struct ViewerScreen: View {
     private var viewerActions: ViewerActions {
         ViewerActions(
             fit: { controller.frameModel() },
-            show: { controller.show($0) },
+            show: { showPreset($0) },
             info: { showingInfo = true },
             toggleGrid: { appearance.showsGrid.toggle() },
             toggleWireframe: { appearance.wireframe.toggle() },
             toggleTool: { open($0) },
+            // From the menu, with Lay Flat open so its answer can be seen.
+            autoOrient: {
+                if tool != .layFlat { open(.layFlat) }
+                autoOrientModel()
+            },
             openTool: tool,
             showsGrid: appearance.showsGrid,
             wireframe: appearance.wireframe
@@ -1051,4 +1124,22 @@ private struct InfoPresentation<Info: View>: ViewModifier {
     private func gated(_ active: Bool) -> Binding<Bool> {
         Binding(get: { active && isPresented }, set: { if active { isPresented = $0 } })
     }
+}
+
+/// Counters for the viewer's haptics: each change of one plays its feedback.
+struct ViewerFeedback {
+    var point = 0
+    var snap = 0
+    var settle = 0
+    var tick = 0
+    var alreadyBest = 0
+}
+
+/// How a turn should feel: a tick for a quarter turn, a soft landing for a face.
+enum TurnFeel {
+    case tick, settle
+}
+
+enum AutoOrientState {
+    case idle, working, alreadyBest
 }

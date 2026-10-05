@@ -9,6 +9,7 @@ struct ViewerActions {
     var toggleGrid: () -> Void
     var toggleWireframe: () -> Void
     var toggleTool: (ViewerTool) -> Void
+    var autoOrient: () -> Void
     var openTool: ViewerTool?
     var showsGrid: Bool
     var wireframe: Bool
@@ -44,6 +45,8 @@ struct ViewerCommands: Commands {
                     Toggle(tool.title, isOn: Binding(get: { actions?.openTool == tool }, set: { _ in actions?.toggleTool(tool) }))
                         .keyboardShortcut(tool.keyEquivalent, modifiers: [.command, .shift])
                 }
+                Button("Auto Orient") { actions?.autoOrient() }
+                    .keyboardShortcut("l", modifiers: [.command, .option])
                 Divider()
                 Button("Model Info") { actions?.info() }
                     .keyboardShortcut("i", modifiers: .command)

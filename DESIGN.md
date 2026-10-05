@@ -193,7 +193,14 @@ Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt co
 - **Tool panel:** one viewer tool at a time (Measure, Lay Flat, Cross-Section), opened from the Tools menu, whose button takes the open tool's symbol and the tint. Its controls sit in a regular-glass panel (24pt corners, max 440pt wide) above the bottom toolbar, in place of the gesture hint, with a 44pt close button. Measure markers are ink on a background-coloured halo, never the accent, since the model is often Filament Orange.
 - **States:** toggles in the toolbar fill with the tint when on. A completed action swaps its symbol in place (plus becomes a checkmark) rather than disappearing.
 - **Switches** in lists and sheets stay system green: on iOS green means "on", and tinting them orange would make them read as brand decoration. Filament Orange drives every other interactive element.
-- **Haptics:** a selection tap for plate, wireframe, grid and printer-bed changes; success or warning feedback with each toast. Nothing else buzzes.
+- **Auto (Lay Flat):** the first of the panel's buttons (`wand.and.sparkles`) turns the model onto the face Bambu Studio's and Orca Slicer's Auto Orient would choose (MeshKit's `AutoOrient`, a port of their Orient.cpp with its constants: first-layer area and hull footprint against overhang and near-flat faces). It works off the main thread with a small spinner in the button's glyph slot; when the model already sits best, the panel's hint line becomes "✓ Already the best way up to print." for 2.5 seconds, with a light tap. No alert. Also Model › Auto Orient (⌥⌘L) on Mac, which opens Lay Flat so the answer shows.
+- **Haptics:** felt, never needed; each marks something landing out of the finger's sight.
+  - Selection tick: plate, wireframe, grid and printer-bed changes; each quarter turn (Turn, Tip, Roll) and Reset; a preset view; a choice on the unit card.
+  - Light impact: a measure point; Fit or Auto with nothing to do.
+  - Medium impact: a measure point that snaps to a corner (on Mac, the Force Touch trackpad's alignment click).
+  - Soft impact: the model landing on a face (a face tap or Auto), felt when the turn lands, not when it's asked for.
+  - Success or warning with each toast.
+  Nothing else buzzes: not camera moves, not the cross-section slider, not opening tools.
 
 ### Chips
 - **Readout chip:** Readout type on a regular glass capsule (6pt by 12pt padding); shows "W 156.5 · D 176.0 · H 79.6 mm".

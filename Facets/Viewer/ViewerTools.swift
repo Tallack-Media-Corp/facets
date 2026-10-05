@@ -44,7 +44,9 @@ struct ToolPanel: View {
     @Binding var sectionFraction: Double
     let sectionHeight: Float
     let isTurned: Bool
+    let autoState: AutoOrientState
     let clearPoints: () -> Void
+    let autoOrient: () -> Void
     let turn: (SIMD3<Float>) -> Void
     let resetOrientation: () -> Void
     let close: () -> Void
@@ -136,13 +138,34 @@ struct ToolPanel: View {
 
     private var layFlat: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(voiceOver
-                 ? "Touch the model directly and lift your finger on a face to rest the model on it, or use the turn buttons below."
-                 : "Tap a face to rest the model on it, or turn it a quarter at a time.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Group {
+                if autoState == .alreadyBest {
+                    Label("Already the best way up to print.", systemImage: "checkmark")
+                        .foregroundStyle(.primary)
+                } else {
+                    Text(voiceOver
+                         ? "Touch the model directly and lift your finger on a face to rest the model on it, or use the buttons below."
+                         : "Tap a face to rest the model on it, choose Auto, or turn it a quarter at a time.")
+                }
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentTransition(.opacity)
+            .animation(.easeInOut(duration: 0.2), value: autoState)
             HStack(spacing: 8) {
+                Button(action: autoOrient) {
+                    toolLabel("Auto") {
+                        if autoState == .working {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "wand.and.sparkles")
+                        }
+                    }
+                }
+                .buttonStyle(.glass)
+                .disabled(autoState == .working)
+                .accessibilityHint("Turns the model onto the face a slicer would print it on")
                 turnButton("Turn", symbol: "arrow.clockwise", axis: [0, 0, 1], hint: "A quarter turn on the bed")
                 turnButton("Tip", symbol: "arrow.down.forward", axis: [1, 0, 0], hint: "A quarter turn, front edge down")
                 turnButton("Roll", symbol: "arrow.turn.right.down", axis: [0, 1, 0], hint: "A quarter turn onto its side")
@@ -165,8 +188,14 @@ struct ToolPanel: View {
     }
 
     private func toolLabel(_ title: String, symbol: String) -> some View {
+        toolLabel(title) { Image(systemName: symbol) }
+    }
+
+    /// The glyphs sit in one height, so every title lines up (and Auto's doesn't
+    /// jump while it works).
+    private func toolLabel(_ title: String, @ViewBuilder icon: () -> some View) -> some View {
         VStack(spacing: 2) {
-            Image(systemName: symbol)
+            icon().frame(height: 22)
             Text(title).font(.caption2.weight(.medium))
         }
         .frame(maxWidth: .infinity, minHeight: 44)

@@ -8,7 +8,7 @@ Free and open source (MIT). No accounts, no tracking, and no network connections
 
 - **Viewer**: orbit, pan, pinch and twist; double tap to fit; front, back, side, top, bottom and isometric views; wireframe; a millimetre build-plate grid; size readout in mm or inches.
 - **Fit check**: pick your printer (Bambu Lab, Prusa, Creality, Elegoo, Voron or a custom bed) and the viewer outlines its bed under the model and says whether it fits, turned if need be. It can be turned off for dimensions only.
-- **Tools**: measure between two points (snapping to corners), lay a model flat on any face or turn it a quarter at a time, and cut a cross-section to see walls and cavities.
+- **Tools**: measure between two points (snapping to corners), lay a model flat on any face, let Auto choose the face a slicer would (the Bambu Studio / Orca Slicer Auto Orient method), or turn it a quarter at a time, and cut a cross-section to see walls and cavities.
 - **Print estimates**: a project saved sliced from Bambu Studio or Orca shows the slicer's print time and filament per plate; anything else gets an estimate worked out from the model's shape (see docs/print-estimates.md).
 - **3MF projects**: Bambu Studio and Orca plates (pick one or show all), filament colours and multi-colour painting, multi-part objects, modifiers hidden, per-object visibility, and 3MF base material colours.
 - **Library**: a folder of models with rendered thumbnails, subfolders, import, rename, duplicate, move, delete, drag and drop on iPad, and search across every folder.
@@ -59,6 +59,7 @@ That builds and runs on the simulator with no further setup. To run on a device,
 - `ZipArchive`: a minimal reader (stored and deflate, ZIP64) on Apple's Compression framework, so there are no dependencies.
 - `XMLScanner`: an allocation-free tokenizer. 3MF models can hold millions of `<vertex>` elements; this reads a 3.9-million-triangle Bambu project in under a second on a Mac.
 - `ThreeMFReader`: core spec meshes, components and build items, the production extension's per-object model files, base materials and colour groups, multi-material painting (`paint_color`, `slic3rpe:mmu_segmentation`, decoded in `TrianglePaint`), and Bambu Studio / Orca `Metadata/` (plates, object names, filament colours, part types).
+- `AutoOrient`: chooses the face to print on by the method Bambu Studio and Orca Slicer use for Auto Orient (from Tweaker-3): candidate directions from the mesh's and its convex hull's largest same-facing areas plus fixed ones, each scored on first-layer contact and hull footprint against overhang and near-flat faces, with the slicers' tuned weights. A tenth of a second on a 260,000-triangle model.
 - `SceneRenderer`, `ModelCanvasView`, `ModelSnapshotter`: a small Metal renderer. Positions are the only vertex data; flat normals come from screen-space derivatives, which gives the faceted look of a printed part and halves memory. The view draws only when something changes. Shaders compile from source at runtime, so the package needs no Metal build step.
 
 ## Tests
@@ -74,6 +75,8 @@ The readers are tested against synthetic fixtures. Two opt-in checks read real f
 MESHKIT_SAMPLES=~/Downloads swift test --filter RealFilesTests
 # Render files to PNGs for a look
 MESHKIT_SNAPSHOT_FILES=/path/a.stl:/path/b.3mf MESHKIT_SNAPSHOT_OUT=/tmp/snaps swift test --filter SnapshotTests
+# Time Auto Orient on a model and show what it chose
+MESHKIT_ORIENT_FILE=/path/a.stl swift test -c release --filter AutoOrientTiming
 ```
 
 ### Icons

@@ -20,6 +20,13 @@ import UniformTypeIdentifiers
             if env["MESHKIT_SNAPSHOT_FLIP"] == "1" {
                 model = model.reoriented(by: simd_float3x3(simd_quatf(angle: .pi, axis: SIMD3(1, 0, 0))), plateID: nil, hidden: [])
             }
+            // MESHKIT_SNAPSHOT_AUTO=1 applies Auto Orient first (and says how long it took).
+            if env["MESHKIT_SNAPSHOT_AUTO"] == "1" {
+                let start = Date()
+                let down = AutoOrient.downDirection(for: model, plateID: model.plates.first?.id, hidden: [])
+                FileHandle.standardError.write(("AUTO " + url.lastPathComponent + " " + [ down.map { "\($0)" } ?? "unchanged", String(format: "%.2fs", Date().timeIntervalSince(start)), "\(model.triangleCount) triangles"].joined(separator: " ") + "\n").data(using: .utf8)!)
+                if let down { model = model.reoriented(by: layFlatRotation(for: down), plateID: model.plates.first?.id, hidden: []) }
+            }
             let image = try #require(snapshotter.image(of: model, pixelSize: 512))
             let dest = URL(fileURLWithPath: out).appendingPathComponent(url.deletingPathExtension().lastPathComponent + ".png")
             let writer = try #require(CGImageDestinationCreateWithURL(dest as CFURL, UTType.png.identifier as CFString, 1, nil))
