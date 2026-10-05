@@ -52,7 +52,7 @@ import AppKit
 import Quartz
 
 /// Quick Look for STL, 3MF and OBJ in the Finder: press Space on a model and it turns
-/// in 3D, on the same stage as the app.
+/// in 3D, on Quick Look's own background.
 final class PreviewViewController: NSViewController, QLPreviewingController {
     private let canvas = ModelCanvasView()
 
@@ -77,25 +77,13 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
     }
 }
 
-/// The app's Stage behind the model (Pure Black included), redrawn when the Mac
-/// switches between light and dark.
+/// No stage of our own on the Mac: the model sits on the Quick Look panel's own
+/// translucent material, as the system's 3D preview does (it sets a clear
+/// background), so it feels part of the Finder in light and dark. Only the grid
+/// follows the appearance.
 private final class StageView: NSView {
     var onAppearanceChange: ((Bool) -> Void)? {
         didSet { updateColors() }
-    }
-    private let backdrop = CAGradientLayer()
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        layer?.addSublayer(backdrop)
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func layout() {
-        super.layout()
-        backdrop.frame = bounds
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -104,13 +92,7 @@ private final class StageView: NSView {
     }
 
     private func updateColors() {
-        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let stage = Palette.stage(pureBlack: SharedSettings.pureBlack)
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            // Layers run bottom to top on the Mac, so the floor comes first.
-            backdrop.colors = [stage.floor.cgColor, stage.top.cgColor]
-        }
-        onAppearanceChange?(dark)
+        onAppearanceChange?(effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
     }
 }
 #endif
