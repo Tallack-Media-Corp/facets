@@ -195,6 +195,13 @@ private struct AboutView: View {
                 Label("Twist two fingers to spin", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
                 Label("Double tap to fit the model", systemImage: "hand.tap")
             }
+            Section {
+                OpenSampleButton()
+            } header: {
+                Text("Sample Model")
+            } footer: {
+                Text(SampleModels.credit)
+            }
             Section("Licence") {
                 Text("MIT Licence. The source code, issues and releases are on GitHub.")
                 Text("The Benchy icon is drawn from #3DBenchy by Creative Tools, a public domain (CC0) model. 3DBenchy.com")

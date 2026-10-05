@@ -18,6 +18,7 @@ struct FacetsApp: App {
                 .environment(locations)
                 .environment(settings)
                 .task { library.purgeExpired() }
+                .task(priority: .background) { await ThumbnailStore.shared.pruneStale() }
                 .task { await library.connectToICloud() }
         }
         #if os(macOS)
@@ -26,7 +27,7 @@ struct FacetsApp: App {
         .commands {
             ViewerCommands()
             #if os(macOS)
-            OpenCommands(library: library)
+            OpenCommands(library: library, locations: locations)
             #endif
         }
 
@@ -56,10 +57,18 @@ struct FacetsApp: App {
 }
 
 #if os(macOS)
-/// File › Open… (⌘O): any model on the Mac, in a window of its own.
+extension FocusedValues {
+    /// The front window's router, so menu commands can change what it shows.
+    @Entry var sceneRouter: Router?
+}
+
+/// File › Open… (⌘O): any model on the Mac, in a window of its own. File › Add
+/// Location… (⇧⌘O): a folder to browse, in the sidebar. Help: the project on GitHub.
 private struct OpenCommands: Commands {
     let library: FileLibrary
+    let locations: LocationsStore
     @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.sceneRouter) private var router
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -73,6 +82,22 @@ private struct OpenCommands: Commands {
                 }
             }
             .keyboardShortcut("o")
+            Button("Add Location…") {
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                panel.prompt = "Add"
+                panel.message = "Choose a folder to browse its STL, 3MF and OBJ files without importing them."
+                guard panel.runModal() == .OK, let url = panel.url, let location = try? locations.add(url) else { return }
+                router?.tab = .location(location.id)
+            }
+            .keyboardShortcut("o", modifiers: [.command, .shift])
+        }
+        // Replaces the stock "Facets Help", which has no help book behind it.
+        CommandGroup(replacing: .help) {
+            Link("Facets on GitHub", destination: AppInfo.sourceURL)
+            Link("Report a Problem…", destination: AppInfo.sourceURL.appending(path: "issues"))
+            Link("Privacy Policy", destination: AppInfo.sourceURL.appending(path: "blob/main/PRIVACY.md"))
         }
     }
 }
@@ -133,6 +158,9 @@ private struct SceneRoot: View {
             .formStyle(.grouped)
             .environment(router)
             .environment(toasts)
+            #if os(macOS)
+            .focusedSceneValue(\.sceneRouter, router)
+            #endif
             // Files, Mail, Messages and the share sheet hand files over here.
             .onOpenURL { url in
                 router.open(url, library: library)
@@ -166,7 +194,7 @@ private struct SceneRoot: View {
 
     #if DEBUG
     /// Launch options for screenshots and quick checks:
-    /// `FACETS_OPEN=<path below Documents>` opens a library file,
+    /// `FACETS_OPEN=<path below Documents>` opens a library file (`sample`, the sample),
     /// `FACETS_TAB=library|browse|recents|settings|search` picks the screen,
     /// `FACETS_BED=<preset id>|none` the printer.
     private func openFromLaunchEnvironment() {
@@ -186,7 +214,9 @@ private struct SceneRoot: View {
         case "search": router.tab = .search
         default: break
         }
-        if let path = env["FACETS_OPEN"], !path.isEmpty {
+        if env["FACETS_OPEN"] == "sample", let url = SampleModels.benchy {
+            router.presented = ModelFileRef(url: url, isExternal: true)
+        } else if let path = env["FACETS_OPEN"], !path.isEmpty {
             router.open(library.root.appending(path: path), library: library)
         }
     }

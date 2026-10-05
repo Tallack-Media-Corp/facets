@@ -29,6 +29,7 @@ final class RecentsStore {
 
     /// Call while the URL is accessible (inside its security scope).
     func record(_ file: ModelFileRef) {
+        guard !SampleModels.isSample(file.url) else { return }
         guard let bookmark = try? Bookmark.make(file.url) else { return }
         let path = file.url.standardizedFileURL.path
         entries.removeAll { resolve($0)?.standardizedFileURL.path == path }

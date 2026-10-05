@@ -158,6 +158,12 @@ struct FolderView: View {
                     Button("Import Files") { importing = true }
                         .buttonStyle(.glassProminent)
                         .controlSize(.large)
+                    // Something to look at before there are files of your own.
+                    if folder == library.root {
+                        OpenSampleButton(title: "Try the Sample Model")
+                            .buttonStyle(.glass)
+                            .controlSize(.large)
+                    }
                 }
                 .padding(.top, 80)
             }
@@ -666,6 +672,8 @@ extension FolderView {
             .simultaneousGesture(TapGesture().onEnded { click(item) })
             .draggable(item.url)
             .contextMenu { selectionMenu(for: selection.contains(item.url) ? selectedItems : [item]) }
+            // No longer a Button on the Mac, so say it can be opened.
+            .accessibilityAddTraits(.isButton)
             .accessibilityAction { activate([item]) }
     }
 

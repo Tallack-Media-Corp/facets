@@ -80,6 +80,8 @@ MESHKIT_SNAPSHOT_FILES=/path/a.stl:/path/b.3mf MESHKIT_SNAPSHOT_OUT=/tmp/snaps s
 
 The app icon and its alternates (Settings › App Icon) are Icon Composer documents in `Facets/Resources/Icons`, built by `python3 tools/icons/build_icons.py`, which also renders the picker previews. The Benchy artwork in `tools/icons/art` is rendered by MeshKit from the public domain (CC0) [#3DBenchy](https://www.3dbenchy.com) model by Creative Tools. The script's docstring has the command to redraw it; the STL itself isn't kept here.
 
+The sample model (`Facets/Resources/Samples/3DBenchy.3mf`, offered on an empty library and in Settings › About) is the same CC0 #3DBenchy as a two-colour Bambu Studio-style project, built from its dual-print STLs at [github.com/CreativeTools/3DBenchy](https://github.com/CreativeTools/3DBenchy) by `python3 tools/samples/build_benchy_sample.py`.
+
 ## File types
 
 STL uses the system's `public.standard-tesselated-geometry-format`. 3MF has no system type, so Facets imports `com.bambulab.3mf`, the identifier Bambu Studio declares and other 3MF apps on Apple platforms share. Both are imported rather than exported: Facets opens these files but doesn't claim to own them.

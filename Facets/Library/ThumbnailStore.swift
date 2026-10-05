@@ -40,10 +40,13 @@ actor ThumbnailStore {
     /// Bumped when the renderer's look changes (v4: dark colours lifted), so cached
     /// pictures are redrawn.
     private static let renderVersion = 4
+    /// Starts every picture's file name, so pictures from an older renderer can be
+    /// told apart and cleared (pruneStale).
+    private static var versionPrefix: String { "v\(renderVersion)-" }
 
     static func key(for url: URL, size: Int64?, modified: Date?, pixelSize: Int, look: Look) -> String {
-        let raw = "v\(renderVersion)|\(url.standardizedFileURL.path)|\(size ?? -1)|\(modified?.timeIntervalSince1970 ?? 0)|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
-        return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
+        let raw = "\(url.standardizedFileURL.path)|\(size ?? -1)|\(modified?.timeIntervalSince1970 ?? 0)|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
+        return versionPrefix + SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     /// The cached picture, without rendering. Cheap enough to call from a view body.
@@ -120,8 +123,8 @@ actor ThumbnailStore {
     /// Path-free, so the same file on another device finds it: name, date, size of
     /// picture and look.
     private static func sharedKey(for url: URL, modified: Date?, pixelSize: Int, look: Look) -> String {
-        let raw = "v\(renderVersion)|\(url.lastPathComponent)|\(Int(modified?.timeIntervalSince1970 ?? 0))|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
-        return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
+        let raw = "\(url.lastPathComponent)|\(Int(modified?.timeIntervalSince1970 ?? 0))|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
+        return versionPrefix + SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     /// Copies a drawn picture into the shared folder, for library files only.
@@ -174,6 +177,30 @@ actor ThumbnailStore {
             var error: NSError?
             NSFileCoordinator().coordinate(writingItemAt: shared, options: .forDeleting, error: &error) { target in
                 try? FileManager.default.removeItem(at: target)
+            }
+        }
+    }
+
+    /// Removes pictures an older renderer drew, here and in the library's shared
+    /// folder, so each look change doesn't leave a set behind in iCloud Drive.
+    /// (Other devices on an older build redraw theirs until they update.)
+    func pruneStale() {
+        let fileManager = FileManager.default
+        let isCurrent = { (name: String) in name.hasPrefix(Self.versionPrefix) || name.hasPrefix(".\(Self.versionPrefix)") }
+        for url in (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] where !isCurrent(url.lastPathComponent) {
+            try? fileManager.removeItem(at: url)
+        }
+        guard let shared = sharedDirectory else { return }
+        for url in (try? fileManager.contentsOfDirectory(at: shared, includingPropertiesForKeys: nil)) ?? [] where !isCurrent(url.lastPathComponent) {
+            // A placeholder (".name.png.icloud") stands for the file itself.
+            var target = url
+            let name = url.lastPathComponent
+            if name.hasPrefix("."), name.hasSuffix(".icloud") {
+                target = url.deletingLastPathComponent().appending(path: String(name.dropFirst().dropLast(".icloud".count)))
+            }
+            var error: NSError?
+            NSFileCoordinator().coordinate(writingItemAt: target, options: .forDeleting, error: &error) { item in
+                try? fileManager.removeItem(at: item)
             }
         }
     }
