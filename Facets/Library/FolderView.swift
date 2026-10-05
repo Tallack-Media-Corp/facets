@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import UniformTypeIdentifiers
 #if os(macOS)
 import QuickLook
@@ -51,6 +52,19 @@ struct FolderView: View {
     /// Browsed models copied to the library this visit, on top of `hasCopy`.
     @State private var saved: Set<URL> = []
 
+    /// The new-user tour of the library root (see FacetsTips).
+    @State private var libraryTips = TipGroup(.ordered) {
+        AddModelsTip()
+        BrowseTip()
+        ViewOptionsTip()
+    }
+
+    /// The tour's current tip, on the library's own root only.
+    private var libraryTip: (any Tip)? {
+        guard folder == library.root, !isBrowsing, loaded else { return nil }
+        return libraryTips.currentTip
+    }
+
     #if os(macOS)
     // The Mac selects with a click and opens with a double-click, as the Finder does.
     @State private var selection: Set<URL> = []
@@ -86,6 +100,12 @@ struct FolderView: View {
                         .allowsHitTesting(false)
                 }
             }
+            // The new-user tour, a card at a time above the tab bar.
+            .overlay(alignment: .bottom) {
+                FloatingTip(tip: libraryTip)
+                    .padding(.bottom, 12)
+                    .animation(.snappy, value: libraryTip?.id)
+            }
             .overlay {
                 if !loaded {
                     ProgressView()
@@ -94,6 +114,7 @@ struct FolderView: View {
                 }
             }
             .onAppear(perform: reload)
+
             .onChange(of: library.revision) { reload() }
             .onChange(of: sort) { reload() }
             .refreshable { await load() }
@@ -264,8 +285,11 @@ struct FolderView: View {
                     Label("Icons", systemImage: "square.grid.2x2").tag(LibraryLayout.grid)
                     Label("List", systemImage: "list.bullet").tag(LibraryLayout.list)
                 }
-                Picker("Sort By", selection: $sort) {
-                    ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
+                // Nothing to sort in an empty folder.
+                if !items.isEmpty {
+                    Picker("Sort By", selection: $sort) {
+                        ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
+                    }
                 }
             } label: {
                 Label("View Options", systemImage: "ellipsis")
@@ -275,7 +299,10 @@ struct FolderView: View {
         if !isBrowsing {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button("Import Files…", systemImage: "square.and.arrow.down") { importing = true }
+                Button("Import Files…", systemImage: "square.and.arrow.down") {
+                    importing = true
+                    AddModelsTip().invalidate(reason: .actionPerformed)
+                }
                 Button("New Folder", systemImage: "folder.badge.plus") {
                     perform("Couldn't Create Folder") {
                         let url = try library.createFolder(in: folder)

@@ -1,5 +1,6 @@
 import MeshKit
 import SwiftUI
+import TipKit
 import UniformTypeIdentifiers
 import simd
 
@@ -63,6 +64,17 @@ struct ViewerScreen: View {
     @State private var pendingTurn: Task<Model3D, Never>?
     /// A unit change being applied; turns wait for it rather than turn the old size.
     @State private var rescaling = false
+    /// The new-user tour of the viewer, one control at a time, in toolbar order.
+    @State private var viewerTips = TipGroup(.ordered) {
+        SizeTip()
+        FitTip()
+        PresetViewsTip()
+        ToolsTip()
+        DisplayTip()
+        InfoTip()
+    }
+    /// Tips wait for the gesture hint (the first opens) so the two never overlap.
+    @State private var tipsReady = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The tool panel's height and the screen's, for keeping the model above it.
     @State private var panelHeight: CGFloat = 0
@@ -239,7 +251,7 @@ struct ViewerScreen: View {
         // file that didn't open.
         if file.isExternal, isLoaded {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(isSaved ? "Saved to Library" : "Save to Library", systemImage: isSaved ? "checkmark" : "plus") {
+                Button(isSaved ? "Saved to Library" : "Save to Library", systemImage: isSaved ? "checkmark" : "tray.and.arrow.down") {
                     saveToLibrary()
                 }
                 .contentTransition(.symbolEffect(.replace))
@@ -256,8 +268,9 @@ struct ViewerScreen: View {
 
         if case .loaded = phase {
             ToolbarItem(placement: .bottomControls) {
-                Button("Fit to Screen", systemImage: "arrow.down.left.and.arrow.up.right.rectangle") {
+                Button("Fit to Screen", systemImage: "viewfinder") {
                     controller.frameModel()
+                    FitTip().invalidate(reason: .actionPerformed)
                 }
             }
             ToolbarItem(placement: .bottomControls) {
@@ -280,7 +293,10 @@ struct ViewerScreen: View {
             ToolbarSpacer(.flexible, placement: .bottomControls)
             ToolbarItem(placement: .bottomControls) {
                 // Toggles, so it also closes the inspector on iPad and Mac.
-                Button("Info", systemImage: "info.circle") { showingInfo.toggle() }
+                Button("Info", systemImage: "info.circle") {
+                    showingInfo.toggle()
+                    InfoTip().invalidate(reason: .actionPerformed)
+                }
             }
         }
     }
@@ -347,13 +363,9 @@ struct ViewerScreen: View {
                 printerSection
             }
         } label: {
-            // A view-options glyph, or the printer once one is chosen: the menu
-            // holds the printer as well as the grid.
-            if settings.checksFit && settings.bed != nil {
-                Label("Display", image: "printer3d")
-            } else {
-                Label("Display", systemImage: "slider.horizontal.3")
-            }
+            // Always the view-options glyph: the menu holds wireframe and the grid as
+            // well as the printer, and the chosen printer is named on the size chip.
+            Label("Display", systemImage: "slider.horizontal.3")
         }
         .toolbarMenuIndicator()
     }
@@ -446,7 +458,11 @@ struct ViewerScreen: View {
                 checksFit: settings.checksFit,
                 hasPrinter: settings.fitBed != nil,
                 unsureOfUnits: !unitSuggestions.isEmpty,
-                choosePrinter: { choosingPrinter = true }
+                sizeTip: tip(SizeTip.self),
+                choosePrinter: {
+                    choosingPrinter = true
+                    SizeTip().invalidate(reason: .actionPerformed)
+                }
             )
             // Overlays on the model stop growing at the first accessibility
             // size; beyond that they'd cover what they describe.
@@ -491,6 +507,9 @@ struct ViewerScreen: View {
             .padding(.bottom, 8)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
             .transition(panelTransition)
+        } else if let card = toolbarTip {
+            FloatingTip(tip: card)
+                .padding(.bottom, 12)
         } else if showingHint {
             GestureHint(stage: shownHintStage ?? 0)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
@@ -584,6 +603,7 @@ struct ViewerScreen: View {
     // MARK: Tools
 
     private func open(_ option: ViewerTool) {
+        ToolsTip().invalidate(reason: .actionPerformed)
         if tool == option {
             closeTool()
             return
@@ -719,20 +739,41 @@ struct ViewerScreen: View {
     /// Teach the gestures in two short beats across the first models opened: drag and
     /// pinch, then double-tap to fit (the way back when the model's lost off-screen).
     private func offerGestureHint() {
+        // The size tip is about choosing a printer; with fit checks off there's none.
+        if !settings.checksFit { SizeTip().invalidate(reason: .tipClosed) }
         if hintStage == 0, legacyInteractions >= 2 { hintStage = 1 }
-        guard hintStage < 2, !Spoken.isVoiceOverRunning else { return }
+        guard hintStage < 2, !Spoken.isVoiceOverRunning else {
+            tipsReady = true
+            return
+        }
         shownHintStage = hintStage
         Task {
             try? await Task.sleep(for: .seconds(0.6))
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) { showingHint = true }
             try? await Task.sleep(for: .seconds(6))
             withAnimation(reduceMotion ? nil : .easeIn(duration: 0.3)) { showingHint = false }
+            tipsReady = true
         }
+    }
+
+    /// The tour's current tip when it's about a bar control (the size tip is a
+    /// popover on its chip instead).
+    private var toolbarTip: (any Tip)? {
+        guard tipsReady, unitSuggestions.isEmpty, tool == nil, !(viewerTips.currentTip is SizeTip) else { return nil }
+        return viewerTips.currentTip
+    }
+
+    /// The tour's tip for one control, when it's that tip's turn and nothing else
+    /// is in the way (the gesture hint, the unit card, an open tool).
+    private func tip<T: Tip>(_ type: T.Type) -> (any Tip)? {
+        guard tipsReady, TipsState.shared.isOn, unitSuggestions.isEmpty, tool == nil else { return nil }
+        return viewerTips.currentTip as? T
     }
 
     private func noteInteraction() {
         if showingHint {
             withAnimation(reduceMotion ? nil : .easeIn(duration: 0.25)) { showingHint = false }
+            tipsReady = true
         }
         // One stage per model opened: the next hint waits for the next model.
         if let shown = shownHintStage {
@@ -837,6 +878,8 @@ private struct ViewerChips: View {
     let hasPrinter: Bool
     /// The file's unit is in question (the unit card is up): no verdict yet.
     let unsureOfUnits: Bool
+    /// The tour's tip for the readout, while it's that tip's turn.
+    let sizeTip: (any Tip)?
     let choosePrinter: () -> Void
     /// The printer glyph is an image, not a symbol, so it's sized with the text by hand.
     @ScaledMetric(relativeTo: .caption) private var glyph: CGFloat = 14
@@ -883,6 +926,8 @@ private struct ViewerChips: View {
                     Button(action: choosePrinter) { readout }
                         .buttonStyle(.plain)
                         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
+                        .popoverTip(sizeTip)
+                        .tipViewStyle(FacetsTipStyle())
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(readoutLabel)
                         .accessibilityHint(hasPrinter ? "Changes the printer" : "Chooses a printer to check the model fits")

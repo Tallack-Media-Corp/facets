@@ -10,6 +10,10 @@ struct FacetsApp: App {
     @State private var locations = LocationsStore()
     @State private var settings = ViewerSettings()
 
+    init() {
+        FacetsTips.configure()
+    }
+
     var body: some Scene {
         WindowGroup {
             SceneRoot()

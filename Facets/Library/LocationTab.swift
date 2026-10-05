@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import TipKit
 
 /// A Browse location as a sidebar item of its own on the Mac, the way the Finder
 /// lists folders: look through its models, open them, save them to the library.
@@ -64,7 +65,10 @@ struct AddLocationButton: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Button { picking = true } label: {
+        Button {
+            picking = true
+            BrowseTip().invalidate(reason: .actionPerformed)
+        } label: {
             Label {
                 // One line: the sidebar bar offers less width than the sidebar shows.
                 Text("Add Location…").fixedSize()

@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 
 extension EnvironmentValues {
     /// Pushes a folder onto the library's stack, for opening one without a link
@@ -19,6 +20,8 @@ struct LibraryTab: View {
         case library = "Library"
         case browse = "Browse"
         var id: String { rawValue }
+        /// "My Models", not a third "Library" under the tab and the title.
+        var title: String { self == .library ? "My Models" : "Browse" }
     }
 
     @Environment(FileLibrary.self) private var library
@@ -64,6 +67,7 @@ struct LibraryTab: View {
 /// title. It scrolls with the list, so pulling to refresh moves it with the title
 /// instead of leaving it pinned above the spinner.
 struct LibrarySectionPicker: View {
+
     /// Where an inset grouped list puts its first row below the title. The grid and
     /// the empty library are scroll views, so they add it themselves, keeping the
     /// switch in the same place whichever side is showing (measured on iPhone and
@@ -74,9 +78,10 @@ struct LibrarySectionPicker: View {
 
     var body: some View {
         Picker("Section", selection: $section) {
-            ForEach(LibraryTab.Section.allCases) { Text($0.rawValue).tag($0) }
+            ForEach(LibraryTab.Section.allCases) { Text($0.title).tag($0) }
         }
         .pickerStyle(.segmented)
+        .onChange(of: section) { if section == .browse { BrowseTip().invalidate(reason: .actionPerformed) } }
         .labelsHidden()
         .frame(maxWidth: 320)
         .frame(maxWidth: .infinity)

@@ -78,6 +78,8 @@ struct SettingsView: View {
                          : "The viewer shows the model's dimensions only.")
                 }
 
+                TipsSection()
+
                 #if os(iOS)
                 Section("App Icon") {
                     AppIconPicker()
@@ -109,7 +111,7 @@ struct SettingsView: View {
                         Text(library.location == .iCloud
                              ? "The library is the Facets folder in iCloud Drive, shared by your iPhone, iPad and Mac."
                              : "To share the library between your devices, sign in to iCloud and turn on iCloud Drive for Facets. Models here move to iCloud Drive when you do.")
-                        if let cacheSize {
+                        if let cacheSize, cacheSize > 0 {
                             Text("Thumbnails use \(Format.fileSize(cacheSize)). They're redrawn when needed.")
                         }
                     }
@@ -219,5 +221,31 @@ private struct AboutView: View {
         }
         .navigationTitle("About")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Turns the new-user tips on or off, or shows them all again from the start.
+private struct TipsSection: View {
+    @State private var isOn = FacetsTips.isOn
+    @State private var reset = false
+
+    var body: some View {
+        Section {
+            Toggle("Show Tips", isOn: $isOn)
+                .onChange(of: isOn) { FacetsTips.setOn(isOn) }
+            Button("Show All Tips Again") {
+                FacetsTips.showAllAgain()
+                isOn = true
+                reset = true
+            }
+        } header: {
+            Text("Tips")
+        } footer: {
+            Text(reset
+                 ? "Each screen shows its tips again, one at a time."
+                 : "Short tips point out what each control does, once per screen. Turn Off Tips on any tip stops them all.")
+        }
+        // A tip's own Turn Off Tips may have changed this while Settings was away.
+        .onAppear { isOn = FacetsTips.isOn }
     }
 }
