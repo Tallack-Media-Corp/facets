@@ -37,9 +37,9 @@ actor ThumbnailStore {
         let usesFileColors: Bool
     }
 
-    /// Bumped when the renderer's look changes (v3: dark colours lifted), so cached
+    /// Bumped when the renderer's look changes (v4: dark colours lifted), so cached
     /// pictures are redrawn.
-    private static let renderVersion = 3
+    private static let renderVersion = 4
 
     static func key(for url: URL, size: Int64?, modified: Date?, pixelSize: Int, look: Look) -> String {
         let raw = "v\(renderVersion)|\(url.standardizedFileURL.path)|\(size ?? -1)|\(modified?.timeIntervalSince1970 ?? 0)|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
