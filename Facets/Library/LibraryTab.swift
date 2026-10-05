@@ -1,5 +1,11 @@
 import SwiftUI
 
+extension EnvironmentValues {
+    /// Pushes a folder onto the library's stack, for opening one without a link
+    /// (a double-click on the Mac).
+    @Entry var openFolder: (LibraryRoute) -> Void = { _ in }
+}
+
 enum LibraryRoute: Hashable {
     case folder(URL)
     /// A folder outside the library, reached through Browse.
@@ -42,6 +48,7 @@ struct LibraryTab: View {
         }
         .presentsModels()
         .environment(\.zoomNamespace, zoom)
+        .environment(\.openFolder) { path.append($0) }
     }
 }
 

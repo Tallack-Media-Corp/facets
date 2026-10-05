@@ -1,5 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import QuickLook
+#endif
 
 enum LibraryLayout: String {
     case grid, list
@@ -36,7 +39,8 @@ struct FolderView: View {
     @State private var importing = false
     @State private var renaming: LibraryItem?
     @State private var renameText = ""
-    @State private var deleting: LibraryItem?
+    /// Waiting on "Delete … and everything in it?": only asked when there's a folder.
+    @State private var deleting: [LibraryItem] = []
     @State private var moving: LibraryItem?
     @State private var failure: (title: String, message: String)?
     @State private var watcher: FolderWatcher?
@@ -46,8 +50,20 @@ struct FolderView: View {
     /// Browsed models copied to the library this visit, on top of `hasCopy`.
     @State private var saved: Set<URL> = []
 
+    #if os(macOS)
+    // The Mac selects with a click and opens with a double-click, as the Finder does.
+    @State private var selection: Set<URL> = []
+    /// Where a shift-click range starts, and where the arrow keys move from.
+    @State private var anchor: URL?
+    @State private var quickLook: URL?
+    @State private var columnCount = 1
+    @FocusState private var gridFocused: Bool
+    @Environment(\.openModel) private var openModel
+    @Environment(\.openFolder) private var openFolder
+    #endif
+
     var body: some View {
-        content
+        keyedContent
             .navigationTitle(title)
             .toolbar { toolbar }
             .fileImporter(isPresented: $importing, allowedContentTypes: UTType.models, allowsMultipleSelection: true) { result in
@@ -92,11 +108,11 @@ struct FolderView: View {
             }
             .confirmationDialog(
                 deleteTitle,
-                isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                isPresented: Binding(get: { !deleting.isEmpty }, set: { if !$0 { deleting = [] } }),
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive) {
-                    if let item = deleting { delete(item) }
+                    delete(deleting)
                 }
             } message: {
                 Text("You can undo this, or restore it from Settings › Recently Deleted for 30 days.")
@@ -111,6 +127,14 @@ struct FolderView: View {
             } message: {
                 Text(failure?.message ?? "")
             }
+    }
+
+    private var keyedContent: some View {
+        #if os(macOS)
+        selectionKeys(content)
+        #else
+        content
+        #endif
     }
 
     @ViewBuilder
@@ -144,6 +168,9 @@ struct FolderView: View {
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 16, alignment: .top)], spacing: 20) {
                     ForEach(items) { item in
+                        #if os(macOS)
+                        macCard(item)
+                        #else
                         open(item) {
                             LibraryCard(item: item)
                         }
@@ -157,13 +184,31 @@ struct FolderView: View {
                                     .environment(settings)
                             }
                         }
+                        #endif
                     }
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 24)
+                #if os(macOS)
+                .onGeometryChange(for: Int.self) { geometry in
+                    // As the adaptive grid fits them: 150 pt minimum, 16 pt apart.
+                    max(1, Int((geometry.size.width - 32 + 16) / (150 + 16)))
+                } action: { columnCount = $0 }
+                #endif
             }
             .background(Color.groupedBackground)
+            #if os(macOS)
+            // Keys go to the grid: arrows, Return, Space, Command-Delete, Escape.
+            .focusable()
+            .focused($gridFocused)
+            .focusEffectDisabled()
+            // A click on the background, between or below the cards, clears the selection.
+            .onTapGesture { selection = [] }
+            #endif
         } else {
+            #if os(macOS)
+            macList
+            #else
             List {
                 if showsSectionPicker {
                     LibrarySectionPicker().sectionPickerRow()
@@ -187,6 +232,7 @@ struct FolderView: View {
                     }
                 }
             }
+            #endif
         }
     }
 
@@ -253,11 +299,14 @@ struct FolderView: View {
     }
 
     private var deleteTitle: String {
-        guard let deleting else { return "" }
-        if deleting.isFolder {
-            return "Delete \"\(deleting.displayName)\" and everything in it?"
+        guard let first = deleting.first else { return "" }
+        if deleting.count > 1 {
+            return "Delete \(deleting.count) items and everything in them?"
         }
-        return "Delete \"\(deleting.displayName)\"?"
+        if first.isFolder {
+            return "Delete \"\(first.displayName)\" and everything in it?"
+        }
+        return "Delete \"\(first.displayName)\"?"
     }
 
     /// A folder pushes; a model opens in the viewer over the tab.
@@ -286,28 +335,37 @@ struct FolderView: View {
     /// A file goes straight away, with Undo; a folder asks first, because it may hold
     /// a lot more than it shows.
     private func requestDelete(_ item: LibraryItem) {
-        if item.isFolder {
-            deleting = item
+        requestDelete([item])
+    }
+
+    private func requestDelete(_ items: [LibraryItem]) {
+        guard !items.isEmpty else { return }
+        if items.contains(where: \.isFolder) {
+            deleting = items
         } else {
-            delete(item)
+            delete(items)
         }
     }
 
-    private func delete(_ item: LibraryItem) {
+    private func delete(_ items: [LibraryItem]) {
+        let name = items.count == 1 ? items[0].displayName : "\(items.count) items"
         perform("Couldn't Delete") {
-            let deleted = try library.delete([item])
+            let deleted = try library.delete(items)
             let undo = { [library, toasts] in
                 do {
                     try library.restore(deleted)
                 } catch {
-                    toasts.show("Couldn't put \(item.displayName) back. It's still in Settings › Recently Deleted.", symbol: "exclamationmark.triangle.fill")
+                    toasts.show("Couldn't put \(name) back. It's still in Settings › Recently Deleted.", symbol: "exclamationmark.triangle.fill")
                 }
             }
             undoManager?.registerUndo(withTarget: library) { _ in
                 MainActor.assumeIsolated { undo() }
             }
-            undoManager?.setActionName("Delete \(item.displayName)")
-            toasts.show("Deleted \(item.displayName)", symbol: "trash.fill", actionTitle: "Undo", action: undo)
+            undoManager?.setActionName("Delete \(name)")
+            toasts.show("Deleted \(name)", symbol: "trash.fill", actionTitle: "Undo", action: undo)
+            #if os(macOS)
+            selection.subtract(items.map(\.url))
+            #endif
         }
     }
 
@@ -422,6 +480,9 @@ struct FolderView: View {
 /// A grid card: the rendered model (or a folder), its name and details.
 struct LibraryCard: View {
     let item: LibraryItem
+    /// Selected on the Mac: an outline round the picture and the name highlighted,
+    /// as the Finder shows it.
+    var isSelected = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -433,12 +494,23 @@ struct LibraryCard: View {
                 }
             }
             .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(.tint, lineWidth: 3)
+                        .padding(-3)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.displayName)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                    .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                    .padding(.horizontal, isSelected ? 4 : 0)
+                    .background(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 4))
+                    .padding(.horizontal, isSelected ? -4 : 0)
                 Text(LibraryRow.subtitle(for: item))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -449,6 +521,7 @@ struct LibraryCard: View {
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
         .accessibilityHint(item.isFolder ? "Opens the folder" : "Opens the model")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -565,3 +638,142 @@ struct MoveSheet: View {
         return library.relativeFolder(of: folder.appending(path: "x")) ?? folder.lastPathComponent
     }
 }
+
+#if os(macOS)
+// MARK: Selection on the Mac
+
+extension FolderView {
+    private var selectedItems: [LibraryItem] { items.filter { selection.contains($0.url) } }
+
+    /// A grid card: click to select, double-click to open, drag out to the Finder or
+    /// a slicer.
+    fileprivate func macCard(_ item: LibraryItem) -> some View {
+        LibraryCard(item: item, isSelected: selection.contains(item.url))
+            .gesture(TapGesture(count: 2).onEnded { activate([item]) })
+            .simultaneousGesture(TapGesture().onEnded { click(item) })
+            .draggable(item.url)
+            .contextMenu { selectionMenu(for: selection.contains(item.url) ? selectedItems : [item]) }
+            .accessibilityAction { activate([item]) }
+    }
+
+    /// The list: the system's own selection, double-click and Return to open.
+    fileprivate var macList: some View {
+        List(selection: $selection) {
+            if showsSectionPicker {
+                LibrarySectionPicker().sectionPickerRow()
+            }
+            ForEach(items) { item in
+                LibraryRow(item: item)
+                    .tag(item.url)
+                    .draggable(item.url)
+            }
+        }
+        .contextMenu(forSelectionType: URL.self) { urls in
+            selectionMenu(for: items.filter { urls.contains($0.url) })
+        } primaryAction: { urls in
+            activate(items.filter { urls.contains($0.url) })
+        }
+    }
+
+    @ViewBuilder
+    private func selectionMenu(for chosen: [LibraryItem]) -> some View {
+        if chosen.count == 1, let item = chosen.first {
+            Button("Open") { activate([item]) }
+            Divider()
+            actions(for: item)
+        } else if chosen.count > 1 {
+            let models = chosen.filter { !$0.isFolder }
+            if !models.isEmpty {
+                Button(models.count == 1 ? "Open" : "Open \(models.count) Models") { activate(models) }
+            }
+            if !isBrowsing {
+                Divider()
+                Button("Delete \(chosen.count) Items", systemImage: "trash", role: .destructive) { requestDelete(chosen) }
+            }
+        }
+    }
+
+    private func click(_ item: LibraryItem) {
+        gridFocused = true
+        let flags = NSEvent.modifierFlags
+        if flags.contains(.command) {
+            if selection.contains(item.url) { selection.remove(item.url) } else { selection.insert(item.url) }
+        } else if flags.contains(.shift), let anchor, let from = index(of: anchor), let to = index(of: item.url) {
+            selection = Set(items[min(from, to)...max(from, to)].map(\.url))
+            return
+        } else {
+            selection = [item.url]
+        }
+        anchor = item.url
+    }
+
+    /// A folder opens in place (only when it's the one thing chosen); each model in
+    /// a window of its own.
+    private func activate(_ chosen: [LibraryItem]) {
+        if chosen.count == 1, let folder = chosen.first, folder.isFolder {
+            openFolder(isBrowsing ? .browse(folder.url, title: folder.url.lastPathComponent) : .folder(folder.url))
+            return
+        }
+        for model in chosen where !model.isFolder {
+            openModel(ModelFileRef(url: model.url, isExternal: isBrowsing))
+        }
+    }
+
+    private func index(of url: URL) -> Int? {
+        items.firstIndex { $0.url == url }
+    }
+
+    private func move(_ key: KeyEquivalent) -> KeyPress.Result {
+        guard !items.isEmpty else { return .ignored }
+        let step = switch key {
+        case .leftArrow: -1
+        case .rightArrow: 1
+        case .upArrow: -columnCount
+        default: columnCount
+        }
+        let current = anchor.flatMap(index(of:))
+        let next = current.map { min(max($0 + step, 0), items.count - 1) } ?? 0
+        selection = [items[next].url]
+        anchor = items[next].url
+        if quickLook != nil, !items[next].isFolder { quickLook = items[next].url }
+        return .handled
+    }
+
+    fileprivate func selectionKeys(_ content: some View) -> some View {
+        content
+            .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
+                // The list moves its own selection; only the grid needs this.
+                guard layout == .grid, !dynamicTypeSize.isAccessibilitySize else { return .ignored }
+                return move(press.key)
+            }
+            .onKeyPress(.return) {
+                guard !selection.isEmpty, layout == .grid else { return .ignored }
+                activate(selectedItems)
+                return .handled
+            }
+            .onKeyPress(.space) {
+                if quickLook != nil {
+                    quickLook = nil
+                } else if let first = selectedItems.first(where: { !$0.isFolder }) {
+                    quickLook = first.url
+                } else {
+                    return .ignored
+                }
+                return .handled
+            }
+            .onKeyPress(.escape) {
+                guard !selection.isEmpty else { return .ignored }
+                selection = []
+                return .handled
+            }
+            .onKeyPress(keys: [.delete, .deleteForward]) { press in
+                guard press.modifiers.contains(.command), !isBrowsing, !selection.isEmpty else { return .ignored }
+                requestDelete(selectedItems)
+                return .handled
+            }
+            .quickLookPreview($quickLook, in: selectedItems.filter { !$0.isFolder }.map(\.url))
+            // A selection doesn't outlive its folder's contents.
+            .onChange(of: items) { selection.formIntersection(items.map(\.url)) }
+    }
+}
+#endif

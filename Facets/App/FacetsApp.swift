@@ -136,6 +136,9 @@ private struct SceneRoot: View {
             .onOpenURL { url in
                 router.open(url, library: library)
             }
+            // An open window takes the file rather than the app making a new one
+            // (on the Mac, the model then gets a window of its own).
+            .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
             // A library model picked from a Spotlight search.
             .onContinueUserActivity(CSSearchableItemActionType) { activity in
                 if let url = SpotlightIndexer.url(for: activity) {
