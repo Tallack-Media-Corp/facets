@@ -130,3 +130,15 @@ extension ToolbarItemPlacement {
     static var topBarTrailing: ToolbarItemPlacement { .primaryAction }
 }
 #endif
+
+extension View {
+    /// Toolbar menus show just their glyph, as on iOS: on the Mac a drop-down
+    /// chevron squeezes into the same glass capsule and pushes the glyph aside.
+    func toolbarMenuIndicator() -> some View {
+        #if os(macOS)
+        menuIndicator(.hidden)
+        #else
+        self
+        #endif
+    }
+}

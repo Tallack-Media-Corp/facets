@@ -247,6 +247,7 @@ struct ViewerScreen: View {
                 } label: {
                     Label("Preset Views", systemImage: "move.3d")
                 }
+                .toolbarMenuIndicator()
             }
             ToolbarSpacer(.flexible, placement: .bottomControls)
             ToolbarItem(placement: .bottomControls) {
@@ -275,6 +276,7 @@ struct ViewerScreen: View {
             Label(tool?.title ?? "Tools", systemImage: tool?.symbol ?? "wrench.and.screwdriver")
         }
         .tint(tool == nil ? nil : Color.accentColor)
+        .toolbarMenuIndicator()
     }
 
     private func symbol(for preset: OrbitCamera.Preset) -> String {
@@ -325,6 +327,7 @@ struct ViewerScreen: View {
                 Label("Display", systemImage: "slider.horizontal.3")
             }
         }
+        .toolbarMenuIndicator()
     }
 
     @ViewBuilder
