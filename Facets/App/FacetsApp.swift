@@ -9,6 +9,9 @@ struct FacetsApp: App {
     @State private var recents = RecentsStore()
     @State private var locations = LocationsStore()
     @State private var settings = ViewerSettings()
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
+    #endif
 
     init() {
         FacetsTips.configure()
@@ -61,6 +64,45 @@ struct FacetsApp: App {
 }
 
 #if os(macOS)
+/// Files from the Finder (double-click, Open With, the Dock), taken at the AppKit
+/// level. On a cold launch the Finder hands them over before SwiftUI's first window
+/// exists, so a window's onOpenURL never saw them: the app opened with no model.
+final class MacAppDelegate: NSObject, NSApplicationDelegate {
+    func application(_ application: NSApplication, open urls: [URL]) {
+        MainActor.assumeIsolated { MacOpener.shared.open(urls) }
+    }
+}
+
+/// Opens models in windows of their own, once SwiftUI can: files that arrive before
+/// any window has appeared wait here, and the first window to appear lets them out.
+@MainActor
+final class MacOpener {
+    static let shared = MacOpener()
+    private var openWindow: OpenWindowAction?
+    private var waiting: [URL] = []
+
+    func open(_ urls: [URL]) {
+        waiting.append(contentsOf: urls.filter(\.isFileURL))
+        drain()
+    }
+
+    /// Called by each window as it appears; any one will do (the action is app-wide).
+    func register(_ action: OpenWindowAction) {
+        openWindow = action
+        drain()
+    }
+
+    private func drain() {
+        guard let openWindow, !waiting.isEmpty else { return }
+        let root = LibraryLocation.current.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        for url in waiting {
+            let inLibrary = url.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root)
+            openWindow(value: ModelFileRef(url: url, isExternal: !inLibrary))
+        }
+        waiting.removeAll()
+    }
+}
+
 extension FocusedValues {
     /// The front window's router, so menu commands can change what it shows.
     @Entry var sceneRouter: Router?
@@ -130,6 +172,7 @@ private struct ModelWindow: View {
         NavigationStack {
             ViewerScreen(file: file)
         }
+        .onAppear { MacOpener.shared.register(openWindow) }
         .formStyle(.grouped)
         // The toast host reads the toast centre, so it goes inside it.
         .toastHost(clearance: 24)
@@ -151,6 +194,9 @@ private struct ModelWindow: View {
 private struct SceneRoot: View {
     @State private var router = Router()
     @State private var toasts = ToastCenter()
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
     @Environment(FileLibrary.self) private var library
     @Environment(ViewerSettings.self) private var settings
     @Environment(\.scenePhase) private var scenePhase
@@ -164,6 +210,8 @@ private struct SceneRoot: View {
             .environment(toasts)
             #if os(macOS)
             .focusedSceneValue(\.sceneRouter, router)
+            // Files from the Finder that came in before this window was up.
+            .onAppear { MacOpener.shared.register(openWindow) }
             #endif
             // Files, Mail, Messages and the share sheet hand files over here.
             .onOpenURL { url in
