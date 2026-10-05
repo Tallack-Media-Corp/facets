@@ -194,7 +194,13 @@ struct ViewOptionsTip: FacetsTip {
 struct SizeTip: FacetsTip {
     let name = "size"
     var title: Text { Text("Size and Fit") }
-    var message: Text? { Text("The model's real size. Tap it to choose your printer and see whether the model fits its bed.") }
+    var message: Text? {
+        #if os(macOS)
+        Text("The model's real size. Click it to choose your printer and see whether the model fits its bed.")
+        #else
+        Text("The model's real size. Tap it to choose your printer and see whether the model fits its bed.")
+        #endif
+    }
     var image: Image? { Image(systemName: "ruler") }
 }
 

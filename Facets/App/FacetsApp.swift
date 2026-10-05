@@ -73,6 +73,25 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// Puts its window in front once it's on screen, and again just after, so a model
+/// opened at launch ends up above the library window that appears with it.
+private struct BringToFront: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        Task { @MainActor in
+            for delay in [0.05, 0.6, 1.5] {
+                try? await Task.sleep(for: .seconds(delay))
+                guard let window = view.window else { continue }
+                NSApp.activate()
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 /// Opens models in windows of their own, once SwiftUI can: files that arrive before
 /// any window has appeared wait here, and the first window to appear lets them out.
 @MainActor
@@ -173,6 +192,9 @@ private struct ModelWindow: View {
             ViewerScreen(file: file)
         }
         .onAppear { MacOpener.shared.register(openWindow) }
+        // On a launch from the Finder the library window comes up after this one and
+        // covers it, so the model looked never to have opened. Come to the front.
+        .background(BringToFront())
         .formStyle(.grouped)
         // The toast host reads the toast centre, so it goes inside it.
         .toastHost(clearance: 24)

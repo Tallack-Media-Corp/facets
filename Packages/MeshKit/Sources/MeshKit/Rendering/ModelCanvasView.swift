@@ -89,6 +89,9 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     private var displayLink: CADisplayLink?
     private var velocity = SIMD2<Float>.zero
     private var animation: (from: OrbitCamera, to: OrbitCamera, start: CFTimeInterval, duration: CFTimeInterval)?
+    /// A short out-and-back zoom: Fit's answer when the model is already framed, so
+    /// the button never seems to do nothing.
+    private var pulse: (base: OrbitCamera, start: CFTimeInterval)?
 
     public init() {
         let context = RenderContext.shared
@@ -157,12 +160,26 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     }
 
     /// Frames what's visible without changing the viewing angle.
-    public func frameModel(animated: Bool) {
-        guard let renderer, bounds.width > 0, bounds.height > 0 else { needsFit = true; return }
+    /// Frames what's showing. Returns false when it already was (nothing to move);
+    /// animated, it then gives a brief out-and-back zoom instead of standing still.
+    @discardableResult
+    public func frameModel(animated: Bool) -> Bool {
+        guard let renderer, bounds.width > 0, bounds.height > 0 else { needsFit = true; return true }
         var next = camera
         next.fitTightly(renderer.visibleParts, aspect: aspect, fill: 0.72, recenter: false, including: bedCorners)
-        move(to: next, animated: animated)
         needsFit = false
+        let settled = animation == nil && pulse == nil
+        let tolerance = max(camera.distance, 1e-3) * 0.01
+        if settled, abs(next.distance - camera.distance) < tolerance, simd_distance(next.target, camera.target) < tolerance {
+            if animated, !Self.reduceMotion, window != nil {
+                velocity = .zero
+                pulse = (camera, CACurrentMediaTime())
+                startDisplayLink()
+            }
+            return false
+        }
+        move(to: next, animated: animated)
+        return true
     }
 
     public func show(_ preset: OrbitCamera.Preset, animated: Bool = true) {
@@ -215,6 +232,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
 
     private func interrupt() {
         animation = nil
+        if let pulse { camera = pulse.base; self.pulse = nil }
         velocity = .zero
         onInteraction?()
     }
@@ -529,7 +547,16 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         } else {
             verticalShift = targetShift
         }
-        if let animation {
+        if let pulse {
+            // Out about 6% and back in 0.5 s, easing at both ends.
+            let t = min((link.timestamp - pulse.start) / 0.5, 1)
+            camera = pulse.base
+            camera.distance = pulse.base.distance * (1 + 0.06 * Float(sin(Double.pi * t)))
+            if t >= 1 {
+                camera = pulse.base
+                self.pulse = nil
+            }
+        } else if let animation {
             let t = min((link.timestamp - animation.start) / animation.duration, 1)
             let eased = Float(1 - pow(1 - t, 3))
             camera = animation.from.interpolated(to: animation.to, eased)
@@ -545,7 +572,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
             velocity = .zero
         }
         requestDraw()
-        if animation == nil, velocity == .zero, verticalShift == targetShift { stopDisplayLink() }
+        if animation == nil, pulse == nil, velocity == .zero, verticalShift == targetShift { stopDisplayLink() }
     }
 
     #if canImport(UIKit)
@@ -782,7 +809,9 @@ public final class ModelCanvasController {
 
     public func resetView() { view?.resetView() }
     public func show(_ preset: OrbitCamera.Preset) { view?.show(preset) }
-    public func frameModel() { view?.frameModel(animated: true) }
+    /// False when the model was already framed (the view then pulses instead).
+    @discardableResult
+    public func frameModel() -> Bool { view?.frameModel(animated: true) ?? true }
 }
 
 /// SwiftUI wrapper around `ModelCanvasView`.

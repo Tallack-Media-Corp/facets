@@ -75,6 +75,9 @@ struct ViewerScreen: View {
     }
     /// Tips wait for the gesture hint (the first opens) so the two never overlap.
     @State private var tipsReady = false
+    /// Counts Fit presses that found the model already framed, for a light tap (the
+    /// canvas gives a small zoom pulse; with Reduce Motion the tap is all there is).
+    @State private var alreadyFitTaps = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The tool panel's height and the screen's, for keeping the model above it.
     @State private var panelHeight: CGFloat = 0
@@ -151,6 +154,7 @@ struct ViewerScreen: View {
         .sensoryFeedback(.selection, trigger: appearance.wireframe)
         .sensoryFeedback(.selection, trigger: appearance.showsGrid)
         .sensoryFeedback(.selection, trigger: settings.bedID)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: alreadyFitTaps)
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
         .hidesTabBar()
@@ -269,7 +273,7 @@ struct ViewerScreen: View {
         if case .loaded = phase {
             ToolbarItem(placement: .bottomControls) {
                 Button("Fit to Screen", systemImage: "viewfinder") {
-                    controller.frameModel()
+                    if !controller.frameModel() { alreadyFitTaps += 1 }
                     FitTip().invalidate(reason: .actionPerformed)
                 }
             }
