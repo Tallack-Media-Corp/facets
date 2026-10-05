@@ -37,8 +37,12 @@ actor ThumbnailStore {
         let usesFileColors: Bool
     }
 
+    /// Bumped when the renderer's look changes (v2: dark colours lifted), so cached
+    /// pictures are redrawn.
+    private static let renderVersion = 2
+
     static func key(for url: URL, size: Int64?, modified: Date?, pixelSize: Int, look: Look) -> String {
-        let raw = "\(url.standardizedFileURL.path)|\(size ?? -1)|\(modified?.timeIntervalSince1970 ?? 0)|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
+        let raw = "v\(renderVersion)|\(url.standardizedFileURL.path)|\(size ?? -1)|\(modified?.timeIntervalSince1970 ?? 0)|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
         return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
@@ -116,7 +120,7 @@ actor ThumbnailStore {
     /// Path-free, so the same file on another device finds it: name, date, size of
     /// picture and look.
     private static func sharedKey(for url: URL, modified: Date?, pixelSize: Int, look: Look) -> String {
-        let raw = "\(url.lastPathComponent)|\(Int(modified?.timeIntervalSince1970 ?? 0))|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
+        let raw = "v\(renderVersion)|\(url.lastPathComponent)|\(Int(modified?.timeIntervalSince1970 ?? 0))|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
         return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 

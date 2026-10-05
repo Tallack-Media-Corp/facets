@@ -43,6 +43,17 @@ enum ShaderSource {
         return out;
     }
 
+    // Black filament reads as a silhouette: its shadows and highlights both sit near
+    // zero. Very dark colours get a little neutral grey added, about #444444 at the
+    // darkest, so their details show; the lift falls away smoothly, and mid and light
+    // colours are untouched. (Linear light: 0.06 is sRGB 0.27.)
+    static float3 liftDark(float3 base) {
+        const float floorLuminance = 0.06;
+        float luminance = dot(base, float3(0.2126, 0.7152, 0.0722));
+        float lifted = sqrt(luminance * luminance + floorLuminance * floorLuminance);
+        return base + (lifted - luminance);
+    }
+
     static float4 shade(float3 base, float3 viewPosition, constant Part &part) {
         if (part.options.x > 0.5) {
             return float4(base * 0.85 + 0.05, 1.0);
@@ -68,7 +79,7 @@ enum ShaderSource {
 
     fragment float4 mesh_fragment(MeshOut in [[stage_in]],
                                   constant Part &part [[buffer(2)]]) {
-        return shade(part.color.rgb, in.viewPosition, part);
+        return shade(liftDark(part.color.rgb), in.viewPosition, part);
     }
 
     // The cross-section, a pipeline of its own: a fragment function that can discard
@@ -80,7 +91,7 @@ enum ShaderSource {
         if (in.worldZ > frame.clip.x) {
             discard_fragment();
         }
-        float3 base = part.color.rgb;
+        float3 base = liftDark(part.color.rgb);
         // With the top cut away, the far side of a wall shows from inside: shade it
         // dark so walls and cavities read against the outer surface. A mirroring
         // transform flips which side faces out.
