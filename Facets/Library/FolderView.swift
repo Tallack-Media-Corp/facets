@@ -223,6 +223,9 @@ struct FolderView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 24)
                 #if os(macOS)
+                // Room above the first row for a selected card's outline, which sits
+                // 3 pt outside the picture: flush, it ran under the toolbar's edge.
+                .padding(.top, showsSectionPicker ? 0 : 12)
                 .onGeometryChange(for: Int.self) { geometry in
                     // As the adaptive grid fits them: 150 pt minimum, 16 pt apart.
                     max(1, Int((geometry.size.width - 32 + 16) / (150 + 16)))
