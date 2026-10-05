@@ -161,7 +161,7 @@ private struct Reader {
                     for state in painted.keys.sorted() {
                         guard let piece = painted[state], piece.triangleCount > 0 else { continue }
                         let pieceColor = state == 0 ? color : Self.filamentColor(state, in: filamentColors)
-                        parts.append(ModelPart(id: parts.count, name: name, geometry: piece, transform: transform, color: pieceColor, objectID: index))
+                        parts.append(ModelPart(id: parts.count, name: name, geometry: piece, transform: transform, color: pieceColor, objectID: index, isPaint: state != 0))
                     }
                 } else {
                     parts.append(ModelPart(id: parts.count, name: name, geometry: geometry, transform: transform, color: color, objectID: index))

@@ -193,13 +193,18 @@ public struct ModelPart: Sendable, Identifiable {
     public var color: SIMD4<Float>?
     /// The build item (3MF) this part belongs to. Parts of one object share it.
     public var objectID: Int
+    /// Multi-colour painting from a slicer. Drawn a hair in front of the rest of its
+    /// object, as the slicers draw paint over the mesh, so where a model has
+    /// coincident faces the paint shows rather than flickering with them.
+    public var isPaint: Bool
     /// World-space bounds of the transformed triangles.
     public let bounds: Bounds
     /// World-space surface by facing, for print estimates.
     public let surface: SurfaceStats
 
-    public init(id: Int, name: String, geometry: MeshGeometry, transform: simd_float4x4 = matrix_identity_float4x4, color: SIMD4<Float>? = nil, objectID: Int = 0) {
+    public init(id: Int, name: String, geometry: MeshGeometry, transform: simd_float4x4 = matrix_identity_float4x4, color: SIMD4<Float>? = nil, objectID: Int = 0, isPaint: Bool = false) {
         self.id = id
+        self.isPaint = isPaint
         self.name = name
         self.geometry = geometry
         self.transform = transform
@@ -543,13 +548,13 @@ public struct Model3D: Sendable, Identifiable {
         }
         let about = translation(pivot) * turn * translation(-pivot)
         var turned = parts.map { part in
-            ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: about * part.transform, color: part.color, objectID: part.objectID)
+            ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: about * part.transform, color: part.color, objectID: part.objectID, isPaint: part.isPaint)
         }
         let shownIDs = Set(visibleParts(plateID: plateID, hidden: hidden).map(\.id))
         let lowest = turned.filter { shownIDs.contains($0.id) }.reduce(Bounds.empty) { $0.union($1.bounds) }.min.z
         let drop = translation(SIMD3(0, 0, shown.min.z - lowest))
         turned = turned.map { part in
-            ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: drop * part.transform, color: part.color, objectID: part.objectID)
+            ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: drop * part.transform, color: part.color, objectID: part.objectID, isPaint: part.isPaint)
         }
         return Model3D(format: format, parts: turned, objects: objects, plates: plates, title: title, application: application, slicerBed: nil, estimates: estimates, sourceID: sourceID)
     }
@@ -564,7 +569,7 @@ public struct Model3D: Sendable, Identifiable {
         scale.columns.1.y = factor
         scale.columns.2.z = factor
         let resized = parts.map { part in
-            ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: scale * part.transform, color: part.color, objectID: part.objectID)
+            ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: scale * part.transform, color: part.color, objectID: part.objectID, isPaint: part.isPaint)
         }
         return Model3D(format: format, parts: resized, objects: objects, plates: plates, title: title, application: application, slicerBed: nil, estimates: estimates, sourceID: sourceID)
     }

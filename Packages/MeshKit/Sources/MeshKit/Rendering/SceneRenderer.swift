@@ -169,6 +169,8 @@ public final class SceneRenderer {
             if appearance.usesFileColors, let fileColor = part.color { color = fileColor }
             let mirrored = simd_determinant(part.transform) < 0
             var uniforms = PartUniforms(model: part.transform, color: color, options: SIMD4(appearance.wireframe ? 1 : 0, mirrored ? 1 : 0, 0, 0))
+            // Paint wins ties with coincident faces of its own object (see isPaint).
+            if part.isPaint { encoder.setDepthBias(-8, slopeScale: -2, clamp: 0) }
             encoder.setVertexBuffer(gpu.positions, offset: 0, index: 0)
             encoder.setVertexBytes(&uniforms, length: MemoryLayout<PartUniforms>.stride, index: 2)
             encoder.setFragmentBytes(&uniforms, length: MemoryLayout<PartUniforms>.stride, index: 2)
@@ -177,6 +179,7 @@ public final class SceneRenderer {
             } else {
                 encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: gpu.count)
             }
+            if part.isPaint { encoder.setDepthBias(0, slopeScale: 0, clamp: 0) }
         }
         encoder.setTriangleFillMode(.fill)
 
