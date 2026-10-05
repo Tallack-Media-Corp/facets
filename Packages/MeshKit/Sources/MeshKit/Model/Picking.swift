@@ -51,6 +51,8 @@ extension ModelPart {
                 indices.withUnsafeBufferPointer { idx in
                     var i = 0
                     while i + 2 < idx.count {
+                        // A newer tap replaced this one: stop scanning (the result is dropped).
+                        if i % 196_608 == 0, Task.isCancelled { return }
                         let a = Int(idx[i]), b = Int(idx[i + 1]), c = Int(idx[i + 2])
                         if a < count, b < count, c < count { test(vertex(a), vertex(b), vertex(c)) }
                         i += 3
@@ -59,6 +61,7 @@ extension ModelPart {
             } else {
                 var i = 0
                 while i + 2 < count {
+                    if i % 196_608 == 0, Task.isCancelled { return }
                     test(vertex(i), vertex(i + 1), vertex(i + 2))
                     i += 3
                 }

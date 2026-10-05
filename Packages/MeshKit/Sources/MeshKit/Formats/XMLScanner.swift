@@ -95,7 +95,8 @@ struct XMLScanner {
                 element.attributes.append(Attribute(name: attrName, value: valueStart..<valueEnd))
                 i = valueEnd + 1
             }
-            position = i
+            // An unclosed value runs to the end; don't step past it.
+            position = min(i, bytes.count)
             return .start
         }
         return nil
@@ -103,8 +104,12 @@ struct XMLScanner {
 
     /// The text up to the next tag, unescaped. For `<metadata name="Title">…`.
     mutating func text() -> String {
-        let start = position
+        let start = min(position, bytes.count)
         let stop = find(UInt8(ascii: "<"), from: start) ?? bytes.count
+        guard start < stop else {
+            position = start
+            return ""
+        }
         position = stop
         return ByteScan.string(bytes, start..<stop).xmlUnescaped
     }

@@ -10,9 +10,20 @@ import AppKit
 /// Rendered the same way as the app's library; very large files fall back to the
 /// picture a 3MF carries, because the extension has little memory to work with.
 final class ThumbnailProvider: QLThumbnailProvider {
-    /// Beyond these sizes a model won't fit in the extension's memory budget.
-    private static let renderLimit3MF = 25_000_000
-    private static let renderLimitSTL = 60_000_000
+    /// Beyond these file sizes a model won't fit in the extension's memory budget
+    /// (a mesh lives twice: in memory and in its Metal buffer). OBJ costs the most
+    /// per byte; a 3MF is compressed, so its entries are capped as they inflate too.
+    #if os(iOS)
+    private static let renderLimitSTL = 20_000_000
+    private static let renderLimitOBJ = 8_000_000
+    private static let renderLimit3MF = 20_000_000
+    private static let inflateLimit = 60_000_000
+    #else
+    private static let renderLimitSTL = 150_000_000
+    private static let renderLimitOBJ = 60_000_000
+    private static let renderLimit3MF = 100_000_000
+    private static let inflateLimit = 600_000_000
+    #endif
 
     override func provideThumbnail(for request: QLFileThumbnailRequest, _ handler: @escaping (QLThumbnailReply?, (any Error)?) -> Void) {
         let url = request.fileURL
@@ -20,9 +31,10 @@ final class ThumbnailProvider: QLThumbnailProvider {
         let pixels = Int(max(maximum.width, maximum.height) * request.scale)
         let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         let isZip = Self.isZip(url)
+        ZipArchive.maximumEntrySize = Self.inflateLimit
 
         var image: CGImage?
-        let limit = isZip ? Self.renderLimit3MF : Self.renderLimitSTL
+        let limit = isZip ? Self.renderLimit3MF : url.pathExtension.lowercased() == "obj" ? Self.renderLimitOBJ : Self.renderLimitSTL
         if fileSize <= limit, let model = try? ModelLoader.load(url) {
             image = ModelSnapshotter()?.image(of: model, pixelSize: pixels)
         }
@@ -39,9 +51,8 @@ final class ThumbnailProvider: QLThumbnailProvider {
         }
 
         // Fit the picture inside the requested box, keeping its shape.
-        let aspect = CGFloat(image.width) / CGFloat(max(image.height, 1))
-        var size = maximum
-        if aspect > 1 { size.height = maximum.width / aspect } else { size.width = maximum.height * aspect }
+        let fit = min(maximum.width / CGFloat(max(image.width, 1)), maximum.height / CGFloat(max(image.height, 1)))
+        let size = CGSize(width: CGFloat(image.width) * fit, height: CGFloat(image.height) * fit)
         // The drawing block gets a context already scaled to the screen.
         #if os(iOS)
         let picture = UIImage(cgImage: image)

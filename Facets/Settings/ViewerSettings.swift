@@ -165,7 +165,7 @@ final class ViewerSettings {
     }
 
     var color: Color {
-        get { Color(hex: colorHex) ?? .orange }
+        get { Color(hex: colorHex) ?? Color(hex: Palette.filamentOrange) ?? .orange }
         set { colorHex = newValue.hexString }
     }
 

@@ -17,7 +17,7 @@ struct FacetsApp: App {
                 .environment(recents)
                 .environment(locations)
                 .environment(settings)
-                .task { library.purgeExpired() }
+                .task { await library.purgeExpired() }
                 .task(priority: .background) { await ThumbnailStore.shared.pruneStale() }
                 .task { await library.connectToICloud() }
         }

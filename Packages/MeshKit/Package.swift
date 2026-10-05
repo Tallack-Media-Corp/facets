@@ -9,6 +9,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "MeshKit"),
-        .testTarget(name: "MeshKitTests", dependencies: ["MeshKit"]),
+        .testTarget(name: "MeshKitTests", dependencies: ["MeshKit"], resources: [.copy("Hostile")]),
     ]
 )

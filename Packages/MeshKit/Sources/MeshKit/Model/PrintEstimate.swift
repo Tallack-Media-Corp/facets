@@ -89,6 +89,8 @@ public struct PrintEstimate: Sendable, Equatable {
         // Small layers are slowed so each has time to cool.
         let printing = max(work, layers * machine.minimumLayer)
         let total = printing + layers * Float(parts) * machine.pieceLayer + machine.start
+        // A damaged file can still reach here with absurd sizes; no estimate then.
+        guard total.isFinite, total < 1e8, mass.isFinite, mass < 1e7 else { return nil }
         seconds = Int(total.rounded())
     }
 }

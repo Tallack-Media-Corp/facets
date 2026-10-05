@@ -109,6 +109,9 @@ private struct SlicerPlate {
 private struct Reader {
     let archive: ZipArchive
     var files: [String: ModelFile] = [:]
+    /// Placed meshes left to make. Components can repeat components, so a tiny
+    /// file could otherwise ask for millions of copies.
+    var leafBudget = 100_000
 
     init(archive: ZipArchive) {
         self.archive = archive
@@ -205,16 +208,20 @@ private struct Reader {
         )
     }
 
-    private mutating func flatten(_ object: ObjectDef, path: String, transform: simd_float4x4, depth: Int, into leaves: inout [(ObjectDef, simd_float4x4, String)]) {
-        guard depth < 16 else { return }
+    private mutating func flatten(_ object: ObjectDef, path: String, transform: simd_float4x4, depth: Int, into leaves: inout [(ObjectDef, simd_float4x4, String)], visiting: Set<String> = []) {
+        // An object that contains itself (directly or further down) is a loop.
+        let key = "\(path)#\(object.id)"
+        guard depth < 16, leafBudget > 0, !visiting.contains(key) else { return }
         if object.geometry != nil {
             leaves.append((object, transform, path))
+            leafBudget -= 1
         }
         for component in object.components {
+            guard leafBudget > 0 else { return }
             let componentPath = component.path.map(ZipArchive.normalize) ?? path
             guard let file = files[componentPath] ?? (try? modelFile(componentPath)),
                   let child = file.objects[component.objectID] else { continue }
-            flatten(child, path: componentPath, transform: transform * component.transform, depth: depth + 1, into: &leaves)
+            flatten(child, path: componentPath, transform: transform * component.transform, depth: depth + 1, into: &leaves, visiting: visiting.union([key]))
         }
     }
 
@@ -481,8 +488,9 @@ private struct Reader {
                         let value = scanner.string("value")
                         switch key {
                         case "index": plate?.index = value.flatMap { Int($0) }
-                        case "prediction": plate?.seconds = value.flatMap { Double($0) }.map { Int($0) }
-                        case "weight": plate?.grams = value.flatMap { Float($0) }
+                        // Figures from the file are checked: "nan" or "1e300" would trap.
+                        case "prediction": plate?.seconds = value.flatMap { Double($0) }.flatMap { $0.isFinite && $0 >= 0 && $0 < 1e8 ? Int($0) : nil }
+                        case "weight": plate?.grams = value.flatMap { Float($0) }.flatMap(Self.sane)
                         case "support_used": plate?.supports = value == "true"
                         default: break
                         }
@@ -490,8 +498,8 @@ private struct Reader {
                         plate?.filaments.append(SliceEstimate.Filament(
                             type: scanner.string("type"),
                             colorHex: scanner.string("color"),
-                            meters: scanner.string("used_m").flatMap { Float($0) },
-                            grams: scanner.string("used_g").flatMap { Float($0) }
+                            meters: scanner.string("used_m").flatMap { Float($0) }.flatMap(Self.sane),
+                            grams: scanner.string("used_g").flatMap { Float($0) }.flatMap(Self.sane)
                         ))
                     }
                 case .end(let name):
@@ -506,6 +514,11 @@ private struct Reader {
             }
             return estimates
         }
+    }
+
+    /// A slicer figure (grams, metres) if it's a plausible one.
+    static func sane(_ value: Float) -> Float? {
+        value.isFinite && value >= 0 && value < 1e7 ? value : nil
     }
 
     /// Filament colours, indexed by extruder: Bambu Studio / Orca project settings,

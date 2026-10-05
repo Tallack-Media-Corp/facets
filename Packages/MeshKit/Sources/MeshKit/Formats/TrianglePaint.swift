@@ -23,10 +23,13 @@ enum TrianglePaint {
         let vertexCount = p.count / 3
         // Per state: its own vertices, and where each original vertex landed in them
         // (UInt32.max for not yet), so whole triangles keep sharing vertices.
+        // The map is made on first use: a state painted only in subdivided pieces
+        // never needs one.
         var groups: [Int: (positions: [Float], indices: [UInt32], remap: [UInt32])] = [:]
 
         func whole(_ state: Int, _ a: UInt32, _ b: UInt32, _ c: UInt32) {
-            var group = groups.removeValue(forKey: state) ?? ([], [], [UInt32](repeating: .max, count: vertexCount))
+            var group = groups.removeValue(forKey: state) ?? ([], [], [])
+            if group.remap.isEmpty { group.remap = [UInt32](repeating: .max, count: vertexCount) }
             for v in [a, b, c] {
                 let mapped = group.remap[Int(v)]
                 if mapped != .max {
@@ -43,7 +46,7 @@ enum TrianglePaint {
         }
 
         func piece(_ state: Int, _ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>) {
-            var group = groups.removeValue(forKey: state) ?? ([], [], [UInt32](repeating: .max, count: vertexCount))
+            var group = groups.removeValue(forKey: state) ?? ([], [], [])
             let base = UInt32(group.positions.count / 3)
             for v in [a, b, c] { group.positions.append(contentsOf: [v.x, v.y, v.z]) }
             group.indices.append(contentsOf: [base, base + 1, base + 2])

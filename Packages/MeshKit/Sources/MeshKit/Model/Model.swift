@@ -110,15 +110,27 @@ public final class MeshGeometry: Sendable {
     /// Bytes the geometry takes on the GPU.
     public var byteCount: Int { positions.count * 4 + (indices?.count ?? 0) * 4 }
 
+    /// Beyond this (10 km, in model units) a coordinate is damage, not a model.
+    static let coordinateLimit: Float = 1e7
+
     public init(positions: [Float], indices: [UInt32]? = nil) {
+        let (positions, indices) = Self.sanitized(positions, indices)
         self.positions = positions
         self.indices = indices
         var bounds = Bounds.empty
         var volume: Double = 0
         positions.withUnsafeBufferPointer { p in
             let count = p.count / 3
-            for i in 0..<count {
-                bounds.add(SIMD3(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]))
+            if let indices {
+                // Only the vertices triangles use: an unused stray point isn't part of the model.
+                for i in indices where Int(i) < count {
+                    let v = Int(i) * 3
+                    bounds.add(SIMD3(p[v], p[v + 1], p[v + 2]))
+                }
+            } else {
+                for i in 0..<count {
+                    bounds.add(SIMD3(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]))
+                }
             }
             func vertex(_ i: Int) -> SIMD3<Double> {
                 SIMD3(Double(p[i * 3]), Double(p[i * 3 + 1]), Double(p[i * 3 + 2]))
@@ -145,6 +157,48 @@ public final class MeshGeometry: Sendable {
         self.bounds = bounds
         self.volume = Float(volume / 6)
         self.surface = Self.surface(positions: positions, indices: indices, transform: nil, outward: volume < 0 ? -1 : 1)
+    }
+
+    /// Drops triangles with a non-finite or absurdly large coordinate ("nan", "1e39"
+    /// in a damaged or hostile file), which would otherwise make the size, the camera
+    /// and the estimates infinite. Unchanged (and uncopied) when nothing is wrong.
+    static func sanitized(_ positions: [Float], _ indices: [UInt32]?) -> ([Float], [UInt32]?) {
+        let limit = coordinateLimit
+        func bad(_ x: Float) -> Bool { !(abs(x) <= limit) }
+        guard positions.contains(where: bad) else { return (positions, indices) }
+        if let indices {
+            let count = positions.count / 3
+            var badVertex = [Bool](repeating: false, count: count)
+            for v in 0..<count where bad(positions[v * 3]) || bad(positions[v * 3 + 1]) || bad(positions[v * 3 + 2]) {
+                badVertex[v] = true
+            }
+            var kept: [UInt32] = []
+            kept.reserveCapacity(indices.count)
+            var t = 0
+            while t + 2 < indices.count {
+                let a = Int(indices[t]), b = Int(indices[t + 1]), c = Int(indices[t + 2])
+                if a < count, b < count, c < count, !badVertex[a], !badVertex[b], !badVertex[c] {
+                    kept.append(contentsOf: indices[t...(t + 2)])
+                }
+                t += 3
+            }
+            // The bad vertices stay in the array (indices refer to them by position)
+            // but are zeroed so nothing downstream ever meets an infinity.
+            var cleaned = positions
+            for v in 0..<count where badVertex[v] {
+                cleaned[v * 3] = 0; cleaned[v * 3 + 1] = 0; cleaned[v * 3 + 2] = 0
+            }
+            return (cleaned, kept)
+        }
+        var kept: [Float] = []
+        kept.reserveCapacity(positions.count)
+        var t = 0
+        while t + 8 < positions.count {
+            let triangle = positions[t..<(t + 9)]
+            if !triangle.contains(where: bad) { kept.append(contentsOf: triangle) }
+            t += 9
+        }
+        return (kept, nil)
     }
 
     /// Surface stats, optionally after a transform. A second pass over the triangles,
@@ -596,6 +650,8 @@ public enum ModelError: LocalizedError, Equatable {
     case emptyFile
     case corrupt(String)
     case noGeometry
+    /// More than this device (or a Quick Look extension) can hold.
+    case tooLarge
 
     public var errorDescription: String? {
         switch self {
@@ -603,6 +659,7 @@ public enum ModelError: LocalizedError, Equatable {
         case .emptyFile: "The file is empty."
         case .corrupt(let detail): "The file couldn't be read: \(detail)."
         case .noGeometry: "The file has no triangles to show."
+        case .tooLarge: "This model is too large to show here."
         }
     }
 }

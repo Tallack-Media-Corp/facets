@@ -79,12 +79,30 @@ actor ThumbnailStore {
             model = try? ModelLoader.load(readURL)
         }
         guard let model else { return nil }
+        return render(model, key: key, url: url, modified: modified, pixelSize: pixelSize, look: look)
+    }
+
+    /// Draws a model the viewer already has open into the library's pictures, at the
+    /// sizes the grid and list use. A big model only in iCloud is never downloaded
+    /// just for its thumbnail (ModelThumbnail.fetchLimit), so this is how it gets
+    /// one, here and, through the shared folder, on the user's other devices.
+    func store(_ model: Model3D, for url: URL, size: Int64?, modified: Date?, look: Look) {
+        for pixelSize in [256, 512] {
+            let key = Self.key(for: url, size: size, modified: modified, pixelSize: pixelSize, look: look)
+            if memory.object(forKey: key as NSString) != nil { continue }
+            if FileManager.default.fileExists(atPath: directory.appending(path: "\(key).png").path) { continue }
+            _ = render(model, key: key, url: url, modified: modified, pixelSize: pixelSize, look: look)
+        }
+    }
+
+    private func render(_ model: Model3D, key: String, url: URL, modified: Date?, pixelSize: Int, look: Look) -> PlatformImage? {
         if snapshotter == nil { snapshotter = ModelSnapshotter() }
         var appearance = RenderAppearance(baseColor: RenderAppearance.linearColor(hex: look.colorHex) ?? RenderAppearance.defaultColor)
         appearance.usesFileColors = look.usesFileColors
         guard let cgImage = snapshotter?.image(of: model, pixelSize: pixelSize, appearance: appearance) else { return nil }
         let image = PlatformImage.from(cgImage)
         memory.setObject(image, forKey: key as NSString)
+        let file = directory.appending(path: "\(key).png")
         if let destination = CGImageDestinationCreateWithURL(file as CFURL, UTType.png.identifier as CFString, 1, nil) {
             CGImageDestinationAddImage(destination, cgImage, nil)
             CGImageDestinationFinalize(destination)

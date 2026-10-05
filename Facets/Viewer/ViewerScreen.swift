@@ -58,6 +58,12 @@ struct ViewerScreen: View {
     @State private var sectionFraction = 1.0
     /// Bumped per turn, so a slow turn finishing late doesn't undo a newer one.
     @State private var turnGeneration = 0
+    /// The turn being worked out; the next one builds on its result, so quick taps
+    /// add up instead of the last one replacing the others.
+    @State private var pendingTurn: Task<Model3D, Never>?
+    /// A unit change being applied; turns wait for it rather than turn the old size.
+    @State private var rescaling = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The tool panel's height and the screen's, for keeping the model above it.
     @State private var panelHeight: CGFloat = 0
     @State private var viewHeight: CGFloat = 1
@@ -125,7 +131,7 @@ struct ViewerScreen: View {
             }
         }
         .overlay(alignment: .top) { topOverlay }
-        .animation(.snappy(duration: 0.25), value: unitSuggestions)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: unitSuggestions)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewHeight = max($0, 1) }
         .overlay(alignment: dockedPanel ? .bottomTrailing : .bottom) { bottomOverlay }
         // Small confirmations for changes that happen out of the finger's sight.
@@ -142,6 +148,27 @@ struct ViewerScreen: View {
     /// Sheets, alerts and the reactions to changes, kept apart from the stage so the
     /// compiler can type-check each half.
     private func lifecycle(_ content: some View) -> some View {
+        reactions(presentations(content))
+    }
+
+    /// Loading, and keeping the stage in step with settings and the plate.
+    private func reactions(_ content: some View) -> some View {
+        content
+        .onChange(of: appearance.plateID) { announceFit() }
+        .task { await load() }
+        .onDisappear {
+            if isAccessing {
+                file.url.stopAccessingSecurityScopedResource()
+                isAccessing = false
+            }
+        }
+        .onChange(of: settings.colorHex) { syncSettings() }
+        .onChange(of: settings.usesFileColors) { syncSettings() }
+        .onChange(of: colorScheme) { syncSettings() }
+    }
+
+    /// The info sheet or inspector, alerts, pickers, and state that follows them.
+    private func presentations(_ content: some View) -> some View {
         content
         // A sheet on iPhone, where the model glides up above it; an inspector beside
         // the model on iPad and Mac, so hiding an object shows what changed.
@@ -156,13 +183,16 @@ struct ViewerScreen: View {
         }
         .background { escapeKey }
         .focusedSceneValue(\.viewerActions, isLoaded ? viewerActions : nil)
-        .animation(.snappy(duration: 0.25), value: tool)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: tool)
         .onChange(of: appearance.plateID) {
             // Another plate is another arrangement: start it as the file has it.
             arranged = nil
             turnGeneration += 1
+            pendingTurn = nil
             measurePoints = []
         }
+        // Points on an object that's been hidden would float over nothing.
+        .onChange(of: appearance.hiddenObjects) { measurePoints = [] }
         .onChange(of: tool) { panelHeight = 0 }
         .onChange(of: unitSuggestions) { panelHeight = 0 }
         .alert("Couldn't Save", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
@@ -193,17 +223,8 @@ struct ViewerScreen: View {
             if id != nil { appearance.showsGrid = true }
             announceFit()
         }
-        .onChange(of: appearance.plateID) { announceFit() }
-        .task { await load() }
-        .onDisappear {
-            if isAccessing {
-                file.url.stopAccessingSecurityScopedResource()
-                isAccessing = false
-            }
-        }
-        .onChange(of: settings.colorHex) { syncSettings() }
-        .onChange(of: settings.usesFileColors) { syncSettings() }
-        .onChange(of: colorScheme) { syncSettings() }
+
+
     }
 
     @ToolbarContentBuilder
@@ -265,6 +286,11 @@ struct ViewerScreen: View {
     }
 
     /// Measure, Lay Flat and Cross-Section. The button shows the open tool.
+    /// Panels rise from the bottom; with Reduce Motion they fade.
+    private var panelTransition: AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
+    }
+
     private var toolsMenu: some View {
         Menu {
             ForEach(ViewerTool.allCases) { option in
@@ -276,6 +302,8 @@ struct ViewerScreen: View {
             Label(tool?.title ?? "Tools", systemImage: tool?.symbol ?? "wrench.and.screwdriver")
         }
         .tint(tool == nil ? nil : Color.accentColor)
+        // The unit card takes the panel's place; settle the size before measuring.
+        .disabled(!unitSuggestions.isEmpty)
         .toolbarMenuIndicator()
     }
 
@@ -445,7 +473,7 @@ struct ViewerScreen: View {
             .frame(maxWidth: dockedPanel ? 360 : nil)
             .padding(.bottom, 8)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .transition(panelTransition)
         } else if let tool, let model = shownModel {
             ToolPanel(
                 tool: tool,
@@ -462,12 +490,12 @@ struct ViewerScreen: View {
             .frame(maxWidth: dockedPanel ? 340 : nil)
             .padding(.bottom, 8)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .transition(panelTransition)
         } else if showingHint {
             GestureHint(stage: shownHintStage ?? 0)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .padding(.bottom, 12)
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
         }
     }
 
@@ -536,6 +564,7 @@ struct ViewerScreen: View {
         guard let original else { return }
         unitScale = factor
         turnGeneration += 1
+        pendingTurn = nil
         let generation = turnGeneration
         arranged = nil
         measurePoints = []
@@ -543,10 +572,12 @@ struct ViewerScreen: View {
             phase = .loaded(original)
             return
         }
+        rescaling = true
         Task {
             let scaled = await Task.detached(priority: .userInitiated) { original.scaled(by: factor) }.value
             guard generation == turnGeneration, unitScale == factor else { return }
             phase = .loaded(scaled)
+            rescaling = false
         }
     }
 
@@ -596,15 +627,23 @@ struct ViewerScreen: View {
     /// Turns what's showing, keeping each turn on top of the last. The new
     /// arrangement is worked out off the main thread: every vertex moves.
     private func reorient(by rotation: simd_float3x3) {
-        guard let model = shownModel else { return }
+        guard !rescaling, let model = shownModel else { return }
         turnGeneration += 1
         let generation = turnGeneration
         let plateID = appearance.plateID, hidden = appearance.hiddenObjects
-        Task {
-            let turned = await Task.detached(priority: .userInitiated) {
-                model.reoriented(by: rotation, plateID: plateID, hidden: hidden)
+        let previous = pendingTurn
+        let turn = Task { () -> Model3D in
+            // On top of a turn still being worked out, not the arrangement before it.
+            let base = await previous?.value ?? model
+            return await Task.detached(priority: .userInitiated) {
+                base.reoriented(by: rotation, plateID: plateID, hidden: hidden)
             }.value
+        }
+        pendingTurn = turn
+        Task {
+            let turned = await turn.value
             guard generation == turnGeneration else { return }
+            pendingTurn = nil
             arranged = turned
             measurePoints = []
             announceArrangement(turned)
@@ -613,6 +652,7 @@ struct ViewerScreen: View {
 
     private func resetOrientation() {
         turnGeneration += 1
+        pendingTurn = nil
         arranged = nil
         measurePoints = []
         if let model = shownModel { announceArrangement(model) }
@@ -684,15 +724,15 @@ struct ViewerScreen: View {
         shownHintStage = hintStage
         Task {
             try? await Task.sleep(for: .seconds(0.6))
-            withAnimation(.easeOut(duration: 0.3)) { showingHint = true }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) { showingHint = true }
             try? await Task.sleep(for: .seconds(6))
-            withAnimation(.easeIn(duration: 0.3)) { showingHint = false }
+            withAnimation(reduceMotion ? nil : .easeIn(duration: 0.3)) { showingHint = false }
         }
     }
 
     private func noteInteraction() {
         if showingHint {
-            withAnimation(.easeIn(duration: 0.25)) { showingHint = false }
+            withAnimation(reduceMotion ? nil : .easeIn(duration: 0.25)) { showingHint = false }
         }
         // One stage per model opened: the next hint waits for the next model.
         if let shown = shownHintStage {
@@ -729,12 +769,29 @@ struct ViewerScreen: View {
             original = model
             phase = .loaded(model)
             checkUnits(of: model)
+            storeThumbnail(of: model)
             offerGestureHint()
             #if DEBUG
             if ProcessInfo.processInfo.environment["FACETS_INFO"] == "1" { showingInfo = true }
             #endif
         } catch {
             phase = .failed(FriendlyError(opening: error))
+        }
+    }
+
+    /// The model is in memory now: draw its library thumbnail from it, so a file too
+    /// big to fetch just for a picture gets one (and other devices share it).
+    private func storeThumbnail(of model: Model3D) {
+        let url = file.url
+        guard !SampleModels.isSample(url) else { return }
+        // Drawing it uploads the mesh a second time; only with memory to spare (this
+        // runs after the viewer's own upload, so it counts that one already).
+        guard let context = RenderContext.shared, context.canDisplay(model) else { return }
+        let look = ThumbnailStore.Look(colorHex: settings.colorHex, usesFileColors: settings.usesFileColors)
+        let size = fileSize
+        Task.detached(priority: .background) {
+            let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+            await ThumbnailStore.shared.store(model, for: url, size: size, modified: modified, look: look)
         }
     }
 
@@ -746,7 +803,9 @@ struct ViewerScreen: View {
             result = Result { try ModelLoader.load(readURL) }
         }
         if let coordinatorError { throw coordinatorError }
-        return try result.get()
+        let model = try result.get()
+        if let context = RenderContext.shared, !context.canDisplay(model) { throw ModelError.tooLarge }
+        return model
     }
 
     private func saveToLibrary() {
@@ -797,6 +856,8 @@ private struct ViewerChips: View {
                                 Text(plate.title).tag(Optional(plate.id))
                             }
                         }
+                        // The plates straight in the menu, not a "Plate" submenu (the Mac's default).
+                        .pickerStyle(.inline)
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "square.stack.3d.up")

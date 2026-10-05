@@ -85,7 +85,8 @@ public enum OBJReader {
                     var value = 0
                     var digits = 0
                     while k < stop, p[k] >= 0x30, p[k] <= 0x39 {
-                        value = value * 10 + Int(p[k] - 0x30)
+                        // Past 10 digits it's no index this file has; stop before it overflows.
+                        if digits < 10 { value = value * 10 + Int(p[k] - 0x30) } else { value = Int.max / 2 }
                         digits += 1
                         k += 1
                     }

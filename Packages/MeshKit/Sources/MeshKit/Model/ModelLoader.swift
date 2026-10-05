@@ -16,6 +16,13 @@ public enum ModelLoader {
     }
 
     public static func load(_ data: Data, name: String, fileExtension: String = "") throws -> Model3D {
+        let model = try read(data, name: name, fileExtension: fileExtension)
+        // Every triangle may have been dropped as damaged (MeshGeometry.sanitized).
+        guard model.triangleCount > 0 else { throw ModelError.noGeometry }
+        return model
+    }
+
+    private static func read(_ data: Data, name: String, fileExtension: String) throws -> Model3D {
         guard !data.isEmpty else { throw ModelError.emptyFile }
         if isZip(data) {
             return try ThreeMFReader.read(ZipArchive(data: data), name: name)

@@ -112,6 +112,9 @@ public final class SceneRenderer {
                 var indexBuffer: MTLBuffer?
                 if let indices = geometry.indices, !indices.isEmpty {
                     indexBuffer = indices.withUnsafeBytes { context.device.makeBuffer(bytes: $0.baseAddress!, length: $0.count, options: .storageModeShared) }
+                    // Without its index buffer an indexed mesh can't be drawn; drawing
+                    // it as a soup would read far past the vertex buffer.
+                    guard indexBuffer != nil else { continue }
                 }
                 let count = geometry.indices?.count ?? geometry.vertexCount
                 geometries[key] = GPUGeometry(positions: positions, indices: indexBuffer, count: count)

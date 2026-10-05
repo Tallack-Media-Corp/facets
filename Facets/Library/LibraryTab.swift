@@ -53,6 +53,8 @@ struct LibraryTab: View {
             }
         }
         .presentsModels()
+        // The library moved (to or from iCloud Drive): folders open from the old one are gone.
+        .onChange(of: library.root) { path = [] }
         .environment(\.zoomNamespace, zoom)
         .environment(\.openFolder) { path.append($0) }
     }

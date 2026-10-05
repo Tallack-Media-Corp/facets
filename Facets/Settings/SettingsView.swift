@@ -39,18 +39,26 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle("Show Build Plate Grid", isOn: $settings.showsGrid)
-                    Toggle("Pure Black in Dark Mode", isOn: $settings.pureBlack)
+                    // Each row explains itself, rather than one paragraph for three rows.
+                    Toggle(isOn: $settings.showsGrid) {
+                        Text("Show Build Plate Grid")
+                        Text("Where each model starts; the viewer's Display menu changes it for one model.")
+                    }
+                    Toggle(isOn: $settings.pureBlack) {
+                        Text("Pure Black in Dark Mode")
+                        Text("True black behind models and thumbnails, for OLED screens.")
+                    }
                     Picker("Units", selection: $settings.units) {
                         ForEach(MeasurementUnits.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Filament for Estimates", selection: $settings.material) {
+                    Picker(selection: $settings.material) {
                         ForEach(FilamentMaterial.allCases) { Text($0.title).tag($0) }
+                    } label: {
+                        Text("Filament for Estimates")
+                        Text("The material used to estimate weight.")
                     }
                 } header: {
                     Text("Viewer")
-                } footer: {
-                    Text("The grid setting is where each model starts; the viewer's Display menu changes it for that model. Filament for Estimates sets the material used to estimate weight. Pure Black takes the viewer and thumbnail backgrounds to true black in dark mode, for OLED screens.")
                 }
 
                 Section {
@@ -160,7 +168,7 @@ private struct ModelColorPicker: View {
             }
             .padding(.vertical, 2)
             ColorPicker("Custom Colour", selection: Binding(
-                get: { Color(hex: hex) ?? .orange },
+                get: { Color(hex: hex) ?? Color(hex: Palette.filamentOrange) ?? .orange },
                 set: { hex = $0.hexString }
             ), supportsOpacity: false)
         }

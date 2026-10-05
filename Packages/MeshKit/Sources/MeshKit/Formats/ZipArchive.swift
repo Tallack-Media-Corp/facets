@@ -76,8 +76,20 @@ public struct ZipArchive: Sendable {
         }
     }
 
+    /// The most one entry may expand to. Quick Look extensions lower it to stay
+    /// inside their memory budget; a declared size above it is refused before
+    /// anything is allocated (a ZIP bomb, or simply too big to show).
+    nonisolated(unsafe) public static var maximumEntrySize = 1_500_000_000
+
     private static func inflate(_ source: UnsafeRawBufferPointer, size: Int) throws -> Data {
         if size == 0 { return Data() }
+        guard size <= maximumEntrySize else {
+            throw ModelError.tooLarge
+        }
+        // Deflate can't shrink data by more than about 1032:1.
+        guard size / 1032 <= max(source.count, 1) else {
+            throw ModelError.corrupt("a package entry is damaged")
+        }
         var output = Data(count: size)
         let written = output.withUnsafeMutableBytes { out -> Int in
             guard let dst = out.bindMemory(to: UInt8.self).baseAddress,
@@ -94,7 +106,8 @@ public struct ZipArchive: Sendable {
     private static func readDirectory(_ raw: UnsafeRawBufferPointer) throws -> [String: Entry] {
         func u16(_ o: Int) -> Int { Int(raw.loadUnaligned(fromByteOffset: o, as: UInt16.self).littleEndian) }
         func u32(_ o: Int) -> Int { Int(raw.loadUnaligned(fromByteOffset: o, as: UInt32.self).littleEndian) }
-        func u64(_ o: Int) -> Int { Int(truncatingIfNeeded: raw.loadUnaligned(fromByteOffset: o, as: UInt64.self).littleEndian) }
+        // A value that doesn't fit an Int is damage; -1 fails every range check below.
+        func u64(_ o: Int) -> Int { Int(exactly: raw.loadUnaligned(fromByteOffset: o, as: UInt64.self).littleEndian) ?? -1 }
 
         guard raw.count >= 22 else { throw ModelError.corrupt("it isn't a ZIP package") }
         // The end-of-central-directory record sits in the last 64 KB + 22 bytes.
@@ -117,6 +130,10 @@ public struct ZipArchive: Sendable {
             guard record >= 0, record + 56 <= raw.count, u32(record) == 0x0606_4B50 else { throw ModelError.corrupt("the ZIP64 directory is damaged") }
             count = u64(record + 32)
             directoryOffset = u64(record + 48)
+        }
+        // Each directory record is at least 46 bytes; a count the file can't hold is damage.
+        guard count >= 0, directoryOffset >= 0, directoryOffset <= raw.count, count <= (raw.count - directoryOffset) / 46 else {
+            throw ModelError.corrupt("the package directory is damaged")
         }
 
         var entries: [String: Entry] = [:]
@@ -153,6 +170,9 @@ public struct ZipArchive: Sendable {
                 e += 4 + size
             }
 
+            guard compressed >= 0, uncompressed >= 0, localOffset >= 0 else {
+                throw ModelError.corrupt("the package directory is damaged")
+            }
             if !name.hasSuffix("/") {
                 entries[normalize(name)] = Entry(method: method, compressedSize: compressed, uncompressedSize: uncompressed, localHeaderOffset: localOffset)
             }

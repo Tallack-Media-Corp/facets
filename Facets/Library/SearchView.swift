@@ -43,6 +43,10 @@ struct SearchView: View {
             .navigationTitle("Search")
             .searchable(text: $query, prompt: "Models")
             .task(id: library.revision) {
+                // An iCloud sync changes many files in a burst; wait for it to settle
+                // rather than walk the whole library for each change.
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
                 let root = library.root
                 all = await Task.detached(priority: .userInitiated) { FileLibrary.allModels(in: root) }.value
             }

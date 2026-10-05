@@ -28,6 +28,7 @@ struct FolderView: View {
     @Environment(FileLibrary.self) private var library
     @Environment(ToastCenter.self) private var toasts
     @Environment(ViewerSettings.self) private var settings
+    @Environment(RecentsStore.self) private var recents
     @Environment(\.undoManager) private var undoManager
     @Environment(\.zoomNamespace) private var zoom
     @AppStorage("library.layout") private var layout: LibraryLayout = .grid
@@ -73,7 +74,8 @@ struct FolderView: View {
                 case .failure(let error): failure = ("Couldn't Import", FriendlyError(file: error).message)
                 }
             }
-            .onDrop(of: UTType.models, isTargeted: $dropTargeted) { providers in
+            // Browsed folders are look-and-save: no drop target there.
+            .onDrop(of: isBrowsing ? [] : UTType.models, isTargeted: $dropTargeted) { providers in
                 !isBrowsing && acceptDrop(providers)
             }
             .overlay {
@@ -370,6 +372,8 @@ struct FolderView: View {
     private func delete(_ items: [LibraryItem]) {
         let name = items.count == 1 ? items[0].displayName : "\(items.count) items"
         perform("Couldn't Delete") {
+            // Before the move: Recents would otherwise follow the files into Recently Deleted.
+            recents.remove(under: items.map(\.url))
             let deleted = try library.delete(items)
             let undo = { [library, toasts] in
                 do {
@@ -459,12 +463,20 @@ struct FolderView: View {
                 if let url = await Self.stage(provider, type: type) { staged.append(url) }
             }
             var added = 0
-            if !staged.isEmpty, let copies = try? await library.importFiles(staged, into: destination) {
-                added = copies.count
+            var importError: Error?
+            if !staged.isEmpty {
+                do {
+                    added = try await library.importFiles(staged, into: destination).count
+                } catch {
+                    importError = error
+                }
             }
             for url in staged { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
             let missed = total - added
             switch (added, missed) {
+            case (0, _) where importError != nil:
+                // The files were fine; copying them failed (no space, iCloud).
+                toasts.show("Couldn't add \(total == 1 ? "that file" : "those files"). \(FriendlyError(file: importError!).message)", symbol: "exclamationmark.triangle.fill")
             case (0, _):
                 toasts.show(total == 1 ? "Couldn't add that file. Only STL, 3MF and OBJ files can go in the library." : "Couldn't add those files. Only STL, 3MF and OBJ files can go in the library.", symbol: "exclamationmark.triangle.fill")
             case (_, 0):

@@ -66,7 +66,7 @@ enum Format {
     /// "1 h 23 min", "48 min", "under a minute".
     static func duration(seconds: Int) -> String {
         if seconds < 60 { return "under a minute" }
-        let minutes = (seconds + 30) / 60
+        let minutes = (min(seconds, 100_000_000) + 30) / 60
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = minutes >= 60 ? [.hour, .minute] : [.minute]
         formatter.unitsStyle = .short
@@ -76,6 +76,7 @@ enum Format {
     /// "6.5 g"; whole grams from 100 up; two decimals under a gram, so a tiny part
     /// doesn't read as nothing.
     static func grams(_ grams: Float) -> String {
+        guard grams.isFinite, grams < 1e9 else { return "—" }
         if grams >= 100 { return "\(Int(grams.rounded())) g" }
         if grams >= 1 { return String(format: "%.1f g", grams) }
         if grams >= 0.01 { return String(format: "%.2f g", grams) }
@@ -93,7 +94,7 @@ enum Format {
     /// An estimate's time, no finer than it can claim: to 5 minutes under an hour,
     /// to the quarter hour up to 10 hours ("9¼ hours"), then to the hour.
     static func roughDuration(seconds: Int) -> String {
-        let minutes = Double(seconds) / 60
+        let minutes = Double(min(seconds, 100_000_000)) / 60
         if minutes < 60 {
             let m = max(5, Int((minutes / 5).rounded()) * 5)
             return m >= 60 ? "1 hour" : "\(m) min"
@@ -110,6 +111,7 @@ enum Format {
 
     /// An estimate's weight to two significant figures ("120 g", "8.4 g").
     static func roughGrams(_ grams: Float) -> String {
+        guard grams.isFinite, grams < 1e9 else { return "—" }
         guard grams >= 0.01 else { return "under 0.01 g" }
         let digits = Int(floor(log10(Double(grams))))
         let step = pow(10, Double(digits - 1))

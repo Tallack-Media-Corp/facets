@@ -15,6 +15,10 @@ final class RecentsStore {
         var bookmark: Data
         var lastOpened: Date
         var isExternal: Bool
+        /// For a file in the library: its path below the library's folder. The
+        /// app's container can move (an update, a restore, iCloud turned on), and a
+        /// bookmark into it doesn't survive that; a path inside the library does.
+        var libraryPath: String?
     }
 
     private(set) var entries: [Entry] = []
@@ -32,23 +36,51 @@ final class RecentsStore {
         guard !SampleModels.isSample(file.url) else { return }
         guard let bookmark = try? Bookmark.make(file.url) else { return }
         let path = file.url.standardizedFileURL.path
-        entries.removeAll { resolve($0)?.standardizedFileURL.path == path }
+        let libraryPath = Self.libraryPath(of: file.url)
+        // The same file, however it was remembered, and dead rows of the same name
+        // (left from before the container moved).
+        entries.removeAll { entry in
+            if let libraryPath, entry.libraryPath == libraryPath { return true }
+            if entry.name == file.name, entry.fileExtension == file.url.pathExtension.uppercased(), resolve(entry) == nil { return true }
+            return resolve(entry)?.standardizedFileURL.path == path
+        }
         entries.insert(Entry(
             id: UUID(),
             name: file.name,
             fileExtension: file.url.pathExtension.uppercased(),
             bookmark: bookmark,
             lastOpened: .now,
-            isExternal: file.isExternal
+            isExternal: file.isExternal,
+            libraryPath: libraryPath
         ), at: 0)
         if entries.count > limit { entries.removeLast(entries.count - limit) }
         save()
     }
 
+    /// The path below the library folder, for a file in the library (not in Recently Deleted).
+    nonisolated static func libraryPath(of url: URL) -> String? {
+        let root = LibraryLocation.current.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        guard path.hasPrefix(root) else { return nil }
+        let relative = String(path.dropFirst(root.count))
+        return relative.hasPrefix(".recently-deleted/") ? nil : relative
+    }
+
     func resolve(_ entry: Entry) -> URL? {
+        Self.location(of: entry.libraryPath, bookmark: entry.bookmark)
+    }
+
+    nonisolated private static func location(of libraryPath: String?, bookmark: Data) -> URL? {
+        if let libraryPath { return LibraryLocation.current.appending(path: libraryPath) }
         var stale = false
-        guard let url = try? Bookmark.resolve(entry.bookmark, isStale: &stale) else { return nil }
-        return url
+        return try? Bookmark.resolve(bookmark, isStale: &stale)
+    }
+
+    /// There, or in iCloud as a placeholder (it downloads when opened).
+    nonisolated private static func exists(_ url: URL) -> Bool {
+        let fileManager = FileManager.default
+        return fileManager.fileExists(atPath: url.path)
+            || fileManager.fileExists(atPath: url.deletingLastPathComponent().appending(path: ".\(url.lastPathComponent).icloud").path)
     }
 
     /// Whether the entry's file is still there and openable.
@@ -56,7 +88,7 @@ final class RecentsStore {
         guard let url = resolve(entry) else { return false }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        return FileManager.default.fileExists(atPath: url.path)
+        return Self.exists(url)
     }
 
     /// What a row shows about an entry's file. Resolving a bookmark and reading the
@@ -70,15 +102,13 @@ final class RecentsStore {
         var isDownloaded = true
     }
 
-    nonisolated static func fileState(for bookmark: Data) -> FileState {
-        var stale = false
-        guard let url = try? Bookmark.resolve(bookmark, isStale: &stale) else { return FileState() }
+    nonisolated static func fileState(for entry: Entry) -> FileState {
+        guard let url = location(of: entry.libraryPath, bookmark: entry.bookmark) else { return FileState() }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let fileManager = FileManager.default
-        let placeholder = url.deletingLastPathComponent().appending(path: ".\(url.lastPathComponent).icloud")
         if !fileManager.fileExists(atPath: url.path) {
-            return FileState(url: url, isAvailable: fileManager.fileExists(atPath: placeholder.path), isDownloaded: false)
+            return FileState(url: url, isAvailable: exists(url), isDownloaded: false)
         }
         let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .ubiquitousItemDownloadingStatusKey])
         let status = values?.ubiquitousItemDownloadingStatus
@@ -98,6 +128,18 @@ final class RecentsStore {
         save()
     }
 
+    /// After a delete: entries for these files, or for anything inside these folders,
+    /// so Recents doesn't open them from Recently Deleted.
+    func remove(under urls: [URL]) {
+        let paths = urls.map { $0.standardizedFileURL.path }
+        let before = entries.count
+        entries.removeAll { entry in
+            guard let path = resolve(entry)?.standardizedFileURL.path else { return false }
+            return paths.contains { path == $0 || path.hasPrefix($0 + "/") }
+        }
+        if entries.count != before { save() }
+    }
+
     func remove(_ entry: Entry) {
         entries.removeAll { $0.id == entry.id }
         save()
@@ -108,16 +150,17 @@ final class RecentsStore {
         save()
     }
 
-    /// Drops entries whose files are gone (deleted, or a bookmark that no longer resolves).
-    func prune() {
-        let before = entries.count
-        entries.removeAll { entry in
-            guard let url = resolve(entry) else { return true }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            return !FileManager.default.fileExists(atPath: url.path)
-        }
-        if entries.count != before { save() }
+    /// Drops entries whose files are gone for good (deleted, or a bookmark that no
+    /// longer resolves). Files only in iCloud count as there. Checked off the main
+    /// thread: bookmarks into other apps' storage can be slow to resolve.
+    func pruneMissing() async {
+        let snapshot = entries
+        let gone = await Task.detached(priority: .utility) {
+            Set(snapshot.filter { !RecentsStore.fileState(for: $0).isAvailable }.map(\.id))
+        }.value
+        guard !gone.isEmpty else { return }
+        entries.removeAll { gone.contains($0.id) }
+        save()
     }
 
     private func save() {

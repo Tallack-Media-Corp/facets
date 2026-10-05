@@ -9,19 +9,44 @@ import UniformTypeIdentifiers
 enum LibraryIndex {
     static var root: URL { LibraryLocation.current }
 
-    /// Every model in the library, skipping the share sheet's Inbox.
+    /// Every model in the library, including ones only in iCloud (by their real
+    /// names), skipping the share sheet's Inbox and Recently Deleted.
     static func models() -> [URL] {
         let root = root
-        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else { return [] }
+        // Hidden files aren't skipped: an evicted model is a ".Name.stl.icloud" placeholder.
+        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.contentModificationDateKey]) else { return [] }
         var result: [URL] = []
         for case let url as URL in enumerator {
-            if url.lastPathComponent == "Inbox", url.deletingLastPathComponent().standardizedFileURL == root {
+            let name = url.lastPathComponent
+            if (name == "Inbox" && url.deletingLastPathComponent().standardizedFileURL == root) || name == ".recently-deleted" || name == ".thumbnails" {
                 enumerator.skipDescendants()
                 continue
             }
-            if ModelLoader.isSupported(url) { result.append(url.standardizedFileURL) }
+            if name.hasPrefix("."), name.hasSuffix(".icloud") {
+                let real = url.deletingLastPathComponent().appending(path: String(name.dropFirst().dropLast(".icloud".count)))
+                if ModelLoader.isSupported(real) { result.append(real.standardizedFileURL) }
+            } else if !name.hasPrefix("."), ModelLoader.isSupported(url) {
+                result.append(url.standardizedFileURL)
+            }
         }
         return result
+    }
+
+    /// There, or only in iCloud.
+    static func exists(_ url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path)
+            || FileManager.default.fileExists(atPath: url.deletingLastPathComponent().appending(path: ".\(url.lastPathComponent).icloud").path)
+    }
+
+    /// Reads a model through a file coordinator, which downloads one only in iCloud.
+    static func load(_ url: URL) throws -> Model3D {
+        var coordinatorError: NSError?
+        var result: Result<Model3D, Error> = .failure(ModelError.emptyFile)
+        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinatorError) { readURL in
+            result = Result { try ModelLoader.load(readURL) }
+        }
+        if let coordinatorError { throw coordinatorError }
+        return try result.get()
     }
 
     static func id(for url: URL) -> String {
@@ -74,7 +99,7 @@ enum SpotlightIndexer {
     static func url(for activity: NSUserActivity) -> URL? {
         guard let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String else { return nil }
         let url = LibraryIndex.url(for: id)
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        return LibraryIndex.exists(url) ? url : nil
     }
 }
 
@@ -111,7 +136,7 @@ struct ModelEntityQuery: EntityStringQuery {
     func entities(for identifiers: [String]) async throws -> [ModelEntity] {
         identifiers.compactMap { id in
             let url = LibraryIndex.url(for: id)
-            return FileManager.default.fileExists(atPath: url.path) ? ModelEntity(url: url) : nil
+            return LibraryIndex.exists(url) ? ModelEntity(url: url) : nil
         }
     }
 
@@ -159,7 +184,7 @@ struct GetModelDimensionsIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         let url = model.url
-        let loaded = try await Task.detached(priority: .userInitiated) { try ModelLoader.load(url) }.value
+        let loaded = try await Task.detached(priority: .userInitiated) { try LibraryIndex.load(url) }.value
         let units = MeasurementUnits(rawValue: UserDefaults.standard.string(forKey: "viewer.units") ?? "") ?? .millimetres
         // A multi-plate project is laid out across several plates; measure the one
         // the viewer opens on, not the whole layout.

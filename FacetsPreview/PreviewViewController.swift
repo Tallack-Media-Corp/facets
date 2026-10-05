@@ -39,7 +39,22 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
         canvas.renderAppearance.gridColor = RenderAppearance.gridColor(dark: dark)
     }
 
+    /// The preview extension has a small memory budget, and a mesh lives twice (in
+    /// memory and in its Metal buffer). Past these, it says so instead of being
+    /// stopped mid-load. A 3MF's entries are also capped as they inflate.
+    private static let limitSTL = 40_000_000
+    private static let limitOBJ = 15_000_000
+    private static let inflateLimit = 80_000_000
+
     func preparePreviewOfFile(at url: URL) async throws {
+        ZipArchive.maximumEntrySize = Self.inflateLimit
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        switch url.pathExtension.lowercased() {
+        case "stl" where size > Self.limitSTL, "obj" where size > Self.limitOBJ:
+            throw ModelError.tooLarge
+        default:
+            break
+        }
         let model = try await Task.detached(priority: .userInitiated) {
             try ModelLoader.load(url)
         }.value

@@ -1,4 +1,7 @@
 import Metal
+#if os(iOS)
+import os
+#endif
 
 /// The device and pipelines, built once per process and shared by every view and
 /// snapshot. Metal devices and pipeline states are thread-safe.
@@ -57,11 +60,37 @@ public final class RenderContext: @unchecked Sendable {
         let write = MTLDepthStencilDescriptor()
         write.depthCompareFunction = .less
         write.isDepthWriteEnabled = true
-        depthWrite = device.makeDepthStencilState(descriptor: write)!
-
         let read = MTLDepthStencilDescriptor()
         read.depthCompareFunction = .less
         read.isDepthWriteEnabled = false
-        depthReadOnly = device.makeDepthStencilState(descriptor: read)!
+        guard let depthWrite = device.makeDepthStencilState(descriptor: write),
+              let depthReadOnly = device.makeDepthStencilState(descriptor: read) else {
+            throw ModelError.corrupt("Metal isn't available")
+        }
+        self.depthWrite = depthWrite
+        self.depthReadOnly = depthReadOnly
+    }
+
+    /// Whether `model` can be shown here: each mesh within the GPU's buffer limit,
+    /// and all of them (held twice, in memory and in Metal buffers) within the memory
+    /// this process has left. Checked after loading, so a model too big for this
+    /// device says so rather than drawing an empty stage or being stopped.
+    public func canDisplay(_ model: Model3D) -> Bool {
+        let limit = device.maxBufferLength
+        var total = 0
+        var seen = Set<ObjectIdentifier>()
+        for part in model.parts where seen.insert(ObjectIdentifier(part.geometry)).inserted {
+            let geometry = part.geometry
+            if geometry.positions.count * 4 > limit || (geometry.indices?.count ?? 0) * 4 > limit { return false }
+            total += geometry.byteCount
+        }
+        #if os(iOS)
+        // The CPU copy already exists; the GPU copy is what's still to come. Zero
+        // means the figure isn't known (the simulator reports it): don't refuse then.
+        let available = Int(os_proc_available_memory())
+        return available == 0 || total < available * 3 / 4
+        #else
+        return true
+        #endif
     }
 }

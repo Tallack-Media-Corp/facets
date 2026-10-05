@@ -23,6 +23,8 @@ struct FriendlyError: Equatable {
                 self.init(.empty, "This File Is Empty", "It has no data in it. If it came from a download, try downloading it again.")
             case .noGeometry:
                 self.init(.noShapes, "Nothing to Show", "The file opened, but it has no shapes in it.")
+            case .tooLarge:
+                self.init(.damaged, "Too Large to Show", "This model is bigger than this device can display. Try it in your slicer, or on a Mac.")
             case .corrupt:
                 self.init(.damaged, "Can't Read This File", "It may be damaged or only partly downloaded, or use a part of the format Facets doesn't read yet. Try downloading it again, or open it in your slicer.")
             }

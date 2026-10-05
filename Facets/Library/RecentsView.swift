@@ -31,6 +31,8 @@ struct RecentsView: View {
                 }
             }
             .navigationTitle("Recents")
+            // Files deleted or gone since last time drop out, rather than piling up.
+            .task { await recents.pruneMissing() }
             .toolbar {
                 if !recents.entries.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -98,7 +100,7 @@ private struct RecentRow: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.tint)
                             .accessibilityHidden(true)
-                        Text("File not found")
+                        Text("Moved or deleted")
                     } else {
                         if entry.isExternal {
                             Image(systemName: "arrow.up.forward.app")
@@ -115,9 +117,10 @@ private struct RecentRow: View {
         }
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
+        .accessibilityHint(isAvailable ? "Opens the model" : "Offers to remove it from Recents")
         .task(id: entry) {
-            let bookmark = entry.bookmark
-            state = await Task.detached(priority: .userInitiated) { RecentsStore.fileState(for: bookmark) }.value
+            let entry = entry
+            state = await Task.detached(priority: .userInitiated) { RecentsStore.fileState(for: entry) }.value
         }
     }
 }

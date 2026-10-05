@@ -16,7 +16,8 @@ final class LocationsStore {
 
     private(set) var locations: [Location] = []
     /// Folders currently opened, so access is started once and kept while the app runs.
-    private var open: [UUID: URL] = [:]
+    // Not observed: filled in while views draw (url(for:)), which mustn't re-render them.
+    @ObservationIgnored private var open: [UUID: URL] = [:]
     private let file = URL.applicationSupportDirectory.appending(path: "locations.json")
 
     init() {
@@ -28,7 +29,11 @@ final class LocationsStore {
                 guard let url = try? Bookmark.resolve(location.bookmark, isStale: &stale) else { return true }
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                return Self.isFolder(url)
+                // Only a definite file goes. A provider that's offline or slow to
+                // answer reads as nothing, and the location must survive that.
+                let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+                guard let isDirectory = values?.isDirectory else { return true }
+                return isDirectory && values?.isPackage != true
             }
             if locations.count != saved.count { save() }
         }

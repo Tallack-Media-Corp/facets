@@ -73,8 +73,11 @@ final class FileLibrary {
         }
     }
 
+    /// In the library, and not in its Recently Deleted.
     func contains(_ url: URL) -> Bool {
-        url.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root.resolvingSymlinksInPath().path + "/")
+        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        let base = root.resolvingSymlinksInPath().path + "/"
+        return path.hasPrefix(base) && !path.hasPrefix(base + ".recently-deleted/")
     }
 
     func isInInbox(_ url: URL) -> Bool {
@@ -205,7 +208,18 @@ final class FileLibrary {
         guard !trimmed.isEmpty else { return item.url }
         let fileName = item.isFolder ? trimmed : "\(trimmed).\(item.url.pathExtension)"
         guard fileName != item.url.lastPathComponent else { return item.url }
-        let destination = uniqueURL(for: fileName, in: item.url.deletingLastPathComponent())
+        let folder = item.url.deletingLastPathComponent()
+        // Only the capitals changed: on a case-insensitive disk the "taken" name is
+        // the file itself, so step through a temporary name instead of making "Name 2".
+        if fileName.lowercased() == item.url.lastPathComponent.lowercased() {
+            let destination = folder.appending(path: fileName)
+            let temporary = folder.appending(path: ".\(UUID().uuidString)")
+            try fileManager.moveItem(at: item.url, to: temporary)
+            try fileManager.moveItem(at: temporary, to: destination)
+            revision += 1
+            return destination
+        }
+        let destination = uniqueURL(for: fileName, in: folder)
         try fileManager.moveItem(at: item.url, to: destination)
         revision += 1
         return destination
@@ -257,7 +271,10 @@ final class FileLibrary {
                 do { try fileManager.moveItem(at: from, to: to) } catch { moveError = error }
             }
             if let error = coordinatorError ?? moveError { throw error }
-            try Data(item.url.path.utf8).write(to: slot.appending(path: ".origin"))
+            // Where it came from, below the library folder when it's in the library: the
+            // container can move, and another device's library is somewhere else.
+            let origin = Self.relativePath(of: item.url, in: root) ?? item.url.path
+            try Data(origin.utf8).write(to: slot.appending(path: ".origin"))
             deleted.append(DeletedItem(stored: stored, original: item.url, deletedAt: .now, isFolder: item.isFolder))
         }
         revision += 1
@@ -288,16 +305,42 @@ final class FileLibrary {
     }
 
     func recentlyDeleted() -> [DeletedItem] {
-        let folders = trash == deviceTrash ? [trash] : [trash, deviceTrash]
+        Self.deletedItems(in: trash == deviceTrash ? [trash] : [trash, deviceTrash], root: root)
+    }
+
+    /// Reads the trash folders. On a device where a slot hasn't downloaded yet, its
+    /// files are iCloud placeholders (".Name.stl.icloud"); they're read by their real
+    /// names, and the small .origin note through a coordinated read, which fetches it.
+    nonisolated static func deletedItems(in folders: [URL], root: URL) -> [DeletedItem] {
+        let fileManager = FileManager.default
         let slots = folders.flatMap { (try? fileManager.contentsOfDirectory(at: $0, includingPropertiesForKeys: [.creationDateKey])) ?? [] }
         return slots.compactMap { slot -> DeletedItem? in
-            guard let originPath = try? String(contentsOf: slot.appending(path: ".origin"), encoding: .utf8),
-                  let stored = (try? fileManager.contentsOfDirectory(at: slot, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]))?.first else { return nil }
+            let names = (try? fileManager.contentsOfDirectory(atPath: slot.path)) ?? []
+            let realNames = names.map { name in
+                name.hasPrefix(".") && name.hasSuffix(".icloud") ? String(name.dropFirst().dropLast(".icloud".count)) : name
+            }
+            guard realNames.contains(".origin"), let storedName = realNames.first(where: { !$0.hasPrefix(".") }) else { return nil }
+            var originText: String?
+            var error: NSError?
+            NSFileCoordinator().coordinate(readingItemAt: slot.appending(path: ".origin"), options: [], error: &error) { url in
+                originText = try? String(contentsOf: url, encoding: .utf8)
+            }
+            guard let originText, !originText.isEmpty else { return nil }
+            // Older notes are absolute paths; newer ones are below the library folder.
+            let original = originText.hasPrefix("/") ? URL(fileURLWithPath: originText) : root.appending(path: originText)
+            let stored = slot.appending(path: storedName)
             let date = (try? slot.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .now
             let isFolder = (try? stored.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-            return DeletedItem(stored: stored, original: URL(fileURLWithPath: originPath), deletedAt: date, isFolder: isFolder)
+            return DeletedItem(stored: stored, original: original, deletedAt: date, isFolder: isFolder)
         }
         .sorted { $0.deletedAt > $1.deletedAt }
+    }
+
+    /// A path below `root`, for a URL inside it.
+    nonisolated static func relativePath(of url: URL, in root: URL) -> String? {
+        let base = root.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        return path.hasPrefix(base) ? String(path.dropFirst(base.count)) : nil
     }
 
     /// Deletes for good.
@@ -308,10 +351,16 @@ final class FileLibrary {
         revision += 1
     }
 
-    /// Clears anything kept longer than 30 days. Called at launch.
-    func purgeExpired() {
+    /// Clears anything kept longer than 30 days. Called at launch; the trash is read
+    /// off the main thread (in iCloud it may need fetching).
+    func purgeExpired() async {
         let cutoff = Date.now.addingTimeInterval(-Self.keepDeletedFor)
-        purge(recentlyDeleted().filter { $0.deletedAt < cutoff })
+        let folders = trash == deviceTrash ? [trash] : [trash, deviceTrash]
+        let root = root
+        let expired = await Task.detached(priority: .background) {
+            FileLibrary.deletedItems(in: folders, root: root).filter { $0.deletedAt < cutoff }
+        }.value
+        if !expired.isEmpty { purge(expired) }
     }
 
     /// True if the library root already has a file with this name and size, so a
@@ -410,15 +459,18 @@ final class FileLibrary {
 
     nonisolated static func uniqueURL(for fileName: String, in folder: URL) -> URL {
         let fileManager = FileManager.default
-        let candidate = folder.appending(path: fileName)
-        guard fileManager.fileExists(atPath: candidate.path) else { return candidate }
+        // A name is taken by a file or by its iCloud placeholder (".Name.stl.icloud").
+        func taken(_ name: String) -> Bool {
+            fileManager.fileExists(atPath: folder.appending(path: name).path)
+                || fileManager.fileExists(atPath: folder.appending(path: ".\(name).icloud").path)
+        }
+        guard taken(fileName) else { return folder.appending(path: fileName) }
         let ext = (fileName as NSString).pathExtension
         let base = (fileName as NSString).deletingPathExtension
         var n = 2
         while true {
             let name = ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)"
-            let url = folder.appending(path: name)
-            if !fileManager.fileExists(atPath: url.path) { return url }
+            if !taken(name) { return folder.appending(path: name) }
             n += 1
         }
     }

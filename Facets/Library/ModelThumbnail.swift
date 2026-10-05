@@ -66,7 +66,10 @@ struct ModelThumbnail: View {
                     result = await ThumbnailStore.shared.sharedThumbnail(for: url, modified: modified, pixelSize: pixels, look: look)
                     // No device has drawn it yet: fetch a reasonably small file once and
                     // draw it, which shares the picture with the others too.
-                    if result == nil, let size, size <= Self.fetchLimit {
+                    // Library files only: a folder under Browse belongs to another app or
+                    // provider, and scrolling it shouldn't download what's in it.
+                    if result == nil, let size, size <= Self.fetchLimit,
+                       url.standardizedFileURL.path.hasPrefix(LibraryLocation.current.standardizedFileURL.path + "/") {
                         result = await ThumbnailStore.shared.thumbnail(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
                     }
                 }

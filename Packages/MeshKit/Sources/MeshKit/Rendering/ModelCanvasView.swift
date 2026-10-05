@@ -97,6 +97,11 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         colorPixelFormat = RenderContext.colorFormat
         depthStencilPixelFormat = RenderContext.depthFormat
         sampleCount = RenderContext.sampleCount
+        #if os(iOS)
+        // Depth is never read back: keep the multisampled depth in tile memory
+        // instead of a full-size texture (tens of MB on a large screen).
+        depthStencilStorageMode = .memoryless
+        #endif
         clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         isPaused = true
         enableSetNeedsDisplay = true
@@ -369,7 +374,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         guard let renderer, let model = renderer.model, let ray = ray(through: point) else { return nil }
         let appearance = renderer.appearance
         let step = max(renderer.focusBounds.radius * 1e-5, 1e-4)
-        return await Task.detached(priority: .userInitiated) {
+        let work = Task.detached(priority: .userInitiated) { () -> SurfaceHit? in
             guard let cut = appearance.sectionHeight else {
                 return model.hit(origin: ray.origin, direction: ray.direction, plateID: appearance.plateID, hidden: appearance.hiddenObjects)
             }
@@ -381,18 +386,24 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
                 origin = hit.point + ray.direction * step
             }
             return nil
-        }.value
+        }
+        // Cancelling the caller (a newer tap) stops the scan too.
+        return await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
     }
 
     /// A tap or click at a point: picks a surface for the open tool.
     private func tapped(at location: CGPoint) {
         guard tool != .none else { return }
         let modelID = renderer?.model?.id
-        Task { @MainActor in
-            guard let hit = await surface(at: location), renderer?.model?.id == modelID else { return }
+        pickTask?.cancel()
+        pickTask = Task { @MainActor in
+            guard let hit = await surface(at: location), !Task.isCancelled, renderer?.model?.id == modelID else { return }
             pick(hit, near: location)
         }
     }
+
+    /// The tap being resolved; a newer one replaces it.
+    private var pickTask: Task<Void, Never>?
 
     private func pick(_ hit: SurfaceHit, near location: CGPoint) {
         guard tool != .none else { return }

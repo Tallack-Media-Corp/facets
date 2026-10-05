@@ -88,14 +88,19 @@ public enum STLReader {
         while i + 6 < end {
             if raw[i] == v, ByteScan.equals(raw, i..<(i + 6), "vertex"), i == 0 || ByteScan.isSpace(raw[i - 1]) {
                 i += 6
-                guard let x = ByteScan.parseFloat(raw, &i, end: end),
-                      let y = ByteScan.parseFloat(raw, &i, end: end),
-                      let z = ByteScan.parseFloat(raw, &i, end: end) else {
-                    throw ModelError.corrupt("a vertex line has missing coordinates")
+                // "nan", "-nan(ind)" or "1.#QNAN" from some exporters: keep the vertex as
+                // NaN so its triangle is dropped (MeshGeometry.sanitized), not the file.
+                let x = ByteScan.parseFloat(raw, &i, end: end)
+                let y = x == nil ? nil : ByteScan.parseFloat(raw, &i, end: end)
+                let z = y == nil ? nil : ByteScan.parseFloat(raw, &i, end: end)
+                if let x, let y, let z {
+                    positions.append(x)
+                    positions.append(y)
+                    positions.append(z)
+                } else {
+                    positions.append(contentsOf: [Float.nan, .nan, .nan])
+                    while i < end, raw[i] != UInt8(ascii: "\n") { i += 1 }
                 }
-                positions.append(x)
-                positions.append(y)
-                positions.append(z)
             } else {
                 i += 1
             }

@@ -67,7 +67,9 @@ struct RootView: View {
         }
         .toastHost(clearance: 24)
         // On the Mac a model from Finder or another app opens in a window of its own.
-        .onChange(of: router.presented) { _, file in
+        // Initial too: a file that launched the app arrives before this window is
+        // watching, and would otherwise sit unopened.
+        .onChange(of: router.presented, initial: true) { _, file in
             guard let file else { return }
             openWindow(value: file)
             router.presented = nil
