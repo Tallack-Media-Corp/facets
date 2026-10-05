@@ -44,11 +44,11 @@ enum ShaderSource {
     }
 
     // Black filament reads as a silhouette: its shadows and highlights both sit near
-    // zero. Very dark colours get a little neutral grey added, about #444444 at the
+    // zero. Very dark colours get a little neutral grey added, about #383838 at the
     // darkest, so their details show; the lift falls away smoothly, and mid and light
-    // colours are untouched. (Linear light: 0.06 is sRGB 0.27.)
+    // colours are untouched. (Linear light: 0.04 is sRGB 0.22.)
     static float3 liftDark(float3 base) {
-        const float floorLuminance = 0.06;
+        const float floorLuminance = 0.04;
         float luminance = dot(base, float3(0.2126, 0.7152, 0.0722));
         float lifted = sqrt(luminance * luminance + floorLuminance * floorLuminance);
         return base + (lifted - luminance);
