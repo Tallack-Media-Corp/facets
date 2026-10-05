@@ -62,6 +62,12 @@ struct LibraryTab: View {
 /// title. It scrolls with the list, so pulling to refresh moves it with the title
 /// instead of leaving it pinned above the spinner.
 struct LibrarySectionPicker: View {
+    /// Where an inset grouped list puts its first row below the title. The grid and
+    /// the empty library are scroll views, so they add it themselves, keeping the
+    /// switch in the same place whichever side is showing (measured on iPhone and
+    /// iPad).
+    static let listTopMargin: CGFloat = 8.5
+
     @AppStorage("library.section") private var section: LibraryTab.Section = .library
 
     var body: some View {

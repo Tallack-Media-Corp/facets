@@ -50,6 +50,10 @@ struct RootView: View {
             NavigationStack {
                 ViewerScreen(file: file, showsCloseButton: true)
             }
+            // The zoom transition's own dismissal (pinch in, or drag) fires on a
+            // pinch that starts near the screen's edge; in the viewer a pinch is
+            // always zoom. The close button is the way out.
+            .interactiveDismissDisabled()
             .toastHost(clearance: 80)
             .zoomDestination(id: file.url, in: router.zoomSource)
         }

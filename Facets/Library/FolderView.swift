@@ -145,7 +145,9 @@ struct FolderView: View {
         } else if items.isEmpty, loaded {
             ScrollView {
                 if showsSectionPicker {
-                    LibrarySectionPicker().padding(.horizontal)
+                    LibrarySectionPicker()
+                        .padding(.horizontal)
+                        .padding(.top, LibrarySectionPicker.listTopMargin)
                 }
                 ContentUnavailableView {
                     Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: "cube.transparent")
@@ -165,6 +167,7 @@ struct FolderView: View {
                 if showsSectionPicker {
                     LibrarySectionPicker()
                         .padding(.horizontal)
+                        .padding(.top, LibrarySectionPicker.listTopMargin)
                         .padding(.bottom, 8)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 16, alignment: .top)], spacing: 20) {

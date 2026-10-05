@@ -69,6 +69,8 @@ private struct ObjectDef {
     var components: [ComponentRef] = []
     var pid: Int?
     var pindex: Int?
+    /// Multi-material painting by triangle index (see TrianglePaint).
+    var paint: [Int: String] = [:]
 }
 
 private struct BuildItem {
@@ -153,7 +155,17 @@ private struct Reader {
                 if leaves.count > 1 {
                     name = partSettings?.name ?? leaf.name ?? "\(objectName) part \(parts.count + 1)"
                 }
-                parts.append(ModelPart(id: parts.count, name: name, geometry: geometry, transform: transform, color: color, objectID: index))
+                // Painted in several filaments: one part per filament, so each draws
+                // in its own colour. Unpainted triangles keep the object's.
+                if !leaf.paint.isEmpty, let painted = TrianglePaint.split(geometry, paint: leaf.paint) {
+                    for state in painted.keys.sorted() {
+                        guard let piece = painted[state], piece.triangleCount > 0 else { continue }
+                        let pieceColor = state == 0 ? color : Self.filamentColor(state, in: filamentColors)
+                        parts.append(ModelPart(id: parts.count, name: name, geometry: piece, transform: transform, color: pieceColor, objectID: index))
+                    }
+                } else {
+                    parts.append(ModelPart(id: parts.count, name: name, geometry: geometry, transform: transform, color: color, objectID: index))
+                }
                 added = true
             }
             if added {
@@ -233,6 +245,7 @@ private struct Reader {
         var colorGroup: Int?
         var positions: [Float] = []
         var indices: [UInt32] = []
+        var paint: [Int: String] = [:]
         var inBuild = false
         var depth = 0
 
@@ -250,6 +263,9 @@ private struct Reader {
                         indices.append(UInt32(truncatingIfNeeded: a))
                         indices.append(UInt32(truncatingIfNeeded: b))
                         indices.append(UInt32(truncatingIfNeeded: c))
+                        if let code = scanner.string("paint_color") ?? scanner.string("mmu_segmentation"), !code.isEmpty {
+                            paint[indices.count / 3 - 1] = code
+                        }
                     }
                 } else if scanner.isElement("object") {
                     current = ObjectDef(id: scanner.int("id") ?? -1, name: scanner.string("name"), pid: scanner.int("pid"), pindex: scanner.int("pindex"))
@@ -260,6 +276,7 @@ private struct Reader {
                 } else if scanner.isElement("mesh") {
                     positions.removeAll(keepingCapacity: true)
                     indices.removeAll(keepingCapacity: true)
+                    paint.removeAll()
                 } else if scanner.isElement("component") {
                     if let id = scanner.int("objectid") {
                         current?.components.append(ComponentRef(path: scanner.string("path"), objectID: id, transform: transform(scanner, scale: scale)))
@@ -303,6 +320,9 @@ private struct Reader {
                         }
                     }
                     current?.geometry = MeshGeometry(positions: positions, indices: valid)
+                    // Dropping bad triangles renumbers the rest; painting would land
+                    // on the wrong ones, so it's left off.
+                    current?.paint = valid.count == indices.count ? paint : [:]
                 } else if scanner.isName(name, "object") {
                     if let object = current { file.objects[object.id] = object }
                     current = nil
@@ -488,12 +508,34 @@ private struct Reader {
         }
     }
 
-    /// Filament colours from Bambu Studio / Orca project settings, indexed by extruder.
+    /// Filament colours, indexed by extruder: Bambu Studio / Orca project settings,
+    /// or PrusaSlicer's config (`; extruder_colour = #…;#…`, else filament_colour).
     private func filamentColours() -> [SIMD4<Float>] {
-        guard let data = try? archive.data(for: "Metadata/project_settings.config"),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let colours = json["filament_colour"] as? [String] else { return [] }
-        return colours.map { parseColor($0) ?? SIMD4(0.8, 0.8, 0.8, 1) }
+        if let data = try? archive.data(for: "Metadata/project_settings.config"),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let colours = json["filament_colour"] as? [String] {
+            return colours.map { parseColor($0) ?? SIMD4(0.8, 0.8, 0.8, 1) }
+        }
+        guard let data = try? archive.data(for: "Metadata/Slic3r_PE.config"), let text = String(data: data, encoding: .utf8) else { return [] }
+        func values(_ key: String) -> [String]? {
+            guard let line = text.split(separator: "\n").first(where: { $0.hasPrefix("; \(key) = ") }) else { return nil }
+            let list = line.dropFirst(key.count + 5).split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+            return list.contains(where: { !$0.isEmpty }) ? list : nil
+        }
+        let extruders = values("extruder_colour"), filaments = values("filament_colour")
+        let count = max(extruders?.count ?? 0, filaments?.count ?? 0)
+        return (0..<count).map { i in
+            let hex = extruders.flatMap { i < $0.count && !$0[i].isEmpty ? $0[i] : nil } ?? filaments.flatMap { i < $0.count ? $0[i] : nil }
+            return hex.flatMap(parseColor) ?? SIMD4(0.8, 0.8, 0.8, 1)
+        }
+    }
+
+    /// A painted filament's colour; one the project doesn't list gets a distinct
+    /// stand-in, so the painting still shows.
+    static func filamentColor(_ filament: Int, in colours: [SIMD4<Float>]) -> SIMD4<Float>? {
+        if filament >= 1, filament <= colours.count { return colours[filament - 1] }
+        let standIns = ["#F2782E", "#F2F2EE", "#2F3033", "#D8352F", "#2F6FD8", "#2FA65A", "#F4C534", "#8A4FD8"]
+        return parseColor(standIns[(max(filament, 1) - 1) % standIns.count])
     }
 }
 

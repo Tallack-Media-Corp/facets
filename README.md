@@ -10,7 +10,7 @@ Free and open source (MIT). No accounts, no tracking, and no network connections
 - **Fit check**: pick your printer (Bambu Lab, Prusa, Creality, Elegoo, Voron or a custom bed) and the viewer outlines its bed under the model and says whether it fits, turned if need be. It can be turned off for dimensions only.
 - **Tools**: measure between two points (snapping to corners), lay a model flat on any face or turn it a quarter at a time, and cut a cross-section to see walls and cavities.
 - **Print estimates**: a project saved sliced from Bambu Studio or Orca shows the slicer's print time and filament per plate; anything else gets an estimate worked out from the model's shape (see docs/print-estimates.md).
-- **3MF projects**: Bambu Studio and Orca plates (pick one or show all), filament colours, multi-part objects, modifiers hidden, per-object visibility, and 3MF base material colours.
+- **3MF projects**: Bambu Studio and Orca plates (pick one or show all), filament colours and multi-colour painting, multi-part objects, modifiers hidden, per-object visibility, and 3MF base material colours.
 - **Library**: a folder of models with rendered thumbnails, subfolders, import, rename, duplicate, move, delete, drag and drop on iPad, and search across every folder.
 - **Browse**: next to Library, add any folder from iCloud Drive, On My iPhone or a storage app in Files and look through it without importing. Folders are kept as security-scoped bookmarks (iOS only lets an app see what the user picks), iCloud files that aren't downloaded yet show a cloud and download when opened, and a plus beside Share saves a copy to the library.
 - **Recents**: models opened from other apps are remembered with security-scoped bookmarks, so they reopen without picking them again.
@@ -58,7 +58,7 @@ That builds and runs on the simulator with no further setup. To run on a device,
 - `STLReader`: binary and ASCII, decided by size rather than the "solid" prefix (many binary files start with it).
 - `ZipArchive`: a minimal reader (stored and deflate, ZIP64) on Apple's Compression framework, so there are no dependencies.
 - `XMLScanner`: an allocation-free tokenizer. 3MF models can hold millions of `<vertex>` elements; this reads a 3.9-million-triangle Bambu project in under a second on a Mac.
-- `ThreeMFReader`: core spec meshes, components and build items, the production extension's per-object model files, base materials and colour groups, and Bambu Studio / Orca `Metadata/` (plates, object names, filament colours, part types).
+- `ThreeMFReader`: core spec meshes, components and build items, the production extension's per-object model files, base materials and colour groups, multi-material painting (`paint_color`, `slic3rpe:mmu_segmentation`, decoded in `TrianglePaint`), and Bambu Studio / Orca `Metadata/` (plates, object names, filament colours, part types).
 - `SceneRenderer`, `ModelCanvasView`, `ModelSnapshotter`: a small Metal renderer. Positions are the only vertex data; flat normals come from screen-space derivatives, which gives the faceted look of a printed part and halves memory. The view draws only when something changes. Shaders compile from source at runtime, so the package needs no Metal build step.
 
 ## Tests
