@@ -47,19 +47,33 @@ struct LibraryTab: View {
                 #endif
             }
             .navigationDestination(for: LibraryRoute.self) { route in
-                switch route {
-                case .folder(let url):
-                    FolderView(folder: url, title: url.lastPathComponent)
-                case .browse(let url, let title):
-                    FolderView(folder: url, title: title, isBrowsing: true)
+                Group {
+                    switch route {
+                    case .folder(let url):
+                        FolderView(folder: url, title: url.lastPathComponent)
+                    case .browse(let url, let title):
+                        FolderView(folder: url, title: title, isBrowsing: true)
+                    }
                 }
+                .folderActions(zoom: zoom) { path.append($0) }
             }
         }
-        .presentsModels()
+        .folderActions(zoom: zoom) { path.append($0) }
         // The library moved (to or from iCloud Drive): folders open from the old one are gone.
         .onChange(of: library.root) { path = [] }
-        .environment(\.zoomNamespace, zoom)
-        .environment(\.openFolder) { path.append($0) }
+    }
+}
+
+extension View {
+    /// What a folder screen needs from its tab: opening models, opening folders in
+    /// the tab's stack, and the zoom transition's namespace. Applied to the stack and
+    /// again to each pushed folder, because on the Mac a pushed destination doesn't
+    /// see values set on its NavigationStack: without it, a double-click in a
+    /// subfolder reached the empty default and did nothing.
+    func folderActions(zoom: Namespace.ID, open: @escaping (LibraryRoute) -> Void) -> some View {
+        presentsModels()
+            .environment(\.zoomNamespace, zoom)
+            .environment(\.openFolder, open)
     }
 }
 

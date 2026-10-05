@@ -37,17 +37,18 @@ struct LocationTab: View {
                 }
             }
             .navigationDestination(for: LibraryRoute.self) { route in
-                switch route {
-                case .folder(let url):
-                    FolderView(folder: url, title: url.lastPathComponent, isBrowsing: true)
-                case .browse(let url, let title):
-                    FolderView(folder: url, title: title, isBrowsing: true)
+                Group {
+                    switch route {
+                    case .folder(let url):
+                        FolderView(folder: url, title: url.lastPathComponent, isBrowsing: true)
+                    case .browse(let url, let title):
+                        FolderView(folder: url, title: title, isBrowsing: true)
+                    }
                 }
+                .folderActions(zoom: zoom) { path.append($0) }
             }
         }
-        .presentsModels()
-        .environment(\.zoomNamespace, zoom)
-        .environment(\.openFolder) { path.append($0) }
+        .folderActions(zoom: zoom) { path.append($0) }
         .onChange(of: relinking) {
             guard relinking else { return }
             relinking = false
