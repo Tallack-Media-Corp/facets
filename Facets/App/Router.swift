@@ -19,6 +19,8 @@ struct ModelFileRef: Identifiable, Hashable, Codable {
 final class Router {
     enum Tab: Hashable {
         case library, recents, settings, search
+        /// A Browse location in the Mac's sidebar.
+        case location(UUID)
     }
 
     var tab: Tab = .library

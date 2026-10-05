@@ -1,6 +1,10 @@
 import MeshKit
 import QuickLookThumbnailing
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 
 /// Thumbnails for STL, 3MF and OBJ in Files and anywhere else the system shows file icons.
 /// Rendered the same way as the app's library; very large files fall back to the
@@ -23,7 +27,11 @@ final class ThumbnailProvider: QLThumbnailProvider {
             image = ModelSnapshotter()?.image(of: model, pixelSize: pixels)
         }
         if image == nil, isZip, let data = ThreeMFReader.thumbnailData(at: url) {
+            #if os(iOS)
             image = UIImage(data: data)?.cgImage
+            #else
+            image = NSImage(data: data)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            #endif
         }
         guard let image else {
             handler(nil, ModelError.noGeometry)
@@ -34,8 +42,12 @@ final class ThumbnailProvider: QLThumbnailProvider {
         let aspect = CGFloat(image.width) / CGFloat(max(image.height, 1))
         var size = maximum
         if aspect > 1 { size.height = maximum.width / aspect } else { size.width = maximum.height * aspect }
-        // The UIKit variant gives a context already scaled to the screen, top-left origin.
+        // The drawing block gets a context already scaled to the screen.
+        #if os(iOS)
         let picture = UIImage(cgImage: image)
+        #else
+        let picture = NSImage(cgImage: image, size: size)
+        #endif
         let reply = QLThumbnailReply(contextSize: size) {
             picture.draw(in: CGRect(origin: .zero, size: size))
             return true

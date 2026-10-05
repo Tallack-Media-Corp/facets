@@ -218,6 +218,8 @@ targets:
       - path: Shared
     dependencies:
       - package: MeshKit
+      - target: FacetsPreviewMac
+      - target: FacetsThumbnailMac
     settings:
       base:
         PRODUCT_NAME: Facets
@@ -234,6 +236,8 @@ targets:
         com.apple.security.app-sandbox: true
         com.apple.security.files.user-selected.read-write: true
         com.apple.security.files.bookmarks.app-scope: true
+        com.apple.security.application-groups:
+          - group.$(FACETS_BUNDLE_ID)
         com.apple.developer.icloud-container-identifiers:
           - iCloud.$(FACETS_BUNDLE_ID)
         com.apple.developer.icloud-services:
@@ -243,6 +247,7 @@ targets:
     info:
       path: FacetsMac/Info.plist
       properties:
+        FacetsAppGroup: group.$(FACETS_BUNDLE_ID)
         CFBundleDisplayName: Facets
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -307,6 +312,83 @@ targets:
               public.mime-type:
                 - model/obj
 
+  # The Finder's Quick Look and thumbnails, from the same sources as iOS's.
+  FacetsPreviewMac:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: FacetsPreview
+        excludes:
+          - Info.plist
+          - FacetsPreview.entitlements
+      - path: Shared
+    dependencies:
+      - package: MeshKit
+      - sdk: Quartz.framework
+    settings:
+      base:
+        PRODUCT_NAME: FacetsPreview
+        PRODUCT_BUNDLE_IDENTIFIER: $(FACETS_BUNDLE_ID).preview
+        ENABLE_HARDENED_RUNTIME: YES
+    entitlements:
+      path: FacetsMac/FacetsPreviewMac.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - group.$(FACETS_BUNDLE_ID)
+    info:
+      path: FacetsMac/FacetsPreviewMac-Info.plist
+      properties:
+        FacetsAppGroup: group.$(FACETS_BUNDLE_ID)
+        CFBundleDisplayName: Facets Preview
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.quicklook.preview
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PreviewViewController
+          NSExtensionAttributes:
+            QLIsDataBasedPreview: false
+            QLSupportsSearchableItems: false
+            QLSupportedContentTypes:
+              - public.standard-tesselated-geometry-format
+              - com.bambulab.3mf
+              - public.geometry-definition-format
+
+  FacetsThumbnailMac:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: FacetsThumbnail
+        excludes:
+          - Info.plist
+    dependencies:
+      - package: MeshKit
+      - sdk: QuickLookThumbnailing.framework
+    settings:
+      base:
+        PRODUCT_NAME: FacetsThumbnail
+        PRODUCT_BUNDLE_IDENTIFIER: $(FACETS_BUNDLE_ID).thumbnail
+        ENABLE_HARDENED_RUNTIME: YES
+    entitlements:
+      path: FacetsMac/FacetsThumbnailMac.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+    info:
+      path: FacetsMac/FacetsThumbnailMac-Info.plist
+      properties:
+        CFBundleDisplayName: Facets Thumbnails
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.quicklook.thumbnail
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ThumbnailProvider
+          NSExtensionAttributes:
+            QLThumbnailMinimumDimension: 0
+            QLSupportedContentTypes:
+              - public.standard-tesselated-geometry-format
+              - com.bambulab.3mf
+              - public.geometry-definition-format
+
 schemes:
   FacetsMac:
     build:
@@ -324,3 +406,4 @@ schemes:
       config: Debug
     archive:
       config: Release
+

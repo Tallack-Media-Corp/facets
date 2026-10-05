@@ -29,6 +29,11 @@ struct LibraryTab: View {
     var body: some View {
         NavigationStack(path: $path) {
             Group {
+                #if os(macOS)
+                // Browse locations are sidebar items on the Mac; no switch here.
+                FolderView(folder: library.root, title: "Library")
+                    .id(library.root)
+                #else
                 switch section {
                 case .library:
                     FolderView(folder: library.root, title: "Library", showsSectionPicker: true)
@@ -36,6 +41,7 @@ struct LibraryTab: View {
                         .id(library.root)
                 case .browse: BrowseView(path: $path)
                 }
+                #endif
             }
             .navigationDestination(for: LibraryRoute.self) { route in
                 switch route {
