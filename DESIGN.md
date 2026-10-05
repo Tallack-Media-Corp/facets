@@ -11,8 +11,8 @@ colors:
   tile-light-bottom: "#E4E7EB"
   tile-dark-top: "#232428"
   tile-dark-bottom: "#131417"
-  grid-ink-light: "rgba(80, 84, 94, 0.26)"
-  grid-ink-dark: "rgba(231, 235, 243, 0.15)"
+  grid-ink-light: "rgba(69, 74, 84, 0.50)"
+  grid-ink-dark: "rgba(231, 235, 243, 0.07)"
   icon-cream-top: "#FFF7EF"
   icon-cream-bottom: "#F6DCC6"
   icon-charcoal-top: "#2A2C31"
@@ -122,7 +122,7 @@ A single warm accent over cool, quiet neutrals: the orange of a fresh spool agai
 - **Stage** (light #F6F7F9 to #D9DCE1, dark #1B1C20 to #08090A, top to bottom): the viewer's backdrop behind the transparent 3D canvas. Cool, desaturated, darker at the floor like a studio sweep.
 - **Tile** (light #F7F8FA to #E4E7EB, dark #232428 to #131417): the same sweep in miniature behind every thumbnail, folder tile and cloud tile, so white and grey models still read.
 - **Pure Black** (Settings › Viewer, off by default): in dark mode the stage runs #101113 to #000000 and tiles #16171A to #000000, for OLED screens. The dark grid is kept at 7% opacity because blending happens in linear light, where a little alpha over near-black reads bright.
-- **Grid Ink** (light rgba(80, 84, 94, 0.26), dark rgba(231, 235, 243, 0.15)): the build-plate grid under a model. Minor lines at 40% of this, every fifth line at 80%, fading out toward the plate edge.
+- **Grid Ink** (light rgba(69, 74, 84, 0.50), dark rgba(231, 235, 243, 0.07)): the build-plate grid under a model. Minor lines at 40% of this, every fifth line at 80%. The alphas differ sevenfold because blending is in linear light, where dark ink on a pale stage reads far fainter than light ink on a dark one; at these values both stand out from their stage by about the same amount. The plate reaches 60% of the model's span past it and feathers out over its outer two thirds on an eased curve, so it dissolves rather than stops.
 - **System semantics**: page backgrounds (systemGroupedBackground), text (label, secondaryLabel, tertiaryLabel) and separators come from iOS, never hex.
 - **Icon fills** (cream #FFF7EF to #F6DCC6, charcoal #2A2C31 to #0C0D10, navy #222C45 to #0B1020): app icon backgrounds only. They never appear in the interface.
 

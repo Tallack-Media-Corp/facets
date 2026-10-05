@@ -123,6 +123,7 @@ private struct SceneRoot: View {
     @State private var router = Router()
     @State private var toasts = ToastCenter()
     @Environment(FileLibrary.self) private var library
+    @Environment(ViewerSettings.self) private var settings
     @Environment(\.scenePhase) private var scenePhase
     private let pending = PendingOpen.shared
 
@@ -166,9 +167,13 @@ private struct SceneRoot: View {
     #if DEBUG
     /// Launch options for screenshots and quick checks:
     /// `FACETS_OPEN=<path below Documents>` opens a library file,
-    /// `FACETS_TAB=library|browse|recents|settings|search` picks the screen.
+    /// `FACETS_TAB=library|browse|recents|settings|search` picks the screen,
+    /// `FACETS_BED=<preset id>|none` the printer.
     private func openFromLaunchEnvironment() {
         let env = ProcessInfo.processInfo.environment
+        if let bed = env["FACETS_BED"] {
+            settings.bedID = bed == "none" ? nil : bed
+        }
         switch env["FACETS_TAB"] {
         case "browse":
             UserDefaults.standard.set("Browse", forKey: "library.section")

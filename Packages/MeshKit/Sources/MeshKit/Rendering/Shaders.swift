@@ -134,7 +134,9 @@ enum ShaderSource {
         float lines = max(minor * 0.4 * crowding, major * 0.8);
 
         float2 t = abs(in.world - grid.rect.xy) / grid.rect.zw;
-        float edge = 1.0 - smoothstep(0.55, 1.0, max(t.x, t.y));
+        // A long, eased feather to the plate's edge, so it dissolves rather than stops.
+        float edge = 1.0 - smoothstep(0.35, 1.0, max(t.x, t.y));
+        edge *= edge;
         float a = grid.color.a * (lines + 0.10) * edge;
         float3 rgb = grid.color.rgb;
 

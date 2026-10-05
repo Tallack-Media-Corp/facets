@@ -34,10 +34,11 @@ public struct RenderAppearance: Sendable, Equatable {
     }
 
     /// Grid colour for a light or dark backdrop. Blending happens in linear light, so
-    /// a small alpha over a dark stage reads far brighter than it sounds; dark mode's
-    /// is kept low so the plate stays near black.
+    /// a small alpha over a dark stage reads far brighter than it sounds, and a dark
+    /// line over a pale stage far fainter: light mode needs about seven times dark
+    /// mode's alpha for the lines to stand out from the stage by the same amount.
     public static func gridColor(dark: Bool) -> SIMD4<Float> {
-        dark ? SIMD4(0.80, 0.83, 0.90, 0.07) : SIMD4(0.08, 0.09, 0.11, 0.26)
+        dark ? SIMD4(0.80, 0.83, 0.90, 0.07) : SIMD4(0.06, 0.07, 0.09, 0.50)
     }
 }
 
@@ -234,7 +235,8 @@ public final class SceneRenderer {
         let size = bounds.size
         let span = max(size.x, size.y, 1)
         let step: Float = [0.5, 1, 2, 5, 10, 20, 50, 100].first { span / $0 <= 16 } ?? 100
-        let margin = max(step * 3, span * 0.45)
+        // Wide enough for the long feather at the edge (Shaders: grid_fragment).
+        let margin = max(step * 4, span * 0.6)
         let minX = bounds.min.x - margin, maxX = bounds.max.x + margin
         let minY = bounds.min.y - margin, maxY = bounds.max.y + margin
         // A hair below the model so its base doesn't fight the plate.
