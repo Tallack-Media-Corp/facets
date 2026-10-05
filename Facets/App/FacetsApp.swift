@@ -148,12 +148,7 @@ private struct OpenCommands: Commands {
             }
             .keyboardShortcut("o")
             Button("Add Location…") {
-                let panel = NSOpenPanel()
-                panel.canChooseDirectories = true
-                panel.canChooseFiles = false
-                panel.prompt = "Add"
-                panel.message = "Choose a folder to browse its STL, 3MF and OBJ files without importing them."
-                guard panel.runModal() == .OK, let url = panel.url, let location = try? locations.add(url) else { return }
+                guard let url = LocationPanel.choose(), let location = try? locations.add(url) else { return }
                 router?.tab = .location(location.id)
             }
             .keyboardShortcut("o", modifiers: [.command, .shift])

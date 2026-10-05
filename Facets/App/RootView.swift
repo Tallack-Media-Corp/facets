@@ -60,8 +60,7 @@ struct RootView: View {
         #else
         .tabViewStyle(.sidebarAdaptable)
         .tabViewSidebarBottomBar {
-            AddLocationButton()
-                .frame(maxWidth: .infinity, alignment: .leading)
+            SidebarFoot()
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
         }

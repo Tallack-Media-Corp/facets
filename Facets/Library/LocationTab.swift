@@ -1,6 +1,7 @@
 #if os(macOS)
 import SwiftUI
 import TipKit
+import os
 
 /// A Browse location as a sidebar item of its own on the Mac, the way the Finder
 /// lists folders: look through its models, open them, save them to the library.
@@ -47,8 +48,10 @@ struct LocationTab: View {
         .presentsModels()
         .environment(\.zoomNamespace, zoom)
         .environment(\.openFolder) { path.append($0) }
-        .fileImporter(isPresented: $relinking, allowedContentTypes: [.folder]) { result in
-            guard case .success(let url) = result, let fresh = try? locations.add(url) else { return }
+        .onChange(of: relinking) {
+            guard relinking else { return }
+            relinking = false
+            guard let url = LocationPanel.choose(), let fresh = try? locations.add(url) else { return }
             // The new entry takes the old one's place, and stays the one showing.
             router.tab = .location(fresh.id)
             // Picking the same folder hands back this very entry: keep it.
@@ -57,17 +60,59 @@ struct LocationTab: View {
     }
 }
 
-/// The sidebar's foot: add a folder to browse.
+/// The folder picker for Browse locations. An open panel of its own rather than
+/// SwiftUI's file importer: the window already has importers (the library's Add
+/// Models), and the sidebar's own one failed straight away beside them, showing an
+/// error before any panel appeared.
+@MainActor
+enum LocationPanel {
+    static func choose() -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Add"
+        panel.message = "Choose a folder to browse its STL, 3MF and OBJ files without importing them."
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+}
+
+/// The sidebar's foot: add a folder to browse, and Settings for anyone who
+/// wouldn't look for it in the app menu.
+struct SidebarFoot: View {
+    var body: some View {
+        HStack {
+            AddLocationButton()
+            Spacer(minLength: 8)
+            SettingsLink {
+                Image(systemName: "gear")
+                    .frame(width: 24, height: 24)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Settings")
+            .accessibilityLabel("Settings")
+        }
+    }
+}
+
+/// Add a folder to browse.
 struct AddLocationButton: View {
     @Environment(LocationsStore.self) private var locations
     @Environment(Router.self) private var router
-    @State private var picking = false
     @State private var errorMessage: String?
 
     var body: some View {
         Button {
-            picking = true
             BrowseTip().invalidate(reason: .actionPerformed)
+            guard let url = LocationPanel.choose() else { return }
+            do {
+                router.tab = .location(try locations.add(url).id)
+            } catch {
+                Logger(subsystem: "Facets", category: "locations").error("Add Location failed: \(error as NSError, privacy: .public)")
+                errorMessage = FriendlyError(file: error).message
+            }
         } label: {
             Label {
                 // One line: the sidebar bar offers less width than the sidebar shows.
@@ -80,18 +125,6 @@ struct AddLocationButton: View {
             .labelStyle(.titleAndIcon)
             .foregroundStyle(.secondary)
             .help("Browse a folder's STL, 3MF and OBJ files without importing them")
-            .fileImporter(isPresented: $picking, allowedContentTypes: [.folder]) { result in
-                switch result {
-                case .success(let url):
-                    do {
-                        router.tab = .location(try locations.add(url).id)
-                    } catch {
-                        errorMessage = FriendlyError(file: error).message
-                    }
-                case .failure(let error):
-                    errorMessage = FriendlyError(file: error).message
-                }
-            }
             .alert("Couldn't Add That Folder", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: {
