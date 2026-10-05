@@ -268,6 +268,7 @@ struct FolderView: View {
             } label: {
                 Label("View Options", systemImage: "ellipsis")
             }
+            .toolbarMenuIndicator()
         }
         if !isBrowsing {
         ToolbarItem(placement: .topBarTrailing) {
@@ -282,6 +283,7 @@ struct FolderView: View {
             } label: {
                 Label("Add", systemImage: "plus")
             }
+            .toolbarMenuIndicator()
         }
         }
     }
