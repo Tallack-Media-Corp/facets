@@ -85,6 +85,12 @@ final class ViewerSettings {
         }
     }
 
+    /// Browse locations: download models under `ModelThumbnail.browseFetchLimit`
+    /// that are only in the cloud, once, so their pictures can be drawn.
+    var fetchesBrowsePreviews: Bool {
+        didSet { defaults.set(fetchesBrowsePreviews, forKey: "library.browsePreviews") }
+    }
+
     /// The filament the shape-based print estimate assumes.
     var material: FilamentMaterial {
         didSet { defaults.set(material.rawValue, forKey: "viewer.material") }
@@ -149,6 +155,7 @@ final class ViewerSettings {
         colorHex = (saved == nil || saved == "#F2802E") ? Palette.filamentOrange : saved!
         usesFileColors = defaults.object(forKey: "viewer.fileColors") as? Bool ?? true
         showsGrid = defaults.object(forKey: "viewer.grid") as? Bool ?? true
+        fetchesBrowsePreviews = defaults.object(forKey: "library.browsePreviews") as? Bool ?? true
         checksFit = defaults.object(forKey: "viewer.checksFit") as? Bool ?? true
         pureBlack = defaults.bool(forKey: "display.pureBlack")
         material = FilamentMaterial(rawValue: defaults.string(forKey: "viewer.material") ?? "") ?? .pla

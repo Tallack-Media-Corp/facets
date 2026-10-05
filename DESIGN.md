@@ -210,7 +210,7 @@ Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt co
 ### Cards / Containers
 - **Library card:** a square tile (14pt corners) with the Tile gradient and the rendered model inset 8%; name and caption beneath, no card background behind the text.
 - **Folder tile:** the same tile with a large filled folder glyph in Filament Orange at 85%.
-- **Cloud tile:** the same tile with an `icloud.and.arrow.down` glyph in secondary label colour for files not yet downloaded.
+- **Cloud tile:** the same tile with an `icloud.and.arrow.down` glyph in secondary label colour for files not yet downloaded. Cloud-only files are fetched once just to draw them (two at a time, only for cards on screen): library files up to 25 MB, Browse files up to 5 MB while Settings › Download Small Models for Previews is on (the default). A picture drawn that way keeps a small cloud badge.
 - **Shadow Strategy:** none (see Elevation & Depth).
 
 ### Inputs / Fields

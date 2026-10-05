@@ -93,6 +93,10 @@ struct SettingsView: View {
                         NSWorkspace.shared.activateFileViewerSelecting([library.root])
                     }
                     #endif
+                    Toggle(isOn: $settings.fetchesBrowsePreviews) {
+                        Text("Download Small Models for Previews")
+                        Text("In Browse locations, models under 5 MB that are only in the cloud download once so their pictures show. Opening a model always downloads it.")
+                    }
                     NavigationLink {
                         RecentlyDeletedView()
                     } label: {

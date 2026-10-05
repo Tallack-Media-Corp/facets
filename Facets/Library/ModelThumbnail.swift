@@ -65,11 +65,11 @@ struct ModelThumbnail: View {
                 } else {
                     result = await ThumbnailStore.shared.sharedThumbnail(for: url, modified: modified, pixelSize: pixels, look: look)
                     // No device has drawn it yet: fetch a reasonably small file once and
-                    // draw it, which shares the picture with the others too.
-                    // Library files only: a folder under Browse belongs to another app or
-                    // provider, and scrolling it shouldn't download what's in it.
-                    if result == nil, let size, size <= Self.fetchLimit,
-                       url.standardizedFileURL.path.hasPrefix(LibraryLocation.current.standardizedFileURL.path + "/") {
+                    // draw it, which shares the picture with the others too. A folder
+                    // under Browse belongs to another app or provider, so only small
+                    // files there, and only with the setting on: scrolling it shouldn't
+                    // pull down big projects. Cards off screen never ask.
+                    if result == nil, let size, size <= fetchLimit {
                         result = await ThumbnailStore.shared.thumbnail(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
                     }
                 }
@@ -80,12 +80,20 @@ struct ModelThumbnail: View {
         }
         .clipShape(.rect(cornerRadius: cornerRadius))
         .accessibilityElement()
-        .accessibilityLabel(isDownloaded ? "" : "In iCloud, downloads when opened")
+        .accessibilityLabel(isDownloaded ? "" : "In the cloud, downloads when opened")
         .accessibilityHidden(isDownloaded)
     }
 
-    /// The largest cloud-only file fetched just to draw its picture.
+    /// The largest cloud-only library file fetched just to draw its picture.
     static let fetchLimit: Int64 = 25_000_000
+    /// The same in a Browse location, with Settings' "Download Small Models for
+    /// Previews" on.
+    static let browseFetchLimit: Int64 = 5_000_000
+
+    private var fetchLimit: Int64 {
+        if url.standardizedFileURL.path.hasPrefix(LibraryLocation.current.standardizedFileURL.path + "/") { return Self.fetchLimit }
+        return settings?.fetchesBrowsePreviews == true ? Self.browseFetchLimit : 0
+    }
 
     /// Rounded up to a few fixed sizes so list and grid share cache entries.
     static func pixelSize(for size: CGSize, scale: CGFloat) -> Int {
