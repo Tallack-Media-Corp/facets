@@ -29,9 +29,9 @@ enum LibrarySort: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .name: "Name"
-        case .modified: "Date Modified"
-        case .size: "Size"
+        case .name: String(localized: "Name", comment: "Sort order")
+        case .modified: String(localized: "Date Modified", comment: "Sort order")
+        case .size: String(localized: "Size", comment: "Sort order")
         }
     }
 }
@@ -378,7 +378,10 @@ final class FileLibrary {
     @discardableResult
     func duplicate(_ item: LibraryItem) async throws -> URL {
         let base = item.url.deletingPathExtension().lastPathComponent
-        let name = item.isFolder ? "\(item.url.lastPathComponent) copy" : "\(base) copy.\(item.url.pathExtension)"
+        // "Bracket copy.stl", as the Finder and Files name a duplicate in each language.
+        let copyName = item.isFolder ? item.url.lastPathComponent : base
+        let copied = String(localized: "\(copyName) copy", comment: "The name of a duplicated file or folder, as in 'Bracket copy'")
+        let name = item.isFolder ? copied : "\(copied).\(item.url.pathExtension)"
         let destination = uniqueURL(for: name, in: item.url.deletingLastPathComponent())
         let source = item.url
         try await Task.detached(priority: .userInitiated) {
@@ -398,7 +401,7 @@ final class FileLibrary {
             // A folder can't go inside itself.
             let target = folder.standardizedFileURL.path, source = item.url.standardizedFileURL.path
             if item.isFolder, target == source || target.hasPrefix(source + "/") {
-                throw CocoaError(.fileWriteInvalidFileName, userInfo: [NSLocalizedDescriptionKey: "A folder can't go inside itself."])
+                throw CocoaError(.fileWriteInvalidFileName, userInfo: [NSLocalizedDescriptionKey: String(localized: "A folder can't go inside itself.")])
             }
             try fileManager.moveItem(at: item.url, to: uniqueURL(for: item.url.lastPathComponent, in: folder))
         }

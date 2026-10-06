@@ -13,9 +13,9 @@ enum LibraryLayout: String {
 /// library it can be changed; while browsing a folder elsewhere it's look-and-save.
 struct FolderView: View {
     #if os(macOS)
-    private static let emptyHint = "Import STL, 3MF and OBJ files, or drag them here from the Finder."
+    private static let emptyHint = String(localized: "Import STL, 3MF and OBJ files, or drag them here from the Finder.")
     #else
-    private static let emptyHint = "Import STL, 3MF and OBJ files, or save them to Facets from the Files app, Mail or any app's share sheet."
+    private static let emptyHint = String(localized: "Import STL, 3MF and OBJ files, or save them to Facets from the Files app, Mail or any app's share sheet.")
     #endif
 
     let folder: URL
@@ -84,8 +84,8 @@ struct FolderView: View {
             .toolbar { toolbar }
             .fileImporter(isPresented: $importing, allowedContentTypes: UTType.models, allowsMultipleSelection: true) { result in
                 switch result {
-                case .success(let urls): perform("Couldn't Import") { try await library.importFiles(urls, into: folder) }
-                case .failure(let error): failure = ("Couldn't Import", FriendlyError(file: error).message)
+                case .success(let urls): perform(String(localized: "Couldn't Import")) { try await library.importFiles(urls, into: folder) }
+                case .failure(let error): failure = (String(localized: "Couldn't Import"), FriendlyError(file: error).message)
                 }
             }
             // Browsed folders are look-and-save: no drop target there.
@@ -128,7 +128,7 @@ struct FolderView: View {
                 TextField("Name", text: $renameText)
                 Button("Cancel", role: .cancel) {}
                 Button("Rename") {
-                    if let item = renaming { perform("Couldn't Rename") { try library.rename(item, to: renameText) } }
+                    if let item = renaming { perform(String(localized: "Couldn't Rename")) { try library.rename(item, to: renameText) } }
                 }
             }
             .confirmationDialog(
@@ -144,7 +144,7 @@ struct FolderView: View {
             }
             .sheet(item: $moving) { item in
                 MoveSheet(item: item) { destination in
-                    perform("Couldn't Move") { try library.move([item], to: destination) }
+                    perform(String(localized: "Couldn't Move")) { try library.move([item], to: destination) }
                 }
             }
             .alert(failure?.title ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
@@ -184,7 +184,7 @@ struct FolderView: View {
                         .controlSize(.large)
                     // Something to look at before there are files of your own.
                     if folder == library.root {
-                        OpenSampleButton(title: "Try the Sample Model")
+                        OpenSampleButton(title: String(localized: "Try the Sample Model"))
                             .buttonStyle(.glass)
                             .controlSize(.large)
                     }
@@ -308,7 +308,7 @@ struct FolderView: View {
                     AddModelsTip().invalidate(reason: .actionPerformed)
                 }
                 Button("New Folder", systemImage: "folder.badge.plus") {
-                    perform("Couldn't Create Folder") {
+                    perform(String(localized: "Couldn't Create Folder")) {
                         let url = try library.createFolder(in: folder)
                         beginRename(LibraryItem(url: url, isFolder: true, size: nil, modified: nil, childCount: 0))
                     }
@@ -345,7 +345,7 @@ struct FolderView: View {
     @ViewBuilder
     private func libraryActions(for item: LibraryItem) -> some View {
         Button("Rename", systemImage: "pencil") { beginRename(item) }
-        Button("Duplicate", systemImage: "plus.square.on.square") { perform("Couldn't Duplicate") { try await library.duplicate(item) } }
+        Button("Duplicate", systemImage: "plus.square.on.square") { perform(String(localized: "Couldn't Duplicate")) { try await library.duplicate(item) } }
         Button("Move…", systemImage: "folder") { moving = item }
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) { requestDelete(item) }
@@ -354,12 +354,12 @@ struct FolderView: View {
     private var deleteTitle: String {
         guard let first = deleting.first else { return "" }
         if deleting.count > 1 {
-            return "Delete \(deleting.count) items and everything in them?"
+            return String(localized: "Delete \(deleting.count) items and everything in them?")
         }
         if first.isFolder {
-            return "Delete \"\(first.displayName)\" and everything in it?"
+            return String(localized: "Delete \"\(first.displayName)\" and everything in it?")
         }
-        return "Delete \"\(first.displayName)\"?"
+        return String(localized: "Delete \"\(first.displayName)\"?")
     }
 
     /// A folder pushes; a model opens in the viewer over the tab.
@@ -378,10 +378,10 @@ struct FolderView: View {
     }
 
     private func save(_ item: LibraryItem) {
-        perform("Couldn't Save to Library") {
+        perform(String(localized: "Couldn't Save to Library")) {
             guard let copy = try await library.importFiles([item.url], into: library.root).first else { return }
             saved.insert(item.url)
-            toasts.show("Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))")
+            toasts.show(String(localized: "Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))"))
         }
     }
 
@@ -401,8 +401,8 @@ struct FolderView: View {
     }
 
     private func delete(_ items: [LibraryItem]) {
-        let name = items.count == 1 ? items[0].displayName : "\(items.count) items"
-        perform("Couldn't Delete") {
+        let name = items.count == 1 ? items[0].displayName : String(localized: "\(items.count) items")
+        perform(String(localized: "Couldn't Delete")) {
             // Before the move: Recents would otherwise follow the files into Recently Deleted.
             recents.remove(under: items.map(\.url))
             let deleted = try library.delete(items)
@@ -410,14 +410,14 @@ struct FolderView: View {
                 do {
                     try library.restore(deleted)
                 } catch {
-                    toasts.show("Couldn't put \(name) back. It's still in Settings › Recently Deleted.", symbol: "exclamationmark.triangle.fill")
+                    toasts.show(String(localized: "Couldn't put \(name) back. It's still in Settings › Recently Deleted."), symbol: "exclamationmark.triangle.fill")
                 }
             }
             undoManager?.registerUndo(withTarget: library) { _ in
                 MainActor.assumeIsolated { undo() }
             }
             undoManager?.setActionName("Delete \(name)")
-            toasts.show("Deleted \(name)", symbol: "trash.fill", actionTitle: "Undo", action: undo)
+            toasts.show(String(localized: "Deleted \"\(name)\"", comment: "Toast after deleting, with the item's name"), symbol: "trash.fill", actionTitle: String(localized: "Undo"), action: undo)
             #if os(macOS)
             selection.subtract(items.map(\.url))
             #endif
@@ -507,13 +507,13 @@ struct FolderView: View {
             switch (added, missed) {
             case (0, _) where importError != nil:
                 // The files were fine; copying them failed (no space, iCloud).
-                toasts.show("Couldn't add \(total == 1 ? "that file" : "those files"). \(FriendlyError(file: importError!).message)", symbol: "exclamationmark.triangle.fill")
+                toasts.show(total == 1 ? String(localized: "Couldn't add that file. \(FriendlyError(file: importError!).message)") : String(localized: "Couldn't add those files. \(FriendlyError(file: importError!).message)"), symbol: "exclamationmark.triangle.fill")
             case (0, _):
-                toasts.show(total == 1 ? "Couldn't add that file. Only STL, 3MF and OBJ files can go in the library." : "Couldn't add those files. Only STL, 3MF and OBJ files can go in the library.", symbol: "exclamationmark.triangle.fill")
+                toasts.show(total == 1 ? String(localized: "Couldn't add that file. Only STL, 3MF and OBJ files can go in the library.") : String(localized: "Couldn't add those files. Only STL, 3MF and OBJ files can go in the library."), symbol: "exclamationmark.triangle.fill")
             case (_, 0):
-                toasts.show(added == 1 ? "Added 1 model" : "Added \(added) models")
+                toasts.show(String(localized: "Added \(added) models"))
             default:
-                toasts.show("Added \(added) of \(total). The others aren't STL, 3MF or OBJ files.", symbol: "exclamationmark.triangle.fill")
+                toasts.show(String(localized: "Added \(added) of \(total). The others aren't STL, 3MF or OBJ files."), symbol: "exclamationmark.triangle.fill")
             }
         }
         return true
@@ -646,8 +646,8 @@ struct LibraryRow: View {
 
     static func subtitle(for item: LibraryItem) -> String {
         if item.isFolder {
-            guard let count = item.childCount else { return "Folder" }
-            return count == 1 ? "1 item" : "\(count) items"
+            guard let count = item.childCount else { return String(localized: "Folder") }
+            return String(localized: "\(count) items")
         }
         return [item.fileExtension, Format.fileSize(item.size), Format.date(item.modified)]
             .filter { !$0.isEmpty }
@@ -750,7 +750,7 @@ extension FolderView {
         } else if chosen.count > 1 {
             let models = chosen.filter { !$0.isFolder }
             if !models.isEmpty {
-                Button(models.count == 1 ? "Open" : "Open \(models.count) Models") { activate(models) }
+                Button(models.count == 1 ? String(localized: "Open") : String(localized: "Open \(models.count) Models")) { activate(models) }
             }
             if !isBrowsing {
                 Divider()
