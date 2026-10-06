@@ -59,6 +59,10 @@ struct LibraryTab: View {
             }
         }
         .folderActions(zoom: zoom) { path.append($0) }
+        // Read the path here, not only hand the stack a binding: otherwise a folder
+        // opened from a pushed folder changed it without redrawing this tab, and the
+        // Mac showed the new folder only when something else redrew, seconds later.
+        .onChange(of: path) {}
         // The library moved (to or from iCloud Drive): folders open from the old one are gone.
         .onChange(of: library.root) { path = [] }
     }
