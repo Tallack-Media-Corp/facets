@@ -104,6 +104,7 @@ struct FolderView: View {
             .overlay(alignment: .bottom) {
                 FloatingTip(tip: libraryTip)
                     .padding(.bottom, 12)
+                    .clearOfFold()
                     .animation(.snappy, value: libraryTip?.id)
             }
             .overlay {

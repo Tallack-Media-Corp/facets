@@ -149,10 +149,12 @@ struct ViewerScreen: View {
                     .accessibilityHint("Swipe up or down to turn the model or change the view.")
             }
         }
-        .overlay(alignment: .top) { topOverlay }
+        .overlay(alignment: .top) { topOverlay.clearOfFold() }
         .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: unitSuggestions)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewHeight = max($0, 1) }
-        .overlay(alignment: dockedPanel ? .bottomTrailing : .bottom) { bottomOverlay }
+        .overlay(alignment: dockedPanel ? .bottomTrailing : .bottom) {
+            if dockedPanel { bottomOverlay } else { bottomOverlay.clearOfFold() }
+        }
         // Small confirmations for changes that happen out of the finger's sight.
         .sensoryFeedback(.selection, trigger: appearance.plateID)
         .sensoryFeedback(.selection, trigger: appearance.wireframe)
@@ -891,6 +893,8 @@ struct ViewerScreen: View {
             offerGestureHint()
             #if DEBUG
             if ProcessInfo.processInfo.environment["FACETS_INFO"] == "1" { showingInfo = true }
+            // FACETS_TOOL=measure|layFlat|section opens that tool's panel.
+            if let name = ProcessInfo.processInfo.environment["FACETS_TOOL"], let tool = ViewerTool(rawValue: name) { open(tool) }
             #endif
         } catch {
             phase = .failed(FriendlyError(opening: error))

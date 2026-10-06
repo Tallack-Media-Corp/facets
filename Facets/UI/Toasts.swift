@@ -91,6 +91,7 @@ private struct ToastHost: ViewModifier {
                         toasts.dismiss(toast.id)
                     }
                     .padding(.bottom, clearance)
+                    .clearOfFold()
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .id(toast.id)
                 }
