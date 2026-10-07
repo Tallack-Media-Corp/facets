@@ -9,7 +9,7 @@ enum SampleModels {
         Bundle.main.url(forResource: "3DBenchy", withExtension: "3mf")
     }
 
-    static let credit = "#3DBenchy by Creative Tools (3DBenchy.com), public domain (CC0). The two-colour version is made from its dual-print files."
+    static var credit: String { String(localized: "#3DBenchy by Creative Tools (3DBenchy.com), public domain (CC0). The two-colour version is made from its dual-print files.") }
 
     /// Inside the app bundle, whose path changes with every update: not for Recents.
     static func isSample(_ url: URL) -> Bool {
@@ -20,7 +20,7 @@ enum SampleModels {
 /// Opens the sample: in the viewer over the current tab on iPhone and iPad, in a
 /// window of its own on the Mac. Works where `openModel` isn't set (Settings).
 struct OpenSampleButton: View {
-    var title = "Open the Sample"
+    var title = String(localized: "Open the Sample")
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #else
