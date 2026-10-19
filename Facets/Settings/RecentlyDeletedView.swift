@@ -59,12 +59,12 @@ struct RecentlyDeletedView: View {
             }
         }
         .hidesTabBar()
-        .confirmationDialog("Delete \(items.count == 1 ? "this item" : "all \(items.count) items") for good?", isPresented: $confirmingEmpty, titleVisibility: .visible) {
+        .confirmationDialog(items.count == 1 ? String(localized: "Delete this item for good?") : String(localized: "Delete all \(items.count) items for good?"), isPresented: $confirmingEmpty, titleVisibility: .visible) {
             Button("Delete All", role: .destructive) { purge(items) }
         } message: {
             Text("They can't be restored after this.")
         }
-        .confirmationDialog("Delete \"\(purging?.displayName ?? "")\" for good?", isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }), titleVisibility: .visible) {
+        .confirmationDialog(String(localized: "Delete \"\(purging?.displayName ?? "")\" for good?"), isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }), titleVisibility: .visible) {
             Button("Delete Now", role: .destructive) {
                 if let purging { purge([purging]) }
             }
@@ -78,7 +78,10 @@ struct RecentlyDeletedView: View {
     private func detail(for item: FileLibrary.DeletedItem) -> String {
         let daysLeft = max(0, Int(ceil(item.deletedAt.addingTimeInterval(FileLibrary.keepDeletedFor).timeIntervalSinceNow / 86_400)))
         let deleted = item.deletedAt.formatted(.relative(presentation: .named))
-        return "Deleted \(deleted) · \(daysLeft == 1 ? "1 day" : "\(daysLeft) days") left"
+        // Two strings, so each has one placeholder and the days can take a plural.
+        let when = String(localized: "Deleted \(deleted)", comment: "When an item was deleted, as in 'Deleted yesterday'")
+        let left = String(localized: "\(daysLeft) days left", comment: "Days until a deleted item is gone for good")
+        return "\(when) · \(left)"
     }
 
     private func reload() {
@@ -89,12 +92,12 @@ struct RecentlyDeletedView: View {
         do {
             let restored = try library.restore(chosen)
             if restored.count == 1, let first = restored.first {
-                toasts.show("Restored \(Format.title(fromFileName: first.deletingPathExtension().lastPathComponent))")
+                toasts.show(String(localized: "Restored \(Format.title(fromFileName: first.deletingPathExtension().lastPathComponent))"))
             } else {
-                toasts.show("Restored \(restored.count) items")
+                toasts.show(String(localized: "Restored \(restored.count) items"))
             }
         } catch {
-            toasts.show("Couldn't restore. There may not be enough space.", symbol: "exclamationmark.triangle.fill")
+            toasts.show(String(localized: "Couldn't restore. There may not be enough space."), symbol: "exclamationmark.triangle.fill")
         }
     }
 

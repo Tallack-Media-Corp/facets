@@ -52,7 +52,7 @@ struct RecentsView: View {
                 }
                 Button("Keep", role: .cancel) {}
             } message: {
-                Text("\(missing?.displayName ?? "This model") was moved, renamed or deleted, or Facets no longer has access to it.")
+                Text(missing.map { String(localized: "\($0.displayName) was moved, renamed or deleted, or Facets no longer has access to it.") } ?? String(localized: "This model was moved, renamed or deleted, or Facets no longer has access to it."))
             }
         }
     }

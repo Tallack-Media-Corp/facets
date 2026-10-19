@@ -49,7 +49,7 @@ struct UnitSuggestionCard: View {
                 ForEach(suggestions) { unit in
                     Button { choose(unit) } label: {
                         VStack(spacing: 1) {
-                            Text(unit.title).font(.footnote.weight(.semibold))
+                            Text(unit.localizedTitle).font(.footnote.weight(.semibold))
                             Text(Format.dimension(largest * unit.factor, units: units))
                                 .font(.caption2.monospacedDigit())
                                 .opacity(0.8)
@@ -58,7 +58,7 @@ struct UnitSuggestionCard: View {
                     }
                     // Equal weight: size alone can't tell metres from inches.
                     .buttonStyle(.glass)
-                    .accessibilityLabel("\(unit.title), \(Format.dimension(largest * unit.factor, units: units)) across")
+                    .accessibilityLabel("\(unit.localizedTitle), \(Format.dimension(largest * unit.factor, units: units)) across")
                 }
                 Button(action: keep) {
                     Text("Keep")

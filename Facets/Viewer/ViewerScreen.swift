@@ -145,14 +145,16 @@ struct ViewerScreen: View {
                 }
                     // Under the bars, but beside an open inspector rather than behind it.
                     .ignoresSafeArea(edges: showingInfo && infoAsInspector ? .vertical : .all)
-                    .accessibilityLabel("\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))\(unitSuggestions.isEmpty ? fitNote(for: model).map { ". \($0.text)" } ?? "" : "")")
+                    .accessibilityLabel(canvasLabel(for: model))
                     .accessibilityHint("Swipe up or down to turn the model or change the view.")
             }
         }
-        .overlay(alignment: .top) { topOverlay }
+        .overlay(alignment: .top) { topOverlay.clearOfFold() }
         .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: unitSuggestions)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewHeight = max($0, 1) }
-        .overlay(alignment: dockedPanel ? .bottomTrailing : .bottom) { bottomOverlay }
+        .overlay(alignment: dockedPanel ? .bottomTrailing : .bottom) {
+            if dockedPanel { bottomOverlay } else { bottomOverlay.clearOfFold() }
+        }
         // Small confirmations for changes that happen out of the finger's sight.
         .sensoryFeedback(.selection, trigger: appearance.plateID)
         .sensoryFeedback(.selection, trigger: appearance.wireframe)
@@ -296,7 +298,7 @@ struct ViewerScreen: View {
             ToolbarItem(placement: .bottomControls) {
                 Menu {
                     ForEach(OrbitCamera.Preset.allCases) { preset in
-                        Button(preset.title, systemImage: symbol(for: preset)) { showPreset(preset) }
+                        Button(preset.localizedTitle, systemImage: symbol(for: preset)) { showPreset(preset) }
                     }
                 } label: {
                     Label("Preset Views", systemImage: "move.3d")
@@ -396,7 +398,7 @@ struct ViewerScreen: View {
             Picker("Printer", selection: Binding(get: { settings.bedID }, set: { settings.bedID = $0 })) {
                 Text("None").tag(String?.none)
                 ForEach(settings.recentBeds) { bed in
-                    Text(bed.id == PrinterBed.customID ? "Custom Bed" : bed.title).tag(Optional(bed.id))
+                    Text(bed.id == PrinterBed.customID ? String(localized: "Custom Bed") : bed.title).tag(Optional(bed.id))
                 }
             }
             .pickerStyle(.inline)
@@ -434,25 +436,36 @@ struct ViewerScreen: View {
     private func fitNote(for model: Model3D) -> (text: String, tooBig: Bool)? {
         guard let bed = settings.fitBed,
               let fit = model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects) else { return nil }
-        let name = bed.id == PrinterBed.customID ? "your custom bed" : "the \(bed.title)"
+        // The printer as these sentences name it; each sentence is whole, so it can
+        // be translated with its own word order.
+        let name = bed.id == PrinterBed.customID
+            ? String(localized: "your custom bed", comment: "Printer named in a fit message, as in 'Fits your custom bed as oriented'")
+            : String(localized: "the \(bed.title)", comment: "A printer named in a fit message, as in 'Fits the Bambu Lab A1 as oriented'")
         let units = settings.units
         switch fit.verdict {
         case .fits:
-            return ("Fits \(name) as oriented", false)
+            return (String(localized: "Fits \(name) as oriented"), false)
         case .fitsTurned:
-            return ("Fits \(name) turned 90°", false)
+            return (String(localized: "Fits \(name) turned 90°"), false)
         case .offPlate:
-            return ("Fits \(name), but runs off the plate as arranged", true)
+            return (String(localized: "Fits \(name), but runs off the plate as arranged"), true)
         case .tooBig(let over):
-            var sides: [(String, Float)] = []
-            if over.width > 0.05 { sides.append(("wide", over.width)) }
-            if over.depth > 0.05 { sides.append(("deep", over.depth)) }
-            if over.height > 0.05 { sides.append(("tall", over.height)) }
-            if sides.count == 1, let side = sides.first {
-                return ("Too \(side.0) for \(name) by \(Format.dimension(side.1, units: units))", true)
+            var sides: [(short: String, long: String)] = []
+            if over.width > 0.05 {
+                let by = Format.dimension(over.width, units: units)
+                sides.append((String(localized: "\(by) too wide"), String(localized: "Too wide for \(name) by \(by)")))
             }
-            let detail = sides.map { "\(Format.dimension($0.1, units: units)) too \($0.0)" }.joined(separator: ", ")
-            return ("Too big for \(name): \(detail)", true)
+            if over.depth > 0.05 {
+                let by = Format.dimension(over.depth, units: units)
+                sides.append((String(localized: "\(by) too deep"), String(localized: "Too deep for \(name) by \(by)")))
+            }
+            if over.height > 0.05 {
+                let by = Format.dimension(over.height, units: units)
+                sides.append((String(localized: "\(by) too tall"), String(localized: "Too tall for \(name) by \(by)")))
+            }
+            if sides.count == 1, let side = sides.first { return (side.long, true) }
+            let detail = sides.map(\.short).formatted(.list(type: .and))
+            return (String(localized: "Too big for \(name): \(detail)"), true)
         }
     }
 
@@ -581,7 +594,7 @@ struct ViewerScreen: View {
         }
         unitSuggestions = UnitGuess.suggestions(for: model.bounds.size)
         if let first = unitSuggestions.first {
-            Spoken.announce("This model is very small. It may be in \(first.title.lowercased()). Options are below the size.")
+            Spoken.announce(first.smallModelAnnouncement)
         }
     }
 
@@ -733,7 +746,7 @@ struct ViewerScreen: View {
             } else {
                 autoOrient = .alreadyBest
                 feedback.alreadyBest += 1
-                Spoken.announce("Already the best way up to print.")
+                Spoken.announce(String(localized: "Already the best way up to print."))
                 try? await Task.sleep(for: .seconds(2.5))
                 if autoOrient == .alreadyBest { autoOrient = .idle }
             }
@@ -750,10 +763,17 @@ struct ViewerScreen: View {
         if let model = shownModel { announceArrangement(model) }
     }
 
+    /// VoiceOver's name for the canvas: the model, its size and, with a printer, its fit.
+    private func canvasLabel(for model: Model3D) -> String {
+        var label = String(localized: "\(displayName), \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))", comment: "VoiceOver: the model's name, then its size")
+        if unitSuggestions.isEmpty, let note = fitNote(for: model) { label += ". \(note.text)" }
+        return label
+    }
+
     /// After a turn: the new size, and the fit when there's a printer.
     private func announceArrangement(_ model: Model3D) {
         guard Spoken.isVoiceOverRunning else { return }
-        var text = "Now \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))"
+        var text = String(localized: "Now \(Format.spokenDimensions(visibleBounds(model).size, units: settings.units))", comment: "VoiceOver, after a turn: the model's new size")
         if let note = fitNote(for: model) { text += ". \(note.text)" }
         Spoken.announce(text)
     }
@@ -891,6 +911,8 @@ struct ViewerScreen: View {
             offerGestureHint()
             #if DEBUG
             if ProcessInfo.processInfo.environment["FACETS_INFO"] == "1" { showingInfo = true }
+            // FACETS_TOOL=measure|layFlat|section opens that tool's panel.
+            if let name = ProcessInfo.processInfo.environment["FACETS_TOOL"], let tool = ViewerTool(rawValue: name) { open(tool) }
             #endif
         } catch {
             phase = .failed(FriendlyError(opening: error))
@@ -932,7 +954,7 @@ struct ViewerScreen: View {
                 let copies = try await library.importFiles([file.url], into: library.root)
                 guard let copy = copies.first else { return }
                 withAnimation(.snappy) { isSaved = true }
-                toasts.show("Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))")
+                toasts.show(String(localized: "Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))"))
             } catch {
                 saveError = FriendlyError(file: error).message
             }
@@ -973,7 +995,7 @@ private struct ViewerChips: View {
                         Picker("Plate", selection: $plateID) {
                             Text("All Plates").tag(Int?.none)
                             ForEach(model.plates) { plate in
-                                Text(plate.title).tag(Optional(plate.id))
+                                Text(plate.localizedTitle).tag(Optional(plate.id))
                             }
                         }
                         // The plates straight in the menu, not a "Plate" submenu (the Mac's default).
@@ -1067,12 +1089,14 @@ private struct ViewerChips: View {
     }
 
     private var readoutLabel: String {
-        if unsureOfUnits { return "Size: \(spokenDimensions). Check the file's units" }
-        return "Size: \(spokenDimensions)\(fitNote.map { ". \($0.text)" } ?? (hasPrinter || !checksFit ? "" : ". No printer selected"))"
+        let size = String(localized: "Size: \(spokenDimensions)", comment: "VoiceOver: the size chip")
+        if unsureOfUnits { return size + ". " + String(localized: "Check the file's units") }
+        if let fitNote { return size + ". " + fitNote.text }
+        return hasPrinter || !checksFit ? size : size + ". " + String(localized: "No printer selected")
     }
 
     private var plateTitle: String {
-        model.plates.first { $0.id == plateID }?.title ?? "All Plates"
+        model.plates.first { $0.id == plateID }.map(\.localizedTitle) ?? String(localized: "All Plates")
     }
 }
 

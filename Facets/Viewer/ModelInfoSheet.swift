@@ -84,7 +84,7 @@ struct ModelInfoSheet: View {
                         Picker("File Units", selection: Binding(get: { unitScale }, set: { setUnitScale($0) })) {
                             Text("As Saved · \(largestSide(1))").tag(Float(1))
                             ForEach(UnitGuess.allCases) { unit in
-                                Text("\(unit.title) · \(largestSide(unit.factor))").tag(unit.factor)
+                                Text("\(unit.localizedTitle) · \(largestSide(unit.factor))").tag(unit.factor)
                             }
                         }
                     }
@@ -97,7 +97,7 @@ struct ModelInfoSheet: View {
                     if let application = model.application {
                         LabeledContent("Made With", value: application.replacingOccurrences(of: "-", with: " "))
                     }
-                    LabeledContent("Location", value: file.isExternal ? "Not saved in Facets" : "In your Facets library")
+                    LabeledContent("Location", value: file.isExternal ? String(localized: "Not saved in Facets") : String(localized: "In your Facets library"))
                 } header: {
                     Text("File")
                 } footer: {
@@ -138,7 +138,7 @@ struct ModelInfoSheet: View {
                     }
                 }
                 if estimate.usesSupports {
-                    LabeledContent("Supports", value: "Yes")
+                    LabeledContent("Supports", value: String(localized: "Yes"))
                 }
             } header: {
                 Text("Print Estimate")
@@ -155,12 +155,15 @@ struct ModelInfoSheet: View {
         } else if let estimate = model.shapeEstimate(plateID: appearance.plateID, hidden: appearance.hiddenObjects, density: material.density, machine: printer?.machine ?? .bambuCoreXY) {
             Section {
                 // Rounded to what the estimate can claim; slicer figures stay exact.
-                LabeledContent("Print Time", value: "about \(Format.roughDuration(seconds: estimate.seconds))")
-                LabeledContent("Filament", value: "about \(Format.roughGrams(estimate.grams))")
+                LabeledContent("Print Time", value: String(localized: "about \(Format.roughDuration(seconds: estimate.seconds))", comment: "A rough estimate, as in 'about 2½ hours'"))
+                LabeledContent("Filament", value: String(localized: "about \(Format.roughGrams(estimate.grams))", comment: "A rough estimate, as in 'about 120 g'"))
             } header: {
                 Text(model.plates.count > 1 && appearance.plateID == nil ? "Print Estimate, All Plates" : "Print Estimate")
             } footer: {
-                Text("Estimated from the model's shape for \(printerName), with typical settings: 0.2 mm layers, two walls and 15% \(material.title) infill. Your slicer will typically be within 10% on filament and \(timeMargin)% on time, more if the model needs supports.\(fitsPrinter == false ? " It doesn't fit this printer as it sits." : "")")
+                Text("Estimated from the model's shape for \(printerName), with typical settings: 0.2 mm layers, two walls and 15% \(material.title) infill. Your slicer will typically be within 10% on filament and \(timeMargin)% on time, more if the model needs supports.")
+                if fitsPrinter == false {
+                    Text("It doesn't fit this printer as it sits.")
+                }
             }
         }
     }
@@ -188,8 +191,8 @@ struct ModelInfoSheet: View {
     }
 
     private var printerName: String {
-        guard let printer, printer.id != PrinterBed.customID else { return "a Bambu Lab printer" }
-        return "the \(printer.title)"
+        guard let printer, printer.id != PrinterBed.customID else { return String(localized: "a Bambu Lab printer", comment: "In 'Estimated from the model's shape for a Bambu Lab printer'") }
+        return String(localized: "the \(printer.title)", comment: "A printer named in a fit message, as in 'Fits the Bambu Lab A1 as oriented'")
     }
 
     /// The object's colour as drawn: its file colour, or the model colour.

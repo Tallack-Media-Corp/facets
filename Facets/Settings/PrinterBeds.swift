@@ -11,7 +11,7 @@ struct PrinterBed: Identifiable, Hashable {
     let depth: Float
     let height: Float
 
-    var title: String { id == Self.customID ? "custom bed" : "\(make) \(name)" }
+    var title: String { id == Self.customID ? String(localized: "Custom Bed") : "\(make) \(name)" }
 
     /// Bambu Lab sizes, heights included, are the `printable_area` and
     /// `printable_height` those printers write into their own project files. The others

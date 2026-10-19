@@ -50,9 +50,10 @@ struct FriendlyError: Equatable {
         }
     }
 
-    private init(_ kind: Kind, _ title: String, _ message: String) {
+    /// Resources, so each title and message above is picked up for translation.
+    private init(_ kind: Kind, _ title: LocalizedStringResource, _ message: LocalizedStringResource) {
         self.kind = kind
-        self.title = title
-        self.message = message
+        self.title = String(localized: title)
+        self.message = String(localized: message)
     }
 }

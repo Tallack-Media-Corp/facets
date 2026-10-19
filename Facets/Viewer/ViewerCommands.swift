@@ -31,7 +31,7 @@ struct ViewerCommands: Commands {
                     .keyboardShortcut("0", modifiers: .command)
                 Menu("Preset Views") {
                     ForEach(Array(OrbitCamera.Preset.allCases.enumerated()), id: \.element) { index, preset in
-                        Button(preset.title) { actions?.show(preset) }
+                        Button(preset.localizedTitle) { actions?.show(preset) }
                             .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
                     }
                 }

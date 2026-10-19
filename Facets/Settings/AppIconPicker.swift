@@ -16,7 +16,7 @@ struct AppIconPicker: View {
 
     static let options: [Option] = [
         Option(iconName: nil, title: "Benchy", preview: "IconPreview-AppIcon"),
-        Option(iconName: "AppIcon-Mesh", title: "Mesh", preview: "IconPreview-AppIcon-Mesh"),
+        Option(iconName: "AppIcon-Mesh", title: String(localized: "Mesh", comment: "Name of the wireframe app icon"), preview: "IconPreview-AppIcon-Mesh"),
     ]
 
     @State private var current: String?
@@ -65,7 +65,7 @@ struct AppIconPicker: View {
                 try await UIApplication.shared.setAlternateIconName(option.iconName)
                 current = option.iconName
             } catch {
-                failure = "iOS didn't accept the change. Try again in a moment."
+                failure = String(localized: "iOS didn't accept the change. Try again in a moment.")
             }
         }
     }

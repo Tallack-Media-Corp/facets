@@ -82,7 +82,7 @@ enum SpotlightIndexer {
                 let attributes = CSSearchableItemAttributeSet(contentType: type)
                 attributes.title = Format.title(fromFileName: url.deletingPathExtension().lastPathComponent)
                 let format = url.pathExtension.uppercased()
-                attributes.contentDescription = LibraryIndex.folderName(of: url).map { "\(format) model in \($0)" } ?? "\(format) model"
+                attributes.contentDescription = LibraryIndex.folderName(of: url).map { String(localized: "\(format) model in \($0)", comment: "Spotlight: a model's format and folder, as in 'STL model in Brackets'") } ?? String(localized: "\(format) model", comment: "Spotlight: a model's format, as in 'STL model'")
                 attributes.contentURL = url
                 attributes.contentModificationDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
                 return CSSearchableItem(uniqueIdentifier: LibraryIndex.id(for: url), domainIdentifier: domain, attributeSet: attributes)
@@ -191,8 +191,10 @@ struct GetModelDimensionsIntent: AppIntent {
         let plate = loaded.plates.first?.id
         let size = loaded.bounds(of: loaded.visibleParts(plateID: plate, hidden: [])).size
         let text = Format.dimensions(size, units: units)
-        let subject = plate == nil ? model.name : "Plate \(plate!) of \(model.name)"
-        return .result(value: text, dialog: "\(subject) is \(Format.spokenDimensions(size, units: units)).")
+        let spoken = Format.spokenDimensions(size, units: units)
+        let answer = plate.map { String(localized: "Plate \($0) of \(model.name) is \(spoken).", comment: "Siri: a plate's size") }
+            ?? String(localized: "\(model.name) is \(spoken).", comment: "Siri: a model's size")
+        return .result(value: text, dialog: IntentDialog(stringLiteral: answer))
     }
 }
 

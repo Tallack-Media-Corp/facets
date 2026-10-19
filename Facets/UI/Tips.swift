@@ -66,7 +66,7 @@ extension FacetsTip {
     var id: String { "\(name)-\(FacetsTips.generation)" }
     var rules: [Rule] { [#Rule(FacetsTips.$enabled) { $0 }] }
     var actions: [Action] {
-        [Action(id: FacetsTips.turnOffID, title: "Turn Off Tips") { FacetsTips.setOn(false) }]
+        [Action(id: FacetsTips.turnOffID, title: String(localized: "Turn Off Tips")) { FacetsTips.setOn(false) }]
     }
 }
 

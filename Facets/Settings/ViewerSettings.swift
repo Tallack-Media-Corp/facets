@@ -15,7 +15,7 @@ enum FilamentMaterial: String, CaseIterable, Identifiable {
         case .abs: "ABS"
         case .asa: "ASA"
         case .tpu: "TPU"
-        case .nylon: "Nylon"
+        case .nylon: String(localized: "Nylon", comment: "Filament material")
         }
     }
 
@@ -37,25 +37,29 @@ enum MeasurementUnits: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
     var symbol: String { self == .millimetres ? "mm" : "in" }
-    var title: String { self == .millimetres ? "Millimetres" : "Inches" }
+    var title: String { self == .millimetres ? String(localized: "Millimetres") : String(localized: "Inches") }
 }
 
 /// A preset model colour, named the way filament is.
 struct ModelColorPreset: Identifiable, Hashable {
-    let name: String
+    let name: LocalizedStringResource
     let hex: String
     var id: String { hex }
 
+    // One colour, one preset: the name is just how it reads.
+    static func == (a: Self, b: Self) -> Bool { a.hex == b.hex }
+    func hash(into hasher: inout Hasher) { hasher.combine(hex) }
+
     static let all: [ModelColorPreset] = [
-        .init(name: "Orange", hex: Palette.filamentOrange),
-        .init(name: "White", hex: "#F2F2EE"),
-        .init(name: "Grey", hex: "#8E9196"),
-        .init(name: "Black", hex: "#2F3033"),
-        .init(name: "Red", hex: "#D8352F"),
-        .init(name: "Yellow", hex: "#F4C534"),
-        .init(name: "Green", hex: "#2FA65A"),
-        .init(name: "Blue", hex: "#2F6FD8"),
-        .init(name: "Purple", hex: "#8A4FD8"),
+        .init(name: LocalizedStringResource("Orange", comment: "Filament colour"), hex: Palette.filamentOrange),
+        .init(name: LocalizedStringResource("White", comment: "Filament colour"), hex: "#F2F2EE"),
+        .init(name: LocalizedStringResource("Grey", comment: "Filament colour"), hex: "#8E9196"),
+        .init(name: LocalizedStringResource("Black", comment: "Filament colour"), hex: "#2F3033"),
+        .init(name: LocalizedStringResource("Red", comment: "Filament colour"), hex: "#D8352F"),
+        .init(name: LocalizedStringResource("Yellow", comment: "Filament colour"), hex: "#F4C534"),
+        .init(name: LocalizedStringResource("Green", comment: "Filament colour"), hex: "#2FA65A"),
+        .init(name: LocalizedStringResource("Blue", comment: "Filament colour"), hex: "#2F6FD8"),
+        .init(name: LocalizedStringResource("Purple", comment: "Filament colour"), hex: "#8A4FD8"),
     ]
 }
 
