@@ -23,7 +23,7 @@ final class ToastCenter {
         let toast = Toast(message: message, symbol: symbol, actionTitle: actionTitle, action: action)
         withAnimation(.snappy) { current = toast }
         var announcement = message
-        if let actionTitle { announcement += ". \(actionTitle) is available." }
+        if let actionTitle { announcement = String(localized: "\(message). \(actionTitle) is available.", comment: "VoiceOver: a toast's message, then its button") }
         AccessibilityNotification.Announcement(announcement).post()
 
         dismissal?.cancel()
@@ -91,6 +91,7 @@ private struct ToastHost: ViewModifier {
                         toasts.dismiss(toast.id)
                     }
                     .padding(.bottom, clearance)
+                    .clearOfFold()
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .id(toast.id)
                 }

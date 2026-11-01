@@ -10,9 +10,9 @@ enum ViewerTool: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .measure: "Measure"
-        case .layFlat: "Lay Flat"
-        case .section: "Cross-Section"
+        case .measure: String(localized: "Measure", comment: "Viewer tool")
+        case .layFlat: String(localized: "Lay Flat", comment: "Viewer tool")
+        case .section: String(localized: "Cross-Section", comment: "Viewer tool")
         }
     }
 
@@ -128,10 +128,10 @@ struct ToolPanel: View {
     private var measureHint: String {
         if voiceOver {
             return points.isEmpty
-                ? "Touch the model directly and lift your finger where the first point goes. Points snap to a nearby corner."
-                : "Touch the model again and lift your finger on the second point."
+                ? String(localized: "Touch the model directly and lift your finger where the first point goes. Points snap to a nearby corner.")
+                : String(localized: "Touch the model again and lift your finger on the second point.")
         }
-        return points.isEmpty ? "Tap a point on the model. Points snap to a nearby corner." : "Tap a second point."
+        return points.isEmpty ? String(localized: "Tap a point on the model. Points snap to a nearby corner.") : String(localized: "Tap a second point.")
     }
 
     // MARK: Lay flat
@@ -179,24 +179,30 @@ struct ToolPanel: View {
         }
     }
 
-    private func turnButton(_ title: String, symbol: String, axis: SIMD3<Float>, hint: String) -> some View {
+    private func turnButton(_ title: LocalizedStringResource, symbol: String, axis: SIMD3<Float>, hint: LocalizedStringResource) -> some View {
         Button { turn(axis) } label: {
             toolLabel(title, symbol: symbol)
         }
         .buttonStyle(.glass)
-        .accessibilityHint(hint)
+        .accessibilityHint(Text(hint))
     }
 
-    private func toolLabel(_ title: String, symbol: String) -> some View {
+    // Resources rather than strings, so each button's title is picked up for translation.
+    private func toolLabel(_ title: LocalizedStringResource, symbol: String) -> some View {
         toolLabel(title) { Image(systemName: symbol) }
     }
 
     /// The glyphs sit in one height, so every title lines up (and Auto's doesn't
     /// jump while it works).
-    private func toolLabel(_ title: String, @ViewBuilder icon: () -> some View) -> some View {
+    private func toolLabel(_ title: LocalizedStringResource, @ViewBuilder icon: () -> some View) -> some View {
         VStack(spacing: 2) {
             icon().frame(height: 22)
+            // One line that shrinks a little to fit ("Zurücksetzen", "Restablecer"),
+            // rather than wrapping or cutting off.
             Text(title).font(.caption2.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .allowsTightening(true)
         }
         .frame(maxWidth: .infinity, minHeight: 44)
     }

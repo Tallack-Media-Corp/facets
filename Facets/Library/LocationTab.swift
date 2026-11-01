@@ -76,8 +76,8 @@ enum LocationPanel {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "Add"
-        panel.message = "Choose a folder to browse its STL, 3MF and OBJ files without importing them."
+        panel.prompt = String(localized: "Add", comment: "Open panel button that adds the chosen folder")
+        panel.message = String(localized: "Choose a folder to browse its STL, 3MF and OBJ files without importing them.")
         return panel.runModal() == .OK ? panel.url : nil
     }
 }

@@ -31,13 +31,16 @@ enum Format {
 
     /// "W 120.0 · D 40.5 · H 22.0 mm": labelled, so nobody has to guess which is height.
     static func dimensions(_ size: SIMD3<Float>, units: MeasurementUnits) -> String {
-        "W \(length(size.x, units: units)) · D \(length(size.y, units: units)) · H \(length(size.z, units: units)) \(units.symbol)"
+        let w = length(size.x, units: units), d = length(size.y, units: units), h = length(size.z, units: units)
+        return String(localized: "W \(w) · D \(d) · H \(h) \(units.symbol)", comment: "Model size: W width, D depth, H height, then the unit")
     }
 
     /// The same, for VoiceOver: "120.0 millimetres wide, 40.5 deep, 22.0 high".
     static func spokenDimensions(_ size: SIMD3<Float>, units: MeasurementUnits) -> String {
-        let unitName = units == .millimetres ? "millimetres" : "inches"
-        return "\(length(size.x, units: units)) \(unitName) wide, \(length(size.y, units: units)) deep, \(length(size.z, units: units)) high"
+        let w = length(size.x, units: units), d = length(size.y, units: units), h = length(size.z, units: units)
+        return units == .millimetres
+            ? String(localized: "\(w) millimetres wide, \(d) deep, \(h) high", comment: "VoiceOver: a model's size")
+            : String(localized: "\(w) inches wide, \(d) deep, \(h) high", comment: "VoiceOver: a model's size")
     }
 
     /// A file name for a title: "Eufy_S1_Case_-_Multicolour" reads as
@@ -65,7 +68,7 @@ enum Format {
 
     /// "1 h 23 min", "48 min", "under a minute".
     static func duration(seconds: Int) -> String {
-        if seconds < 60 { return "under a minute" }
+        if seconds < 60 { return String(localized: "under a minute") }
         let minutes = (min(seconds, 100_000_000) + 30) / 60
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = minutes >= 60 ? [.hour, .minute] : [.minute]
@@ -77,17 +80,17 @@ enum Format {
     /// doesn't read as nothing.
     static func grams(_ grams: Float) -> String {
         guard grams.isFinite, grams < 1e9 else { return "—" }
-        if grams >= 100 { return "\(Int(grams.rounded())) g" }
-        if grams >= 1 { return String(format: "%.1f g", grams) }
-        if grams >= 0.01 { return String(format: "%.2f g", grams) }
-        return "under 0.01 g"
+        if grams >= 100 { return "\(Int(grams.rounded()).formatted()) g" }
+        if grams >= 1 { return "\(grams.formatted(.number.precision(.fractionLength(1)))) g" }
+        if grams >= 0.01 { return "\(grams.formatted(.number.precision(.fractionLength(2)))) g" }
+        return String(localized: "under 0.01 g")
     }
 
     /// Filament length: "2.13 m", or feet in inch mode.
     static func filamentLength(_ meters: Float, units: MeasurementUnits) -> String {
         switch units {
-        case .millimetres: String(format: "%.2f m", meters)
-        case .inches: String(format: "%.1f ft", meters * 3.28084)
+        case .millimetres: "\(meters.formatted(.number.precision(.fractionLength(2)))) m"
+        case .inches: "\((meters * 3.28084).formatted(.number.precision(.fractionLength(1)))) ft"
         }
     }
 
@@ -97,25 +100,28 @@ enum Format {
         let minutes = Double(min(seconds, 100_000_000)) / 60
         if minutes < 60 {
             let m = max(5, Int((minutes / 5).rounded()) * 5)
-            return m >= 60 ? "1 hour" : "\(m) min"
+            return m >= 60 ? String(localized: "1 hour") : String(localized: "\(m) min", comment: "Minutes, abbreviated")
         }
         let hours = minutes / 60
         if hours < 10 {
             let quarters = Int((hours * 4).rounded())
             let whole = quarters / 4
             let fraction = ["", "¼", "½", "¾"][quarters % 4]
-            return "\(whole)\(fraction) hour\(quarters == 4 ? "" : "s")"
+            if quarters == 4 { return String(localized: "1 hour") }
+            // "9¼ hours": the whole hours and a fraction sign, then the word.
+            let amount = "\(whole)\(fraction)"
+            return String(localized: "\(amount) hours", comment: "A number of hours with a fraction, as in '2½ hours'")
         }
-        return "\(Int(hours.rounded())) hours"
+        return String(localized: "\(Int(hours.rounded())) hours")
     }
 
     /// An estimate's weight to two significant figures ("120 g", "8.4 g").
     static func roughGrams(_ grams: Float) -> String {
         guard grams.isFinite, grams < 1e9 else { return "—" }
-        guard grams >= 0.01 else { return "under 0.01 g" }
+        guard grams >= 0.01 else { return String(localized: "under 0.01 g") }
         let digits = Int(floor(log10(Double(grams))))
         let step = pow(10, Double(digits - 1))
         let rounded = (Double(grams) / step).rounded() * step
-        return digits >= 1 ? "\(Int(rounded)) g" : String(format: "%.\(max(0, 1 - digits))f g", rounded)
+        return digits >= 1 ? "\(Int(rounded).formatted()) g" : "\(rounded.formatted(.number.precision(.fractionLength(max(0, 1 - digits))))) g"
     }
 }

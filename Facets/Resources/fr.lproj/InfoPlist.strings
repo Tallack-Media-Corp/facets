@@ -1,0 +1,4 @@
+/* Document and file type names, as Files and the Finder show them. */
+"STL Model" = "Modèle STL";
+"3MF Model" = "Modèle 3MF";
+"OBJ Model" = "Modèle OBJ";
