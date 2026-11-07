@@ -17,3 +17,6 @@ DerivedData/
 # Local test models (keep sample files out of the repository)
 /samples/
 .env
+
+# App Store screenshots: they show Brennan's own model designs, so they stay off the public repo.
+docs/app-store-screenshots/

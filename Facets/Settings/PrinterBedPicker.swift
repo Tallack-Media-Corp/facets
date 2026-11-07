@@ -30,7 +30,7 @@ struct PrinterBedPicker: View {
                 }
             }
             Section {
-                row(title: "Custom", id: PrinterBed.customID)
+                row(title: String(localized: "Custom", comment: "A printer bed size of your own"), id: PrinterBed.customID)
                 if settings.bedID == PrinterBed.customID {
                     LabeledContent("Width") {
                         TextField("Width", value: lengthBinding($settings.customBedWidth), format: .number.precision(.fractionLength(0...1)))
@@ -95,10 +95,10 @@ struct PrinterBedPicker: View {
     /// The short form of a fit verdict, for a row in the list.
     private static func note(for verdict: BedFit.Verdict) -> (text: String, symbol: String) {
         switch verdict {
-        case .fits: ("Fits", "checkmark.circle")
-        case .fitsTurned: ("Fits turned 90°", "checkmark.circle")
-        case .tooBig: ("Too small", "exclamationmark.triangle.fill")
-        case .offPlate: ("Fits, but runs off the plate as arranged", "exclamationmark.triangle.fill")
+        case .fits: (String(localized: "Fits", comment: "The model fits this printer"), "checkmark.circle")
+        case .fitsTurned: (String(localized: "Fits turned 90°"), "checkmark.circle")
+        case .tooBig: (String(localized: "Too small", comment: "This printer is too small for the model"), "exclamationmark.triangle.fill")
+        case .offPlate: (String(localized: "Fits, but runs off the plate as arranged"), "exclamationmark.triangle.fill")
         }
     }
 

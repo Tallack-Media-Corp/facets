@@ -18,9 +18,9 @@ struct SettingsView: View {
     /// Where the library is when it isn't in iCloud.
     static var deviceName: String {
         #if os(macOS)
-        "On This Mac"
+        String(localized: "On This Mac")
         #else
-        UIDevice.current.userInterfaceIdiom == .pad ? "On This iPad" : "On This iPhone"
+        UIDevice.current.userInterfaceIdiom == .pad ? String(localized: "On This iPad") : String(localized: "On This iPhone")
         #endif
     }
     @State private var cacheSize: Int64?
@@ -87,7 +87,7 @@ struct SettingsView: View {
                 #endif
 
                 Section {
-                    LabeledContent("Library", value: library.location == .iCloud ? "iCloud Drive" : Self.deviceName)
+                    LabeledContent("Library", value: library.location == .iCloud ? String(localized: "iCloud Drive") : Self.deviceName)
                     #if os(macOS)
                     Button("Show in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([library.root])
@@ -168,7 +168,7 @@ private struct ModelColorPicker: View {
                             .contentShape(.circle)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(preset.name)
+                    .accessibilityLabel(Text(preset.name))
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }

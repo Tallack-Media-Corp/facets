@@ -21,7 +21,7 @@ struct LibraryTab: View {
         case browse = "Browse"
         var id: String { rawValue }
         /// "My Models", not a third "Library" under the tab and the title.
-        var title: String { self == .library ? "My Models" : "Browse" }
+        var title: String { self == .library ? String(localized: "My Models") : String(localized: "Browse") }
     }
 
     @Environment(FileLibrary.self) private var library
