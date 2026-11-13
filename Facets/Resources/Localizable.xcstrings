@@ -1034,6 +1034,34 @@
         }
       }
     },
+    "A small, fast viewer for 3D printing files. Open STL, 3MF and OBJ models from anywhere on your Mac, keep a library of them, and preview them right in the Finder.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein kleiner, schneller Viewer für 3D-Druckdateien. Öffne STL-, 3MF- und OBJ-Modelle von überall auf deinem Mac, sammle sie in einer Bibliothek und sieh sie dir direkt im Finder an."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un visor pequeño y rápido para archivos de impresión 3D. Abre modelos STL, 3MF y OBJ desde cualquier lugar de tu Mac, guárdalos en una biblioteca y previsualízalos directamente en el Finder."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une visionneuse légère et rapide pour les fichiers d'impression 3D. Ouvrez des modèles STL, 3MF et OBJ depuis n'importe où sur votre Mac, rangez-les dans une bibliothèque et prévisualisez-les directement dans le Finder."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3Dプリント用ファイルのための、小さくて高速なビューアです。MacのどこにあるSTL、3MF、OBJモデルでも開いてライブラリにまとめ、Finderで直接プレビューできます。"
+          }
+        }
+      }
+    },
     "A small, fast viewer for 3D printing files. Open STL, 3MF and OBJ models from anywhere on your iPhone or iPad, keep a library of them, and preview them right in the Files app.": {
       "localizations": {
         "de": {
@@ -3870,6 +3898,62 @@
         }
       }
     },
+    "Double-click an STL, 3MF or OBJ in the Finder, or choose File › Open.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doppelklicke im Finder auf eine STL-, 3MF- oder OBJ-Datei oder wähle „Ablage“ › „Öffnen“."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haz doble clic en un STL, 3MF u OBJ en el Finder, o elige Archivo › Abrir."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-cliquez sur un fichier STL, 3MF ou OBJ dans le Finder, ou choisissez Fichier › Ouvrir."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FinderでSTL、3MF、OBJをダブルクリックするか、“ファイル › 開く”を選択します。"
+          }
+        }
+      }
+    },
+    "Double-click to fit the model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Einpassen doppelklicken"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haz doble clic para encuadrar el modelo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-cliquez pour cadrer le modèle"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダブルクリックでモデル全体を表示"
+          }
+        }
+      }
+    },
     "Double-tap to fit the model": {
       "localizations": {
         "de": {
@@ -3950,6 +4034,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "ドラッグでモデルを回転"
+          }
+        }
+      }
+    },
+    "Drag to turn the model; arrow keys turn it in steps": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ziehen, um das Modell zu drehen; mit den Pfeiltasten schrittweise drehen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrastra para girar el modelo; las teclas de flecha lo giran por pasos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faites glisser pour tourner le modèle ; les touches fléchées le tournent par paliers"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ドラッグでモデルを回転、矢印キーで少しずつ回転"
           }
         }
       }
@@ -6461,6 +6573,34 @@
         }
       }
     },
+    "Mouse and Trackpad": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maus und Trackpad"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ratón y trackpad"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Souris et trackpad"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "マウスとトラックパッド"
+          }
+        }
+      }
+    },
     "Move \"%@\"": {
       "localizations": {
         "de": {
@@ -8691,6 +8831,34 @@
         }
       }
     },
+    "Rotate two fingers on the trackpad to spin": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit zwei Fingern auf dem Trackpad drehen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gira dos dedos en el trackpad para rotar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tournez deux doigts sur le trackpad pour faire pivoter"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "トラックパッドで2本指を回転させて回転"
+          }
+        }
+      }
+    },
     "Sample Model": {
       "localizations": {
         "de": {
@@ -8831,6 +8999,34 @@
         }
       }
     },
+    "Scroll or pinch to zoom; two fingers or Option-drag to move": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrollen oder Aufziehen zum Zoomen; mit zwei Fingern oder Ziehen bei gedrückter Wahltaste bewegen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desplaza o pellizca para ampliar; dos dedos o arrastrar con Opción para mover"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faites défiler ou pincez pour zoomer ; deux doigts ou glisser avec Option pour déplacer"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スクロールまたはピンチでズーム、2本指またはOptionキーを押しながらドラッグで移動"
+          }
+        }
+      }
+    },
     "Search": {
       "localizations": {
         "de": {
@@ -8911,6 +9107,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "断面"
+          }
+        }
+      }
+    },
+    "Select a model in the Finder and press Space for a 3D Quick Look preview.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle im Finder ein Modell aus und drücke die Leertaste für eine 3D-Vorschau mit Quick Look."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecciona un modelo en el Finder y pulsa la barra espaciadora para ver una previsualización 3D con Quick Look."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélectionnez un modèle dans le Finder et appuyez sur la barre d'espace pour un aperçu 3D Quick Look."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finderでモデルを選択してスペースキーを押すと、Quick Lookで3Dプレビューが表示されます。"
           }
         }
       }
@@ -9079,6 +9303,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "ビルドプレートのグリッドを表示"
+          }
+        }
+      }
+    },
+    "Show Library When Opening a File": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bibliothek beim Öffnen einer Datei zeigen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar la biblioteca al abrir un archivo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher la bibliothèque à l'ouverture d'un fichier"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ファイルを開くときにライブラリを表示"
           }
         }
       }
@@ -10177,6 +10429,34 @@
         }
       }
     },
+    "To look through a folder without importing, choose File › Add Location.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um einen Ordner ohne Import anzusehen, wähle „Ablage“ › „Ort hinzufügen“."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para ver una carpeta sin importarla, elige Archivo › Añadir ubicación."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pour parcourir un dossier sans l'importer, choisissez Fichier › Ajouter un emplacement."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み込まずにフォルダを閲覧するには、“ファイル › 場所を追加”を選択します。"
+          }
+        }
+      }
+    },
     "To share the library between your devices, sign in to iCloud and turn on iCloud Drive for Facets. Models here move to iCloud Drive when you do.": {
       "localizations": {
         "de": {
@@ -11022,6 +11302,34 @@
         }
       }
     },
+    "When you open a model from the Finder and no library window is open, open one too.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn du ein Modell aus dem Finder öffnest und kein Bibliotheksfenster offen ist, wird auch eines geöffnet."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Al abrir un modelo desde el Finder sin ninguna ventana de biblioteca abierta, se abre también una."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lorsque vous ouvrez un modèle depuis le Finder et qu'aucune fenêtre de bibliothèque n'est ouverte, en ouvrir une aussi."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finderからモデルを開いたときにライブラリウインドウが開いていなければ、あわせて開きます。"
+          }
+        }
+      }
+    },
     "Where each model starts; the viewer's Display menu changes it for one model.": {
       "localizations": {
         "de": {
@@ -11278,6 +11586,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "この操作は取り消せます。また、30日間は“設定 › 最近削除した項目”から復元できます。"
+          }
+        }
+      }
+    },
+    "Your library is kept on this Mac. Show in Finder, in Settings, opens it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Bibliothek liegt auf diesem Mac. „Im Finder zeigen“ in den Einstellungen öffnet sie."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu biblioteca se guarda en este Mac. Puedes abrirla con Mostrar en el Finder, en Ajustes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre bibliothèque est conservée sur ce Mac. « Afficher dans le Finder », dans Réglages, permet de l'ouvrir."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライブラリはこのMacに保存されています。“設定”の“Finderに表示”で開けます。"
+          }
+        }
+      }
+    },
+    "Your library is the Facets folder in iCloud Drive.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Bibliothek ist der Ordner „Facets“ in iCloud Drive."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu biblioteca es la carpeta Facets de iCloud Drive."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre bibliothèque est le dossier Facets d'iCloud Drive."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライブラリはiCloud DriveのFacetsフォルダです。"
           }
         }
       }
