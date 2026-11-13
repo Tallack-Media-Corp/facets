@@ -183,9 +183,7 @@ private struct ModelWindow: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        NavigationStack {
-            ViewerScreen(file: file)
-        }
+        ViewerScreen(file: file)
         .onAppear { MacOpener.shared.register(openWindow) }
         // On a launch from the Finder the library window comes up after this one and
         // covers it, so the model looked never to have opened. Come to the front.

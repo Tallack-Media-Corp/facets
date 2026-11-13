@@ -106,7 +106,8 @@ struct ModelInfoSheet: View {
                     }
                 }
             }
-            .navigationTitle(file.displayName)
+            // Beside the model on iPad and Mac, the viewer's own bar already names it.
+            .navigationTitle(showsDone ? file.displayName : "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if showsDone {

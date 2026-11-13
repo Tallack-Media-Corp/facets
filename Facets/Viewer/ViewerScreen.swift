@@ -90,8 +90,10 @@ struct ViewerScreen: View {
 
     var body: some View {
         // Two halves, so the compiler can type-check each; both are this view's own
-        // methods, run in its body, so their state is live.
-        lifecycle(viewerStage)
+        // methods, run in its body, so their state is live. The stack is inside the
+        // inspector, so on iPad the bar and its title span only the model, not the
+        // panel beside it.
+        lifecycle(NavigationStack { viewerStage })
     }
 
     /// The model, its chips and panels, and the toolbar.
@@ -206,7 +208,7 @@ struct ViewerScreen: View {
         content
         // A sheet on iPhone, where the model glides up above it; an inspector beside
         // the model on iPad and Mac, so hiding an object shows what changed.
-        .modifier(InfoPresentation(asInspector: infoAsInspector, isPresented: $showingInfo) { infoSheet(showsDone: $0) })
+        .modifier(InfoPresentation(asInspector: infoAsInspector, isPresented: $showingInfo, stageTop: Color(Palette.stage(pureBlack: settings.pureBlack).top)) { infoSheet(showsDone: $0) })
         .onChange(of: showingInfo) {
             // The canvas narrows or widens with the inspector; reframe once it has.
             guard infoAsInspector else { return }
@@ -906,6 +908,10 @@ struct ViewerScreen: View {
             appearance.plateID = model.plates.first?.id
             original = model
             phase = .loaded(model)
+            // Reading it downloaded it if it was only in iCloud; open folders list it
+            // again so its cloud badge goes. (A download leaves the folder's own entries
+            // alone on the Mac, so the folder watcher doesn't see it.)
+            library.noteExternalChange()
             checkUnits(of: model)
             storeThumbnail(of: model)
             offerGestureHint()
@@ -1135,12 +1141,18 @@ private struct GestureHint: View {
 private struct InfoPresentation<Info: View>: ViewModifier {
     let asInspector: Bool
     @Binding var isPresented: Bool
+    /// The panel takes the stage's own top colour, so beside the model it reads as one
+    /// surface instead of a grey of its own against the stage's.
+    let stageTop: Color
     @ViewBuilder let info: (_ showsDone: Bool) -> Info
 
     func body(content: Content) -> some View {
         content
             .inspector(isPresented: gated(asInspector)) {
-                info(false).inspectorColumnWidth(min: 320, ideal: 360, max: 440)
+                info(false)
+                    .scrollContentBackground(.hidden)
+                    .background(stageTop)
+                    .inspectorColumnWidth(min: 320, ideal: 360, max: 440)
             }
             .sheet(isPresented: gated(!asInspector)) { info(true) }
     }

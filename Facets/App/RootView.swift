@@ -47,9 +47,7 @@ struct RootView: View {
         // iPhone's tab bar is at the bottom; iPad's is at the top.
         .toastHost(clearance: sizeClass == .compact ? 88 : 24)
         .fullScreenCover(item: $router.presented) { file in
-            NavigationStack {
-                ViewerScreen(file: file, showsCloseButton: true)
-            }
+            ViewerScreen(file: file, showsCloseButton: true)
             // The zoom transition's own dismissal (pinch in, or drag) fires on a
             // pinch that starts near the screen's edge; in the viewer a pinch is
             // always zoom. The close button is the way out.
