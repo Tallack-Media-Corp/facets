@@ -18,7 +18,7 @@ struct FacetsApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "library") {
             SceneRoot()
                 .environment(library)
                 .environment(recents)
@@ -30,6 +30,9 @@ struct FacetsApp: App {
         }
         #if os(macOS)
         .defaultSize(width: 1100, height: 760)
+        // Files from the Finder go through MacOpener, which decides whether a library
+        // window comes with them; otherwise SwiftUI made one whenever none was open.
+        .handlesExternalEvents(matching: [])
         #endif
         .commands {
             ViewerCommands()
@@ -50,6 +53,7 @@ struct FacetsApp: App {
             }
         }
         .defaultSize(width: 900, height: 700)
+        .handlesExternalEvents(matching: [])
         // A restored window would hold a bare URL without the user's permission to it.
         .restorationBehavior(.disabled)
 
@@ -97,8 +101,13 @@ private struct BringToFront: NSViewRepresentable {
 @MainActor
 final class MacOpener {
     static let shared = MacOpener()
+    static let libraryWindowID = "library" // The id of the first WindowGroup in FacetsApp.
     private var openWindow: OpenWindowAction?
     private var waiting: [URL] = []
+    /// Library windows on screen, counted by SceneRoot as they come and go.
+    var libraryWindows = 0
+    /// False until a window appears. A launch with files opens no window of its own.
+    private var windowSeen = false
 
     func open(_ urls: [URL]) {
         waiting.append(contentsOf: urls.filter(\.isFileURL))
@@ -107,18 +116,33 @@ final class MacOpener {
 
     /// Called by each window as it appears; any one will do (the action is app-wide).
     func register(_ action: OpenWindowAction) {
+        windowSeen = true
         openWindow = action
+        drain()
+    }
+
+    /// Called by the menu commands, which exist before any window does.
+    func prepare(_ action: OpenWindowAction) {
+        if openWindow == nil { openWindow = action }
         drain()
     }
 
     private func drain() {
         guard let openWindow, !waiting.isEmpty else { return }
         let root = LibraryLocation.current.standardizedFileURL.resolvingSymlinksInPath().path + "/"
-        for url in waiting {
+        // Opening a window can bring up another that calls back in here, so take the
+        // files first or they open twice.
+        let urls = waiting
+        waiting.removeAll()
+        let launching = !windowSeen
+        for url in urls {
             let inLibrary = url.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root)
             openWindow(value: ModelFileRef(url: url, isExternal: !inLibrary))
         }
-        waiting.removeAll()
+        // At launch the library comes too; once running, only if the setting asks.
+        if libraryWindows == 0, launching || UserDefaults.standard.bool(forKey: ViewerSettings.showsLibraryOnOpenKey) {
+            openWindow(id: Self.libraryWindowID)
+        }
     }
 }
 
@@ -136,6 +160,7 @@ private struct OpenCommands: Commands {
     @FocusedValue(\.sceneRouter) private var router
 
     var body: some Commands {
+        let _ = Task { MacOpener.shared.prepare(openWindow) }
         CommandGroup(after: .newItem) {
             Button("Open…") {
                 let panel = NSOpenPanel()
@@ -226,12 +251,19 @@ private struct SceneRoot: View {
             #if os(macOS)
             .focusedSceneValue(\.sceneRouter, router)
             // Files from the Finder that came in before this window was up.
-            .onAppear { MacOpener.shared.register(openWindow) }
+            .onAppear {
+                MacOpener.shared.libraryWindows += 1
+                MacOpener.shared.register(openWindow)
+            }
+            .onDisappear { MacOpener.shared.libraryWindows -= 1 }
             #endif
-            // Files, Mail, Messages and the share sheet hand files over here.
+            #if os(iOS)
+            // Files, Mail, Messages and the share sheet hand files over here. On the
+            // Mac, MacOpener has them all; taking them here too opened models twice.
             .onOpenURL { url in
                 router.open(url, library: library)
             }
+            #endif
             // An open window takes the file rather than the app making a new one
             // (on the Mac, the model then gets a window of its own).
             .handlesExternalEvents(preferring: ["*"], allowing: ["*"])

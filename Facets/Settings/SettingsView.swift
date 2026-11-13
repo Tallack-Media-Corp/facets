@@ -92,6 +92,10 @@ struct SettingsView: View {
                     Button("Show in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([library.root])
                     }
+                    Toggle(isOn: $settings.showsLibraryOnOpen) {
+                        Text("Show Library When Opening a File")
+                        Text("When you open a model from the Finder and no library window is open, open one too.")
+                    }
                     #endif
                     Toggle(isOn: $settings.fetchesBrowsePreviews) {
                         Text("Download Small Models for Previews")

@@ -95,6 +95,13 @@ final class ViewerSettings {
         didSet { defaults.set(fetchesBrowsePreviews, forKey: "library.browsePreviews") }
     }
 
+    /// Mac: a model opened from the Finder while Facets is running also brings up a
+    /// library window when none is open. Read by `MacOpener` from the same key.
+    var showsLibraryOnOpen: Bool {
+        didSet { defaults.set(showsLibraryOnOpen, forKey: Self.showsLibraryOnOpenKey) }
+    }
+    static let showsLibraryOnOpenKey = "mac.libraryOnOpen"
+
     /// The filament the shape-based print estimate assumes.
     var material: FilamentMaterial {
         didSet { defaults.set(material.rawValue, forKey: "viewer.material") }
@@ -160,6 +167,7 @@ final class ViewerSettings {
         usesFileColors = defaults.object(forKey: "viewer.fileColors") as? Bool ?? true
         showsGrid = defaults.object(forKey: "viewer.grid") as? Bool ?? true
         fetchesBrowsePreviews = defaults.object(forKey: "library.browsePreviews") as? Bool ?? true
+        showsLibraryOnOpen = defaults.bool(forKey: Self.showsLibraryOnOpenKey)
         checksFit = defaults.object(forKey: "viewer.checksFit") as? Bool ?? true
         pureBlack = defaults.bool(forKey: "display.pureBlack")
         material = FilamentMaterial(rawValue: defaults.string(forKey: "viewer.material") ?? "") ?? .pla
