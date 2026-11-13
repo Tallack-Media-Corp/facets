@@ -242,7 +242,7 @@ public struct ModelPart: Sendable, Identifiable {
     public let id: Int
     public var name: String
     public let geometry: MeshGeometry
-    public let transform: simd_float4x4
+    public private(set) var transform: simd_float4x4
     /// Linear-light RGBA from the file, if it says.
     public var color: SIMD4<Float>?
     /// The build item (3MF) this part belongs to. Parts of one object share it.
@@ -252,9 +252,9 @@ public struct ModelPart: Sendable, Identifiable {
     /// coincident faces the paint shows rather than flickering with them.
     public var isPaint: Bool
     /// World-space bounds of the transformed triangles.
-    public let bounds: Bounds
+    public private(set) var bounds: Bounds
     /// World-space surface by facing, for print estimates.
-    public let surface: SurfaceStats
+    public private(set) var surface: SurfaceStats
 
     public init(id: Int, name: String, geometry: MeshGeometry, transform: simd_float4x4 = matrix_identity_float4x4, color: SIMD4<Float>? = nil, objectID: Int = 0, isPaint: Bool = false) {
         self.id = id
@@ -298,6 +298,17 @@ public struct ModelPart: Sendable, Identifiable {
             SIMD3(transform.columns.2.x, transform.columns.2.y, transform.columns.2.z)
         )
         return geometry.volume * simd_determinant(m)
+    }
+
+    /// The same part moved straight up by `dz` (down if negative), its bounds and
+    /// surface shifted rather than worked out again from every triangle.
+    func lifted(by dz: Float) -> ModelPart {
+        guard dz != 0 else { return self }
+        var part = self
+        part.transform.columns.3.z += dz
+        if !bounds.isEmpty { part.bounds = Bounds(min: bounds.min + SIMD3(0, 0, dz), max: bounds.max + SIMD3(0, 0, dz)) }
+        part.surface = surface.raised(by: dz)
+        return part
     }
 }
 
@@ -601,16 +612,15 @@ public struct Model3D: Sendable, Identifiable {
             return m
         }
         let about = translation(pivot) * turn * translation(-pivot)
-        var turned = parts.map { part in
+        let turned = parts.map { part in
             ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: about * part.transform, color: part.color, objectID: part.objectID, isPaint: part.isPaint)
         }
         let shownIDs = Set(visibleParts(plateID: plateID, hidden: hidden).map(\.id))
         let lowest = turned.filter { shownIDs.contains($0.id) }.reduce(Bounds.empty) { $0.union($1.bounds) }.min.z
-        let drop = translation(SIMD3(0, 0, shown.min.z - lowest))
-        turned = turned.map { part in
-            ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: drop * part.transform, color: part.color, objectID: part.objectID, isPaint: part.isPaint)
-        }
-        return Model3D(format: format, parts: turned, objects: objects, plates: plates, title: title, application: application, slicerBed: nil, estimates: estimates, sourceID: sourceID)
+        // Setting it down is a pure lift: shift what's already worked out rather
+        // than walk every triangle again.
+        let dz = shown.min.z - lowest
+        return Model3D(format: format, parts: turned.map { $0.lifted(by: dz) }, objects: objects, plates: plates, title: title, application: application, slicerBed: nil, estimates: estimates, sourceID: sourceID)
     }
 
     /// The same model scaled up or down by `factor` (for a file saved in metres or

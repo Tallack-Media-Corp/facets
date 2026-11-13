@@ -153,6 +153,15 @@ import simd
         // A quarter turn about Z swaps width and depth.
         let turned = flat.reoriented(by: quarterTurn(about: [0, 0, 1]), plateID: nil, hidden: [])
         #expect(abs(turned.bounds.size.x - flat.bounds.size.y) < 0.001)
+        // The lift shifts bounds and surface rather than recomputing them; they must
+        // match what a fresh part with the same transform works out.
+        for part in flat.parts + turned.parts {
+            let fresh = ModelPart(id: part.id, name: part.name, geometry: part.geometry, transform: part.transform)
+            #expect(simd_distance(fresh.bounds.min, part.bounds.min) < 0.001)
+            #expect(simd_distance(fresh.bounds.max, part.bounds.max) < 0.001)
+            #expect(abs(fresh.surface.overhangMoment - part.surface.overhangMoment) <= max(abs(fresh.surface.overhangMoment) * 1e-4, 0.01))
+            #expect(abs(fresh.surface.up - part.surface.up) < 0.01)
+        }
     }
 
     @Test func layFlatHandlesStraightUpAndDown() {

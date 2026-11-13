@@ -631,6 +631,8 @@ struct ViewerScreen: View {
         arranged = nil
         measurePoints = []
         guard factor != 1 else {
+            // A rescale still running is now stale and won't clear this itself.
+            rescaling = false
             phase = .loaded(original)
             return
         }

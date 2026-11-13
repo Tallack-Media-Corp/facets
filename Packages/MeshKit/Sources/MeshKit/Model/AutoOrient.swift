@@ -45,10 +45,12 @@ public enum AutoOrient {
         candidates += supplements
         candidates = deduplicated(candidates)
 
+        // Each candidate's lowest point, from one pass over the vertices.
+        let lows = faces.minima(along: candidates.map { -$0 })
         var best: (direction: SIMD3<Float>, cost: Float)?
         var current: Float?
-        for direction in candidates {
-            let cost = score(up: -direction, faces: faces, hull: hull)
+        for (direction, low) in zip(candidates, lows) {
+            let cost = score(up: -direction, faces: faces, hull: hull, minZ: low)
             if simd_dot(direction, SIMD3(0, 0, -1)) > 0.9999 { current = cost }
             if best == nil || cost < best!.cost { best = (direction, cost) }
         }
@@ -63,13 +65,13 @@ public enum AutoOrient {
 
     /// Orient.cpp's target function for one candidate, `up` being the direction that
     /// would point up.
-    static func score(up: SIMD3<Float>, faces: Faces, hull: ConvexHull) -> Float {
-        terms(up: up, faces: faces, hull: hull).cost
+    static func score(up: SIMD3<Float>, faces: Faces, hull: ConvexHull, minZ: Float? = nil) -> Float {
+        terms(up: up, faces: faces, hull: hull, minZ: minZ).cost
     }
 
     /// The score and what went into it.
-    static func terms(up: SIMD3<Float>, faces: Faces, hull: ConvexHull) -> (cost: Float, bottom: Float, overhang: Float, lowAngle: Float, bottomHull: Float) {
-        let minZ = faces.minimum(along: up)
+    static func terms(up: SIMD3<Float>, faces: Faces, hull: ConvexHull, minZ known: Float? = nil) -> (cost: Float, bottom: Float, overhang: Float, lowAngle: Float, bottomHull: Float) {
+        let minZ = known ?? faces.minima(along: [up])[0]
         var firstLayer: Float = 0, halfLayer: Float = 0, overhang: Float = 0, lowAngle: Float = 0
         faces.forEach { a, b, c, area, normal in
             let zMax = max(simd_dot(a, up), simd_dot(b, up), simd_dot(c, up))
@@ -174,15 +176,20 @@ public enum AutoOrient {
             }
         }
 
-        func minimum(along up: SIMD3<Float>) -> Float {
-            var lowest = Float.infinity
+        /// The lowest point along each direction, over every vertex (not a sample:
+        /// one stray low point decides what touches the plate). One pass for all
+        /// of them, so each vertex is transformed once.
+        func minima(along ups: [SIMD3<Float>]) -> [Float] {
+            var lowest = [Float](repeating: .infinity, count: ups.count)
             for part in parts {
                 let m = part.transform
-                let p = part.geometry.positions
-                var i = 0
-                while i + 2 < p.count {
-                    lowest = min(lowest, simd_dot((m * SIMD4(p[i], p[i + 1], p[i + 2], 1)).xyz, up))
-                    i += 3
+                part.geometry.positions.withUnsafeBufferPointer { p in
+                    var i = 0
+                    while i + 2 < p.count {
+                        let v = (m * SIMD4(p[i], p[i + 1], p[i + 2], 1)).xyz
+                        for k in ups.indices { lowest[k] = min(lowest[k], simd_dot(v, ups[k])) }
+                        i += 3
+                    }
                 }
             }
             return lowest

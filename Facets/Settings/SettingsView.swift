@@ -184,17 +184,41 @@ private struct ModelColorPicker: View {
 private struct AboutView: View {
     @Environment(FileLibrary.self) private var library
 
+    private static var summary: String {
+        #if os(macOS)
+        String(localized: "A small, fast viewer for 3D printing files. Open STL, 3MF and OBJ models from anywhere on your Mac, keep a library of them, and preview them right in the Finder.")
+        #else
+        String(localized: "A small, fast viewer for 3D printing files. Open STL, 3MF and OBJ models from anywhere on your iPhone or iPad, keep a library of them, and preview them right in the Files app.")
+        #endif
+    }
+
     var body: some View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Facets")
                         .font(.title2.bold())
-                    Text("A small, fast viewer for 3D printing files. Open STL, 3MF and OBJ models from anywhere on your iPhone or iPad, keep a library of them, and preview them right in the Files app.")
+                    Text(Self.summary)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
             }
+            #if os(macOS)
+            Section("Opening Files") {
+                Label("Double-click an STL, 3MF or OBJ in the Finder, or choose File › Open.", systemImage: "doc")
+                Label(library.location == .iCloud
+                      ? "Your library is the Facets folder in iCloud Drive."
+                      : "Your library is kept on this Mac. Show in Finder, in Settings, opens it.", systemImage: "folder")
+                Label("To look through a folder without importing, choose File › Add Location.", systemImage: "folder.badge.plus")
+                Label("Select a model in the Finder and press Space for a 3D Quick Look preview.", systemImage: "eye")
+            }
+            Section("Mouse and Trackpad") {
+                Label("Drag to turn the model; arrow keys turn it in steps", systemImage: "hand.draw")
+                Label("Scroll or pinch to zoom; two fingers or Option-drag to move", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
+                Label("Rotate two fingers on the trackpad to spin", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
+                Label("Double-click to fit the model", systemImage: "cursorarrow.click.2")
+            }
+            #else
             Section("Opening Files") {
                 Label("Tap an STL, 3MF or OBJ in Files, Mail or Messages and choose Facets.", systemImage: "doc")
                 Label(library.location == .iCloud
@@ -209,6 +233,7 @@ private struct AboutView: View {
                 Label("Twist two fingers to spin", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
                 Label("Double tap to fit the model", systemImage: "hand.tap")
             }
+            #endif
             Section {
                 OpenSampleButton()
             } header: {
