@@ -49,9 +49,10 @@ final class FileLibrary {
 
     private let fileManager = FileManager.default
 
-    init() {
-        root = LibraryLocation.current
-        location = LibraryLocation.kind
+    /// Tests pass a temporary folder.
+    init(root: URL = LibraryLocation.current, location: LibraryLocation.Kind = LibraryLocation.kind) {
+        self.root = root
+        self.location = location
     }
 
     /// Finds iCloud Drive and moves the library there, bringing any models saved on
@@ -120,7 +121,7 @@ final class FileLibrary {
             guard ModelLoader.isSupported(realURL) else { continue }
             let status = values?.ubiquitousItemDownloadingStatus
             let downloaded = !isPlaceholder && (status == nil || status == .current || status == .downloaded)
-            items.append(LibraryItem(url: realURL, isFolder: false, size: isPlaceholder ? nil : values?.fileSize.map(Int64.init), modified: values?.contentModificationDate, childCount: nil, isDownloaded: downloaded))
+            items.append(LibraryItem(url: realURL, isFolder: false, size: isPlaceholder ? placeholderSize(url) : values?.fileSize.map(Int64.init), modified: values?.contentModificationDate, childCount: nil, isDownloaded: downloaded))
         }
         return items.sorted { a, b in
             if a.isFolder != b.isFolder { return a.isFolder }
@@ -136,6 +137,14 @@ final class FileLibrary {
     }
 
     /// Fills in how many models and subfolders each folder holds.
+    /// An iCloud placeholder is a small property list that keeps the real file's size,
+    /// which decides whether Browse fetches a model to draw its thumbnail.
+    nonisolated private static func placeholderSize(_ url: URL) -> Int64? {
+        guard let data = try? Data(contentsOf: url),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return nil }
+        return (plist["NSURLFileSizeKey"] as? NSNumber)?.int64Value
+    }
+
     nonisolated static func withChildCounts(_ items: [LibraryItem]) -> [LibraryItem] {
         items.map { item in
             guard item.isFolder, item.childCount == nil else { return item }
@@ -196,33 +205,77 @@ final class FileLibrary {
     @discardableResult
     func createFolder(in folder: URL, named name: String = "New Folder") throws -> URL {
         let url = uniqueURL(for: name, in: folder)
-        try fileManager.createDirectory(at: url, withIntermediateDirectories: false)
+        try Self.coordinatedWrite(url) { try FileManager.default.createDirectory(at: $0, withIntermediateDirectories: false) }
         revision += 1
         return url
     }
 
     @discardableResult
     func rename(_ item: LibraryItem, to newName: String) throws -> URL {
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "/", with: "-")
+        let folder = item.url.deletingLastPathComponent()
+        let trimmed = visibleName(newName.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-"), in: folder)
         guard !trimmed.isEmpty else { return item.url }
         let fileName = item.isFolder ? trimmed : "\(trimmed).\(item.url.pathExtension)"
         guard fileName != item.url.lastPathComponent else { return item.url }
-        let folder = item.url.deletingLastPathComponent()
         // Only the capitals changed: on a case-insensitive disk the "taken" name is
         // the file itself, so step through a temporary name instead of making "Name 2".
-        if fileName.lowercased() == item.url.lastPathComponent.lowercased() {
-            let destination = folder.appending(path: fileName)
+        // (On a case-sensitive one another file may really have it; then it's taken.)
+        let destination = folder.appending(path: fileName)
+        if fileName.lowercased() == item.url.lastPathComponent.lowercased(),
+           !fileManager.fileExists(atPath: destination.path) || Self.isSameFile(destination, item.url) {
             let temporary = folder.appending(path: ".\(UUID().uuidString)")
-            try fileManager.moveItem(at: item.url, to: temporary)
-            try fileManager.moveItem(at: temporary, to: destination)
+            try Self.coordinatedMove(item.url, to: temporary)
+            do {
+                try Self.coordinatedMove(temporary, to: destination)
+            } catch {
+                // Never leave it under the hidden temporary name, which no list shows.
+                try? Self.coordinatedMove(temporary, to: item.url)
+                throw error
+            }
             revision += 1
             return destination
         }
-        let destination = uniqueURL(for: fileName, in: folder)
-        try fileManager.moveItem(at: item.url, to: destination)
+        let unique = uniqueURL(for: fileName, in: folder)
+        try Self.coordinatedMove(item.url, to: unique)
         revision += 1
-        return destination
+        return unique
+    }
+
+    /// A name the library lists: no leading dots (hidden files), and not Inbox at the
+    /// top (the folder iOS owns, which the list leaves out).
+    private func visibleName(_ name: String, in folder: URL) -> String {
+        var name = Substring(name)
+        while name.hasPrefix(".") { name = name.dropFirst() }
+        if name == "Inbox", folder.standardizedFileURL == root.standardizedFileURL { return "Inbox 2" }
+        return String(name)
+    }
+
+    nonisolated private static func isSameFile(_ a: URL, _ b: URL) -> Bool {
+        let key: Set<URLResourceKey> = [.fileResourceIdentifierKey]
+        guard let x = try? a.resourceValues(forKeys: key).fileResourceIdentifier,
+              let y = try? b.resourceValues(forKeys: key).fileResourceIdentifier else { return false }
+        return x.isEqual(y)
+    }
+
+    /// Moves through a file coordinator, as iCloud asks of writes in its container,
+    /// so an upload, a download or another device's change can't race it.
+    nonisolated static func coordinatedMove(_ source: URL, to destination: URL) throws {
+        var coordinatorError: NSError?
+        var moveError: Error?
+        NSFileCoordinator().coordinate(writingItemAt: source, options: .forMoving, writingItemAt: destination, options: .forReplacing, error: &coordinatorError) { from, to in
+            do { try FileManager.default.moveItem(at: from, to: to) } catch { moveError = error }
+        }
+        if let error = coordinatorError ?? moveError { throw error }
+    }
+
+    nonisolated private static func coordinatedWrite(_ url: URL, options: NSFileCoordinator.WritingOptions = [], _ body: (URL) throws -> Void) throws {
+        var coordinatorError: NSError?
+        var writeError: Error?
+        NSFileCoordinator().coordinate(writingItemAt: url, options: options, error: &coordinatorError) { url in
+            do { try body(url) } catch { writeError = error }
+        }
+        if let error = coordinatorError ?? writeError { throw error }
     }
 
     // MARK: Recently Deleted
@@ -256,28 +309,33 @@ final class FileLibrary {
     static let keepDeletedFor: TimeInterval = 30 * 24 * 60 * 60
 
     /// Moves items to Recently Deleted. Returns what's needed to put them back.
+    /// One that fails (moved or deleted on another device meanwhile) is skipped, so
+    /// the rest still get their Undo; it throws only when none could go.
     @discardableResult
     func delete(_ items: [LibraryItem]) throws -> [DeletedItem] {
         var deleted: [DeletedItem] = []
+        var firstError: Error?
         for item in items {
             // Each in its own folder, with a note of where it came from, so two files
-            // of the same name never collide and a restore knows where to go.
+            // of the same name never collide and a restore knows where to go. The note
+            // goes first: a slot without one is never listed, so never purged either.
             let slot = trash.appending(path: UUID().uuidString, directoryHint: .isDirectory)
-            try fileManager.createDirectory(at: slot, withIntermediateDirectories: true)
             let stored = slot.appending(path: item.url.lastPathComponent)
-            var coordinatorError: NSError?
-            var moveError: Error?
-            NSFileCoordinator().coordinate(writingItemAt: item.url, options: .forMoving, writingItemAt: stored, options: .forReplacing, error: &coordinatorError) { from, to in
-                do { try fileManager.moveItem(at: from, to: to) } catch { moveError = error }
-            }
-            if let error = coordinatorError ?? moveError { throw error }
             // Where it came from, below the library folder when it's in the library: the
             // container can move, and another device's library is somewhere else.
             let origin = Self.relativePath(of: item.url, in: root) ?? item.url.path
-            try Data(origin.utf8).write(to: slot.appending(path: ".origin"))
-            deleted.append(DeletedItem(stored: stored, original: item.url, deletedAt: .now, isFolder: item.isFolder))
+            do {
+                try fileManager.createDirectory(at: slot, withIntermediateDirectories: true)
+                try Data(origin.utf8).write(to: slot.appending(path: ".origin"))
+                try Self.coordinatedMove(item.url, to: stored)
+                deleted.append(DeletedItem(stored: stored, original: item.url, deletedAt: .now, isFolder: item.isFolder))
+            } catch {
+                try? fileManager.removeItem(at: slot)
+                firstError = firstError ?? error
+            }
         }
         revision += 1
+        if deleted.isEmpty, let firstError { throw firstError }
         return deleted
     }
 
@@ -286,7 +344,10 @@ final class FileLibrary {
     @discardableResult
     func restore(_ items: [DeletedItem]) throws -> [URL] {
         var restored: [URL] = []
-        for item in items where fileManager.fileExists(atPath: item.stored.path) {
+        // A slot not downloaded yet holds the item's iCloud placeholder; the coordinated
+        // move fetches it.
+        let placeholder = { (url: URL) in url.deletingLastPathComponent().appending(path: ".\(url.lastPathComponent).icloud") }
+        for item in items where fileManager.fileExists(atPath: item.stored.path) || fileManager.fileExists(atPath: placeholder(item.stored).path) {
             var folder = item.original.deletingLastPathComponent()
             // Deleted before the library moved to iCloud Drive: back into the library
             // as it is now, not the old device folder.
@@ -296,7 +357,7 @@ final class FileLibrary {
             }
             if !fileManager.fileExists(atPath: folder.path) { folder = root }
             let destination = uniqueURL(for: item.original.lastPathComponent, in: folder)
-            try fileManager.moveItem(at: item.stored, to: destination)
+            try Self.coordinatedMove(item.stored, to: destination)
             try? fileManager.removeItem(at: item.stored.deletingLastPathComponent())
             restored.append(destination)
         }
@@ -346,7 +407,9 @@ final class FileLibrary {
     /// Deletes for good.
     func purge(_ items: [DeletedItem]) {
         for item in items {
-            try? fileManager.removeItem(at: item.stored.deletingLastPathComponent())
+            try? Self.coordinatedWrite(item.stored.deletingLastPathComponent(), options: .forDeleting) {
+                try FileManager.default.removeItem(at: $0)
+            }
         }
         revision += 1
     }
@@ -403,7 +466,7 @@ final class FileLibrary {
             if item.isFolder, target == source || target.hasPrefix(source + "/") {
                 throw CocoaError(.fileWriteInvalidFileName, userInfo: [NSLocalizedDescriptionKey: String(localized: "A folder can't go inside itself.")])
             }
-            try fileManager.moveItem(at: item.url, to: uniqueURL(for: item.url.lastPathComponent, in: folder))
+            try Self.coordinatedMove(item.url, to: uniqueURL(for: visibleName(item.url.lastPathComponent, in: folder), in: folder))
         }
         revision += 1
     }
@@ -445,7 +508,7 @@ final class FileLibrary {
 
     func adoptFromInbox(_ url: URL) throws -> URL {
         let destination = uniqueURL(for: url.lastPathComponent, in: root)
-        try fileManager.moveItem(at: url, to: destination)
+        try Self.coordinatedMove(url, to: destination)
         revision += 1
         return destination
     }

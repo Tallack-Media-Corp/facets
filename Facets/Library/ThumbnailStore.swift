@@ -208,6 +208,7 @@ actor ThumbnailStore {
         for url in (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] where !isCurrent(url.lastPathComponent) {
             try? fileManager.removeItem(at: url)
         }
+        Self.trim(directory, to: 200_000_000, coordinated: false)
         guard let shared = sharedDirectory else { return }
         for url in (try? fileManager.contentsOfDirectory(at: shared, includingPropertiesForKeys: nil)) ?? [] where !isCurrent(url.lastPathComponent) {
             // A placeholder (".name.png.icloud") stands for the file itself.
@@ -221,11 +222,41 @@ actor ThumbnailStore {
                 try? fileManager.removeItem(at: item)
             }
         }
+        // Pictures of models since deleted, renamed or recoloured are never asked for
+        // again; past a cap the oldest go, and anything still shown is redrawn.
+        // shortcut: oldest-first, not per model; remove a model's pictures on purge if
+        // redraws ever show.
+        Self.trim(shared, to: 100_000_000, coordinated: true)
     }
 
+    private static func trim(_ folder: URL, to limit: Int64, coordinated: Bool) {
+        let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
+        // Placeholders (".name.png.icloud") weigh nothing here; the real ones count.
+        let files = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: Array(keys))) ?? [])
+            .filter { !$0.lastPathComponent.hasPrefix(".") }
+            .map { ($0, (try? $0.resourceValues(forKeys: keys)) ) }
+            .sorted { ($0.1?.contentModificationDate ?? .distantPast) > ($1.1?.contentModificationDate ?? .distantPast) }
+        var total: Int64 = 0
+        for (url, values) in files {
+            total += Int64(values?.fileSize ?? 0)
+            guard total > limit else { continue }
+            if coordinated {
+                var error: NSError?
+                NSFileCoordinator().coordinate(writingItemAt: url, options: .forDeleting, error: &error) { item in
+                    try? FileManager.default.removeItem(at: item)
+                }
+            } else {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
+    /// This device's cache and the library's shared pictures.
     func diskUsage() -> Int64 {
-        let urls = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey])) ?? []
-        return urls.reduce(0) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+        [directory, sharedDirectory].compactMap { $0 }.reduce(0) { sum, folder in
+            let urls = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+            return sum + urls.reduce(0) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+        }
     }
 }
 

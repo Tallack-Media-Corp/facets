@@ -61,16 +61,14 @@ enum LibraryLocation {
             guard let items = try? fileManager.contentsOfDirectory(at: deviceRoot, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { return 0 }
             var moved = 0
             for item in items where item.lastPathComponent != "Inbox" {
-                var destination = cloud.appending(path: item.lastPathComponent)
-                var n = 2
-                let ext = item.pathExtension
-                let base = item.deletingPathExtension().lastPathComponent
-                while fileManager.fileExists(atPath: destination.path) {
-                    destination = cloud.appending(path: ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)")
-                    n += 1
-                }
-                if (try? fileManager.setUbiquitous(true, itemAt: item, destinationURL: destination)) != nil {
+                // Counts iCloud placeholders as taken too, so a clash with a file not
+                // downloaded here doesn't fail the move.
+                let destination = FileLibrary.uniqueURL(for: item.lastPathComponent, in: cloud)
+                do {
+                    try fileManager.setUbiquitous(true, itemAt: item, destinationURL: destination)
                     moved += 1
+                } catch {
+                    Logger(subsystem: "Facets", category: "library").error("Couldn't move \(item.lastPathComponent, privacy: .public) to iCloud Drive: \(error as NSError, privacy: .public)")
                 }
             }
             return moved

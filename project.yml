@@ -383,6 +383,25 @@ targets:
               - public.standard-tesselated-geometry-format
               - com.bambulab.3mf
               - public.geometry-definition-format
+  # The library's file handling, on a temporary folder: only the files it needs, not
+  # the app, so a test run never touches the real library.
+  FacetsTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: FacetsTests
+      - path: Facets/Library/FileLibrary.swift
+      - path: Facets/Library/LibraryLocation.swift
+      - path: Facets/UI/Format.swift
+      - path: Facets/Settings/ViewerSettings.swift
+      - path: Facets/Settings/PrinterBeds.swift
+      - path: Shared
+    dependencies:
+      - package: MeshKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FACETS_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
 
 schemes:
   FacetsMac:
@@ -391,6 +410,9 @@ schemes:
         FacetsMac: all
     run:
       config: Debug
+    test:
+      targets:
+        - FacetsTests
     archive:
       config: Release
   Facets:
