@@ -31,8 +31,9 @@ public enum STLReader {
         if expected == raw.count { return true }
         let looksASCII = startsWithSolid(raw) && containsFacet(raw)
         if looksASCII { return false }
-        // Some exporters pad the end; accept a file at least as long as promised.
-        return count > 0 && expected <= raw.count
+        // Padded, or cut short with at least half its triangles (readBinary keeps what's
+        // there). Text read as a count is over 168 million, which no smaller file meets.
+        return count > 0 && raw.count - 84 >= count * 25
     }
 
     private static func startsWithSolid(_ raw: UnsafeRawBufferPointer) -> Bool {

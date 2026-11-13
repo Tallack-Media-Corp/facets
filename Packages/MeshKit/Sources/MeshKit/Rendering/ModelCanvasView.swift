@@ -91,7 +91,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     private var animation: (from: OrbitCamera, to: OrbitCamera, start: CFTimeInterval, duration: CFTimeInterval)?
     /// A short out-and-back zoom: Fit's answer when the model is already framed, so
     /// the button never seems to do nothing.
-    private var pulse: (base: OrbitCamera, start: CFTimeInterval)?
+    private(set) var pulse: (base: OrbitCamera, start: CFTimeInterval)?
 
     public init() {
         let context = RenderContext.shared
@@ -214,6 +214,8 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
 
     private func move(to next: OrbitCamera, animated: Bool) {
         velocity = .zero
+        // A pulse still running would put its own starting camera back over this one.
+        pulse = nil
         if animated, !Self.reduceMotion, window != nil {
             animation = (camera, next, CACurrentMediaTime(), 0.4)
             startDisplayLink()
