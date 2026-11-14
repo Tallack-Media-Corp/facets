@@ -103,11 +103,10 @@ struct ViewerScreen: View {
             switch phase {
             case .loading:
                 ProgressView("Opening \(displayName)…")
-                    .padding(20)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                    .glassCard(padding: CardPadding.loading, cornerRadius: Radius.overlay, maxWidth: nil, margin: 0)
             case .failed(let error):
                 ContentUnavailableView {
-                    Label(error.title, systemImage: "exclamationmark.triangle")
+                    Label(error.title, systemImage: Symbol.failed)
                 } description: {
                     Text(error.message)
                 } actions: {
@@ -152,7 +151,7 @@ struct ViewerScreen: View {
             }
         }
         .overlay(alignment: .top) { topOverlay.clearOfFold() }
-        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: unitSuggestions)
+        .animation(Motion.animation(Motion.panel, reduceMotion: reduceMotion), value: unitSuggestions)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewHeight = max($0, 1) }
         .overlay(alignment: dockedPanel ? .bottomTrailing : .bottom) {
             if dockedPanel { bottomOverlay } else { bottomOverlay.clearOfFold() }
@@ -166,12 +165,7 @@ struct ViewerScreen: View {
         // The tools: a tick per point and a firmer one on a corner, a soft landing
         // when a face is laid flat, a tick per quarter turn or preset view.
         .sensoryFeedback(.impact(weight: .light, intensity: 0.5), trigger: feedback.point)
-        #if os(macOS)
-        // A Force Touch trackpad's click as the point catches a corner.
-        .sensoryFeedback(.alignment, trigger: feedback.snap)
-        #else
-        .sensoryFeedback(.impact(weight: .medium, intensity: 0.9), trigger: feedback.snap)
-        #endif
+        .sensoryFeedback(ViewerFeedback.snapFeel, trigger: feedback.snap)
         .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.8), trigger: feedback.settle)
         .sensoryFeedback(.selection, trigger: feedback.tick)
         .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: feedback.alreadyBest)
@@ -219,7 +213,7 @@ struct ViewerScreen: View {
         }
         .background { escapeKey }
         .focusedSceneValue(\.viewerActions, isLoaded ? viewerActions : nil)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: tool)
+        .animation(Motion.animation(Motion.panel, reduceMotion: reduceMotion), value: tool)
         .onChange(of: appearance.plateID) {
             // Another plate is another arrangement: start it as the file has it.
             arranged = nil
@@ -242,11 +236,7 @@ struct ViewerScreen: View {
         .sheet(isPresented: $choosingPrinter) {
             NavigationStack {
                 PrinterBedPicker(verdict: shownModel.map { model in { bed in verdict(model, on: bed) } }, onPick: { choosingPrinter = false })
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done", systemImage: "checkmark") { choosingPrinter = false }
-                        }
-                    }
+                    .doneButton { choosingPrinter = false }
             }
             .presentationDetents([.medium, .large])
         }
@@ -263,15 +253,15 @@ struct ViewerScreen: View {
     private var toolbar: some ToolbarContent {
         if showsCloseButton {
             ToolbarItem(placement: .topBarLeading) {
-                Button("Close", systemImage: "xmark") { dismiss() }
+                Button("Close", systemImage: Symbol.close) { dismiss() }
             }
         }
-        // A file from Browse or another app gets a plus beside Share to keep a copy.
+        // A file from Browse or another app gets Save to Library beside Share to keep a copy.
         // It stays as a tick once saved, so the bar doesn't jump. Neither shows for a
         // file that didn't open.
         if file.isExternal, isLoaded {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(isSaved ? "Saved to Library" : "Save to Library", systemImage: isSaved ? "checkmark" : "tray.and.arrow.down") {
+                Button(isSaved ? "Saved to Library" : "Save to Library", systemImage: isSaved ? Symbol.saved : Symbol.saveToLibrary) {
                     saveToLibrary()
                 }
                 .contentTransition(.symbolEffect(.replace))
@@ -281,14 +271,14 @@ struct ViewerScreen: View {
         if isLoaded {
             ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: file.url) {
-                    Label("Share", systemImage: "square.and.arrow.up")
+                    Label("Share", systemImage: Symbol.share)
                 }
             }
         }
 
         if case .loaded = phase {
             ToolbarItem(placement: .bottomControls) {
-                Button("Fit to Screen", systemImage: "viewfinder") {
+                Button("Fit to Screen", systemImage: Symbol.fit) {
                     if !controller.frameModel() { alreadyFitTaps += 1 }
                     FitTip().invalidate(reason: .actionPerformed)
                 }
@@ -299,7 +289,7 @@ struct ViewerScreen: View {
                         Button(preset.localizedTitle, systemImage: symbol(for: preset)) { showPreset(preset) }
                     }
                 } label: {
-                    Label("Preset Views", systemImage: "move.3d")
+                    Label("Preset Views", systemImage: Symbol.presetViews)
                 }
                 .toolbarMenuIndicator()
             }
@@ -313,7 +303,7 @@ struct ViewerScreen: View {
             ToolbarSpacer(.flexible, placement: .bottomControls)
             ToolbarItem(placement: .bottomControls) {
                 // Toggles, so it also closes the inspector on iPad and Mac.
-                Button("Info", systemImage: "info.circle") {
+                Button("Info", systemImage: Symbol.info) {
                     showingInfo.toggle()
                     InfoTip().invalidate(reason: .actionPerformed)
                 }
@@ -324,7 +314,7 @@ struct ViewerScreen: View {
     /// Measure, Lay Flat and Cross-Section. The button shows the open tool.
     /// Panels rise from the bottom; with Reduce Motion they fade.
     private var panelTransition: AnyTransition {
-        reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
+        Motion.transition(.move(edge: .bottom).combined(with: .opacity), reduceMotion: reduceMotion)
     }
 
     private var toolsMenu: some View {
@@ -335,7 +325,7 @@ struct ViewerScreen: View {
                 }
             }
         } label: {
-            Label(tool?.title ?? "Tools", systemImage: tool?.symbol ?? "wrench.and.screwdriver")
+            Label(tool?.title ?? "Tools", systemImage: tool?.symbol ?? Symbol.tools)
         }
         .tint(tool == nil ? nil : Color.accentColor)
         // The unit card takes the panel's place; settle the size before measuring.
@@ -345,13 +335,13 @@ struct ViewerScreen: View {
 
     private func symbol(for preset: OrbitCamera.Preset) -> String {
         switch preset {
-        case .isometric: "cube"
-        case .front: "square.bottomhalf.filled"
-        case .back: "square.tophalf.filled"
-        case .left: "square.lefthalf.filled"
-        case .right: "square.righthalf.filled"
-        case .top: "arrow.down.to.line"
-        case .bottom: "arrow.up.to.line"
+        case .isometric: Symbol.isometric
+        case .front: Symbol.front
+        case .back: Symbol.back
+        case .left: Symbol.left
+        case .right: Symbol.right
+        case .top: Symbol.top
+        case .bottom: Symbol.bottom
         }
     }
 
@@ -374,10 +364,10 @@ struct ViewerScreen: View {
     private var buildPlateMenu: some View {
         Menu {
             Toggle(isOn: $appearance.wireframe) {
-                Label("Wireframe", systemImage: "cube.transparent")
+                Label("Wireframe", systemImage: Symbol.wireframe)
             }
             Toggle(isOn: $appearance.showsGrid) {
-                Label("Build Plate Grid", systemImage: "grid")
+                Label("Build Plate Grid", systemImage: Symbol.grid)
             }
             if settings.checksFit {
                 printerSection
@@ -385,7 +375,7 @@ struct ViewerScreen: View {
         } label: {
             // Always the view-options glyph: the menu holds wireframe and the grid as
             // well as the printer, and the chosen printer is named on the size chip.
-            Label("Display", systemImage: "slider.horizontal.3")
+            Label("Display", systemImage: Symbol.display)
         }
         .toolbarMenuIndicator()
     }
@@ -496,7 +486,7 @@ struct ViewerScreen: View {
             // Overlays on the model stop growing at the first accessibility
             // size; beyond that they'd cover what they describe.
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-            .padding(.top, 8)
+            .padding(.top, Spacing.sm)
         }
     }
 
@@ -515,8 +505,8 @@ struct ViewerScreen: View {
                 keep: { keepUnit() }
             )
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-            .frame(maxWidth: dockedPanel ? 360 : nil)
-            .padding(.bottom, 8)
+            .frame(maxWidth: dockedPanel ? Size.dockedUnitCard : nil)
+            .padding(.bottom, Spacing.sm)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
             .transition(panelTransition)
         } else if let tool, let model = shownModel {
@@ -534,18 +524,18 @@ struct ViewerScreen: View {
                 resetOrientation: resetOrientation,
                 close: { closeTool() }
             )
-            .frame(maxWidth: dockedPanel ? 340 : nil)
-            .padding(.bottom, 8)
+            .frame(maxWidth: dockedPanel ? Size.dockedToolPanel : nil)
+            .padding(.bottom, Spacing.sm)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
             .transition(panelTransition)
         } else if let card = toolbarTip {
             FloatingTip(tip: card)
-                .padding(.bottom, 12)
+                .padding(.bottom, Spacing.md)
         } else if showingHint {
             GestureHint(stage: shownHintStage ?? 0)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                .padding(.bottom, 12)
-                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
+                .padding(.bottom, Spacing.md)
+                .transition(Motion.transition(.opacity.combined(with: .scale(scale: 0.96)), reduceMotion: reduceMotion))
         }
     }
 
@@ -741,7 +731,7 @@ struct ViewerScreen: View {
                 autoOrient = .alreadyBest
                 feedback.alreadyBest += 1
                 Spoken.announce(String(localized: "Already the best way up to print."))
-                try? await Task.sleep(for: .seconds(2.5))
+                try? await Task.sleep(for: Motion.alreadyBestShown)
                 if autoOrient == .alreadyBest { autoOrient = .idle }
             }
         }
@@ -791,7 +781,7 @@ struct ViewerScreen: View {
     /// or the tool panel. The model reframes into what's left.
     private var obscured: CGFloat {
         let bottomCard = tool != nil || !unitSuggestions.isEmpty
-        let panel = bottomCard && !dockedPanel ? min((panelHeight + 8) / viewHeight, 0.45) : 0
+        let panel = bottomCard && !dockedPanel ? min((panelHeight + Spacing.sm) / viewHeight, 0.45) : 0
         return max(obscuredBySheet, panel)
     }
 
@@ -841,10 +831,10 @@ struct ViewerScreen: View {
         }
         shownHintStage = hintStage
         Task {
-            try? await Task.sleep(for: .seconds(0.6))
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) { showingHint = true }
-            try? await Task.sleep(for: .seconds(6))
-            withAnimation(reduceMotion ? nil : .easeIn(duration: 0.3)) { showingHint = false }
+            try? await Task.sleep(for: Motion.hintDelay)
+            withAnimation(Motion.animation(Motion.hintIn, reduceMotion: reduceMotion)) { showingHint = true }
+            try? await Task.sleep(for: Motion.hintShown)
+            withAnimation(Motion.animation(Motion.hintOut, reduceMotion: reduceMotion)) { showingHint = false }
             tipsReady = true
         }
     }
@@ -865,7 +855,7 @@ struct ViewerScreen: View {
 
     private func noteInteraction() {
         if showingHint {
-            withAnimation(reduceMotion ? nil : .easeIn(duration: 0.25)) { showingHint = false }
+            withAnimation(Motion.animation(Motion.hintDismissed, reduceMotion: reduceMotion)) { showingHint = false }
             tipsReady = true
         }
         // One stage per model opened: the next hint waits for the next model.
@@ -949,7 +939,7 @@ struct ViewerScreen: View {
         Task {
             do {
                 guard let name = try await library.saveCopy(of: file.url) else { return }
-                withAnimation(.snappy) { isSaved = true }
+                withAnimation(Motion.animation(Motion.standard, reduceMotion: reduceMotion)) { isSaved = true }
                 toasts.show(String(localized: "Saved to Library as \(name)"))
             } catch {
                 saveError = FriendlyError(file: error).message
@@ -977,15 +967,15 @@ private struct ViewerChips: View {
     let sizeTip: (any Tip)?
     let choosePrinter: () -> Void
     /// The printer glyph is an image, not a symbol, so it's sized with the text by hand.
-    @ScaledMetric(relativeTo: .caption) private var glyph: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var glyph = Size.readoutGlyph
 
     /// iPad's canvas is much larger; the chips step up a size or two to match.
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var wide: Bool { sizeClass == .regular }
 
     var body: some View {
-        GlassEffectContainer(spacing: 8) {
-            VStack(spacing: 8) {
+        GlassEffectContainer(spacing: Spacing.sm) {
+            VStack(spacing: Spacing.sm) {
                 if !model.plates.isEmpty {
                     Menu {
                         Picker("Plate", selection: $plateID) {
@@ -997,21 +987,20 @@ private struct ViewerChips: View {
                         // The plates straight in the menu, not a "Plate" submenu (the Mac's default).
                         .pickerStyle(.inline)
                     } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "square.stack.3d.up")
+                        HStack(spacing: Spacing.snug) {
+                            Image(systemName: Symbol.plate)
                             Text(plateTitle)
                                 .lineLimit(1)
-                            Image(systemName: "chevron.down")
+                            Image(systemName: Symbol.chipMenu)
                                 .font(.caption2.weight(.bold))
                         }
                         .font((wide ? Font.title3 : .subheadline).weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .frame(minHeight: 44)
+                        .padding(ChipPadding.plate)
+                        .frame(minHeight: Size.minTapTarget)
                         .contentShape(.capsule)
                     }
                     .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .glassChip(interactive: true)
                     .accessibilityLabel("Plate: \(plateTitle)")
                 }
                 // The readout is also the printer control: it says which printer the
@@ -1020,7 +1009,7 @@ private struct ViewerChips: View {
                 if checksFit {
                     Button(action: choosePrinter) { readout }
                         .buttonStyle(.plain)
-                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
+                        .glassChip(interactive: true, cornerRadius: Radius.readout)
                         .popoverTip(sizeTip)
                         .tipViewStyle(FacetsTipStyle())
                         .accessibilityElement(children: .ignore)
@@ -1029,7 +1018,7 @@ private struct ViewerChips: View {
                         .accessibilityAddTraits(.isButton)
                 } else {
                     readout
-                        .glassEffect(.regular, in: .capsule)
+                        .glassChip()
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(readoutLabel)
                 }
@@ -1038,13 +1027,13 @@ private struct ViewerChips: View {
     }
 
     private var readout: some View {
-        HStack(spacing: 8) {
-            VStack(spacing: 2) {
+        HStack(spacing: Spacing.sm) {
+            VStack(spacing: Spacing.hair) {
                 Text(dimensions)
                     .font((wide ? Font.body : .footnote).weight(.medium).monospacedDigit())
                     .foregroundStyle(Color.primary)
                 if unsureOfUnits {
-                    Label("Check the file's units", systemImage: "ruler")
+                    Label("Check the file's units", systemImage: Symbol.units)
                         .font((wide ? Font.subheadline : .caption).weight(.medium))
                         .foregroundStyle(Color.secondary)
                 } else if let fitNote {
@@ -1073,14 +1062,13 @@ private struct ViewerChips: View {
                 }
             }
             if checksFit {
-                Image(systemName: "chevron.down")
+                Image(systemName: Symbol.chipMenu)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(Color.secondary)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(minHeight: 44)
+        .padding(ChipPadding.readout)
+        .frame(minHeight: Size.minTapTarget)
         .contentShape(.rect)
     }
 
@@ -1112,12 +1100,11 @@ private struct GestureHint: View {
     let stage: Int
 
     var body: some View {
-        Label(stage == 0 ? "Drag to turn · Pinch to zoom" : "Double-tap to fit the model", systemImage: stage == 0 ? "hand.draw" : "hand.tap")
+        Label(stage == 0 ? "Drag to turn · Pinch to zoom" : "Double-tap to fit the model", systemImage: stage == 0 ? Symbol.gestureTurn : Symbol.gestureFit)
             .font(.subheadline.weight(.medium))
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .glassEffect(.regular, in: .capsule)
+            // The same chip as a toast.
+            .glassChip(ChipPadding.toast)
             .padding(.horizontal)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -1142,7 +1129,7 @@ private struct InfoPresentation<Info: View>: ViewModifier {
                 info(false)
                     .scrollContentBackground(.hidden)
                     .background(stageTop)
-                    .inspectorColumnWidth(min: 320, ideal: 360, max: 440)
+                    .inspectorColumnWidth(min: Size.inspectorMin, ideal: Size.inspectorIdeal, max: Size.inspectorMax)
             }
             .sheet(isPresented: gated(!asInspector)) { info(true) }
     }
@@ -1154,6 +1141,16 @@ private struct InfoPresentation<Info: View>: ViewModifier {
 
 /// Counters for the viewer's haptics: each change of one plays its feedback.
 struct ViewerFeedback {
+    /// A measure point catching a corner: a firm tap on iPhone; on the Mac, a Force
+    /// Touch trackpad's alignment click.
+    static var snapFeel: SensoryFeedback {
+        #if os(macOS)
+        .alignment
+        #else
+        .impact(weight: .medium, intensity: 0.9)
+        #endif
+    }
+
     var point = 0
     var snap = 0
     var settle = 0

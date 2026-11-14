@@ -109,13 +109,7 @@ struct ModelInfoSheet: View {
             // Beside the model on iPad and Mac, the viewer's own bar already names it.
             .navigationTitle(showsDone ? file.displayName : "")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if showsDone {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done", systemImage: "checkmark", action: close)
-                    }
-                }
-            }
+            .doneButton(shown: showsDone, action: close)
         }
         .presentationDetents([.medium, .large], selection: $detent)
         .presentationBackgroundInteraction(.enabled(upThrough: .medium))
@@ -213,11 +207,8 @@ private struct FilamentRow: View {
         LabeledContent {
             Text([filament.grams.map(Format.grams), filament.meters.map { Format.filamentLength($0, units: units) }].compactMap { $0 }.joined(separator: " · "))
         } label: {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(filament.colorHex.flatMap { Color(hex: $0) } ?? .gray)
-                    .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
-                    .frame(width: 18, height: 18)
+            HStack(spacing: Spacing.roomy) {
+                ColorSwatch(color: filament.colorHex.flatMap { Color(hex: $0) } ?? .gray)
                     .accessibilityHidden(true)
                 Text(filament.type ?? "Filament")
             }
@@ -233,11 +224,8 @@ private struct ObjectRow: View {
 
     var body: some View {
         Toggle(isOn: $isVisible) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(color)
-                    .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
-                    .frame(width: 18, height: 18)
+            HStack(spacing: Spacing.roomy) {
+                ColorSwatch(color: color)
                     .accessibilityHidden(true)
                 Text(label)
                     .lineLimit(2)

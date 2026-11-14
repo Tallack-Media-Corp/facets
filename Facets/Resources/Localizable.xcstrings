@@ -424,34 +424,6 @@
         }
       }
     },
-    "%@ was moved, renamed or deleted, or Facets no longer has access to it.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ wurde bewegt, umbenannt oder gelöscht, oder Facets hat keinen Zugriff mehr darauf."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ se ha movido, renombrado o eliminado, o Facets ya no tiene acceso."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "« %@ » a été déplacé, renommé ou supprimé, ou Facets n'y a plus accès."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@は移動、名称変更、または削除されたか、Facetsからアクセスできなくなりました。"
-          }
-        }
-      }
-    },
     "%@ · %@": {
       "localizations": {
         "de": {
@@ -1963,34 +1935,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "このファイルを読み込めません"
-          }
-        }
-      }
-    },
-    "Can't open this folder. Add it again.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dieser Ordner kann nicht geöffnet werden. Füge ihn erneut hinzu."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No se puede abrir esta carpeta. Vuelve a añadirla."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Impossible d'ouvrir ce dossier. Ajoutez-le à nouveau."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このフォルダを開けません。もう一度追加してください。"
           }
         }
       }
@@ -5729,30 +5673,30 @@
         }
       }
     },
-    "It was moved, renamed or deleted since Facets last saw it.": {
+    "It was moved, renamed or deleted, or Facets no longer has access to it.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sie wurde bewegt, umbenannt oder gelöscht, seit Facets sie zuletzt gesehen hat."
+            "value": "Sie wurde bewegt, umbenannt oder gelöscht, oder Facets hat keinen Zugriff mehr darauf."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Se ha movido, renombrado o eliminado desde la última vez que Facets lo vio."
+            "value": "Se ha movido, renombrado o eliminado, o Facets ya no tiene acceso."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Il a été déplacé, renommé ou supprimé depuis la dernière fois que Facets l'a vu."
+            "value": "Il a été déplacé, renommé ou supprimé, ou Facets n'y a plus accès."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Facetsが前回確認したあとに、移動、名称変更、または削除されました。"
+            "value": "移動、名称変更、または削除されたか、Facetsからアクセスできなくなりました。"
           }
         }
       }
@@ -9869,6 +9813,34 @@
         }
       }
     },
+    "The folder was moved or deleted, or Facets no longer has access to it. Add it again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner wurde bewegt oder gelöscht, oder Facets hat keinen Zugriff mehr darauf. Füge ihn erneut hinzu."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La carpeta se ha movido o eliminado, o Facets ya no tiene acceso. Vuelve a añadirla."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le dossier a été déplacé ou supprimé, ou Facets n'y a plus accès. Ajoutez-le à nouveau."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォルダが移動または削除されたか、Facetsからアクセスできなくなりました。もう一度追加してください。"
+          }
+        }
+      }
+    },
     "The library is the Facets folder in iCloud Drive, shared by your iPhone, iPad and Mac.": {
       "localizations": {
         "de": {
@@ -10229,34 +10201,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "このモデルはとても小さいため、メートル単位の可能性があります。オプションはサイズの下にあります。"
-          }
-        }
-      }
-    },
-    "This model was moved, renamed or deleted, or Facets no longer has access to it.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dieses Modell wurde bewegt, umbenannt oder gelöscht, oder Facets hat keinen Zugriff mehr darauf."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Este modelo se ha movido, renombrado o eliminado, o Facets ya no tiene acceso."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ce modèle a été déplacé, renommé ou supprimé, ou Facets n'y a plus accès."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このモデルは移動、名称変更、または削除されたか、Facetsからアクセスできなくなりました。"
           }
         }
       }

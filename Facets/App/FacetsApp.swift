@@ -208,7 +208,7 @@ private struct SettingsWindow: View {
         SettingsView()
             .formStyle(.grouped)
             .frame(minWidth: 460, idealWidth: 520, minHeight: 480, idealHeight: 640)
-            .toastHost(clearance: 24)
+            .toastHost()
             .environment(toasts)
     }
 }
@@ -228,7 +228,7 @@ private struct ModelWindow: View {
         .background(BringToFront())
         .formStyle(.grouped)
         // The toast host reads the toast centre, so it goes inside it.
-        .toastHost(clearance: 24)
+        .toastHost()
         .environment(router)
         .environment(toasts)
         // "Find in Files…" and "Open Another File…" ask the router for a file; here

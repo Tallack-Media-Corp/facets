@@ -22,7 +22,7 @@ struct LocationTab: View {
                         .id(url)
                 } else {
                     ContentUnavailableView {
-                        Label("Can't Open \(location.name)", systemImage: "exclamationmark.triangle")
+                        Label("Can't Open \(location.name)", systemImage: Symbol.missing)
                     } description: {
                         Text("The folder was moved or deleted, or Facets no longer has access to it.")
                     } actions: {
@@ -111,10 +111,10 @@ struct SidebarFoot: View {
     var body: some View {
         HStack {
             AddLocationButton()
-            Spacer(minLength: 8)
+            Spacer(minLength: Spacing.sm)
             SettingsLink {
-                Image(systemName: "gear")
-                    .frame(width: 24, height: 24)
+                Image(systemName: Symbol.settings)
+                    .frame(width: Size.sidebarButton, height: Size.sidebarButton)
                     .contentShape(.rect)
             }
             .buttonStyle(.borderless)
@@ -122,6 +122,8 @@ struct SidebarFoot: View {
             .help("Settings")
             .accessibilityLabel("Settings")
         }
+        .padding(.horizontal, Spacing.roomy)
+        .padding(.vertical, Spacing.sm)
     }
 }
 
@@ -140,7 +142,7 @@ struct AddLocationButton: View {
                 // One line: the sidebar bar offers less width than the sidebar shows.
                 Text("Add Location…").fixedSize()
             } icon: {
-                Image(systemName: "folder.badge.plus")
+                Image(systemName: Symbol.addLocation)
             }
         }
             .buttonStyle(.borderless)

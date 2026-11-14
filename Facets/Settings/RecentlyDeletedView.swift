@@ -14,28 +14,17 @@ struct RecentlyDeletedView: View {
     var body: some View {
         List {
             ForEach(items) { item in
-                HStack(spacing: 12) {
-                    HStack(spacing: 12) {
-                        RowThumbnail {
-                            if item.isFolder {
-                                FolderTile(showsBackdrop: false)
-                            } else {
-                                // Drawn from the file where it waits; a cube while it renders.
-                                ModelThumbnail(url: item.stored, cornerRadius: 10, showsBackdrop: false, isDownloaded: item.isDownloaded)
-                            }
-                        }
-                        .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(item.displayName)
-                                .font(.headline)
-                                .lineLimit(3)
-                            Text(detail(for: item))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                ThumbnailRow(title: item.displayName) {
+                    if item.isFolder {
+                        FolderTile(showsBackdrop: false)
+                    } else {
+                        // Drawn from the file where it waits; a cube while it renders.
+                        // The row rounds the corners.
+                        ModelThumbnail(url: item.stored, cornerRadius: 0, showsBackdrop: false, isDownloaded: item.isDownloaded)
                     }
-                    .accessibilityElement(children: .combine)
-                    Spacer(minLength: 8)
+                } caption: {
+                    Text(detail(for: item))
+                } accessory: {
                     // In sight on every row, not only behind a swipe or a right-click.
                     Button("Restore") { restore([item]) }
                         .buttonStyle(.bordered)
@@ -56,7 +45,7 @@ struct RecentlyDeletedView: View {
         }
         .overlay {
             if loaded, items.isEmpty {
-                ContentUnavailableView("Nothing Deleted", systemImage: "trash", description: Text("Models and folders you delete stay here for 30 days, so you can put them back."))
+                ContentUnavailableView("Nothing Deleted", systemImage: Symbol.nothingDeleted, description: Text("Models and folders you delete stay here for 30 days, so you can put them back."))
             }
         }
         .navigationTitle("Recently Deleted")

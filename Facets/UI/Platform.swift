@@ -137,8 +137,8 @@ extension View {
                     Spacer()
                     trailing
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.horizontal, Spacing.xl)
+                .padding(.vertical, Spacing.md)
             }
         }
         #endif

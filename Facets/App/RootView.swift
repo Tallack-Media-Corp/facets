@@ -3,19 +3,18 @@ import SwiftUI
 struct RootView: View {
     @Environment(Router.self) private var router
     @Environment(LocationsStore.self) private var locations
-    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         @Bindable var router = router
         TabView(selection: $router.tab) {
-            Tab("Library", systemImage: "square.grid.2x2", value: Router.Tab.library) {
+            Tab("Library", systemImage: Symbol.library, value: Router.Tab.library) {
                 LibraryTab()
             }
-            Tab("Recents", systemImage: "clock", value: Router.Tab.recents) {
+            Tab("Recents", systemImage: Symbol.recents, value: Router.Tab.recents) {
                 RecentsView()
             }
             #if os(iOS)
-            Tab("Settings", systemImage: "gearshape", value: Router.Tab.settings) {
+            Tab("Settings", systemImage: Symbol.settings, value: Router.Tab.settings) {
                 SettingsView()
             }
             #endif
@@ -23,7 +22,7 @@ struct RootView: View {
             // Browse, as the Finder lists folders: each location its own sidebar item.
             TabSection("Locations") {
                 ForEach(locations.locations) { location in
-                    Tab(location.name, systemImage: location.isCloud ? "icloud" : "folder", value: Router.Tab.location(location.id)) {
+                    Tab(location.name, systemImage: location.isCloud ? Symbol.cloudFolder : Symbol.folder, value: Router.Tab.location(location.id)) {
                         LocationTab(location: location)
                     }
                     .contextMenu {
@@ -41,25 +40,22 @@ struct RootView: View {
         }
         #if os(iOS)
         .tabBarMinimizeBehavior(.onScrollDown)
-        // iPhone's tab bar is at the bottom; iPad's is at the top.
-        .toastHost(clearance: sizeClass == .compact ? 88 : 24)
+        #else
+        .tabViewStyle(.sidebarAdaptable)
+        .tabViewSidebarBottomBar { SidebarFoot() }
+        #endif
+        .toastHost()
+        #if os(iOS)
         .fullScreenCover(item: $router.presented) { file in
             ViewerScreen(file: file, showsCloseButton: true)
             // The zoom transition's own dismissal (pinch in, or drag) fires on a
             // pinch that starts near the screen's edge; in the viewer a pinch is
             // always zoom. The close button is the way out.
             .interactiveDismissDisabled()
-            .toastHost(clearance: 80)
+            .toastHost(aboveBottomToolbar: true)
             .zoomDestination(id: file.url, in: router.zoomSource)
         }
         #else
-        .tabViewStyle(.sidebarAdaptable)
-        .tabViewSidebarBottomBar {
-            SidebarFoot()
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-        }
-        .toastHost(clearance: 24)
         // On the Mac a model from Finder or another app opens in a window of its own.
         .opensPresentedModelsInWindows(router)
         #endif

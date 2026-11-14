@@ -397,6 +397,8 @@ targets:
       - path: Facets/Library/ThumbnailStore.swift
       - path: Facets/UI/Platform.swift
       - path: Facets/UI/Format.swift
+      # Printer verdicts carry their symbol.
+      - path: Facets/UI/Symbols.swift
       - path: Facets/Settings/ViewerSettings.swift
       - path: Facets/Settings/PrinterBeds.swift
       - path: Facets/App/LibraryFingerprint.swift

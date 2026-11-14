@@ -152,7 +152,7 @@ struct ModelEntity: AppEntity {
         DisplayRepresentation(
             title: "\(name)",
             subtitle: folder.map { "\($0)" },
-            image: .init(systemName: "cube")
+            image: .init(systemName: Symbol.model)
         )
     }
 }

@@ -104,7 +104,7 @@ struct LibrarySectionPicker: View {
         .pickerStyle(.segmented)
         .onChange(of: section) { if section == .browse { BrowseTip().invalidate(reason: .actionPerformed) } }
         .labelsHidden()
-        .frame(maxWidth: 320)
+        .frame(maxWidth: Size.segmentedMaxWidth)
         .frame(maxWidth: .infinity)
     }
 }
@@ -114,6 +114,6 @@ extension View {
     func sectionPickerRow() -> some View {
         listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16))
+            .listRowInsets(EdgeInsets(top: 0, leading: Spacing.lg, bottom: Spacing.xs, trailing: Spacing.lg))
     }
 }

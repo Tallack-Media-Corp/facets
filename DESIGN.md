@@ -54,6 +54,8 @@ rounded:
   tile: "14px"
   overlay: "20px"
   drop-target: "24px"
+  panel: "24px"
+  readout: "16px"
   capsule: "9999px"
 spacing:
   hair: "2px"
@@ -174,7 +176,7 @@ Flat content, floating glass. Nothing in the interface casts a drop shadow. The 
 
 ## Shapes
 
-Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt corner, list thumbnails 10pt, the loading panel 20pt and the drag-and-drop target outline 24pt (dashed, 3pt, in Filament Orange). Floating chips and toasts are capsules. Swatches and icon-picker selection marks are circles. App icons use Icon Composer's own shape.
+Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt corner, list thumbnails 10pt, the loading panel 20pt, floating cards (tool panels, tips, the unit card) 24pt and the drag-and-drop target outline 24pt (dashed, 3pt, in Filament Orange). Floating chips and toasts are capsules. Swatches and icon-picker selection marks are circles. App icons use Icon Composer's own shape.
 
 ## Components
 
@@ -185,11 +187,11 @@ Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt co
 - **Info:** a sheet on iPhone (the model glides up above its medium detent); an inspector beside the canvas on iPad and Mac, so the canvas narrows and reframes instead of hiding under it. Shape-based estimates are rounded to what they can claim (time to 5 min, then quarter hours, then hours; grams to two significant figures); slicer figures stay exact.
 - **Mac:** settings live in Facets › Settings… (⌘,), not a sidebar tab, with a gear at the right of the sidebar's foot that opens the same window for anyone who wouldn't look in the menu; and File › Open… (⌘O) opens any model in a window of its own. A click on the canvas waits out the double-click interval before it measures, so a double-click only fits. The library behaves like the Finder: a click selects (a tint outline round the picture, the name on a 25% tint wash; white on Filament Orange would fall short of 4.5:1), Command- and Shift-click extend, a double-click or Return opens, Space shows Quick Look, Command-Delete deletes, and models drag out to the Finder or a slicer. Browse locations are sidebar items under Locations, added with "Add Location…" at the sidebar's foot (an open panel, not SwiftUI's file importer, which failed beside the window's other importers), instead of the Library | Browse switch. The Finder gets Facets' Quick Look preview and thumbnails for 3MF; for STL the Mac's own built-in previewer takes precedence over any app's. The Mac preview has no Stage: the model and grid sit on the Quick Look panel's own translucent material, as Apple's 3D preview does, so it reads as part of the OS (Pure Black doesn't apply there).
 - **Recently Deleted:** with the library in iCloud Drive, deleted models go to a hidden `.recently-deleted` folder inside it (a move within iCloud, so nothing downloads and it works offline); otherwise to the app's own storage. The list reads both.
-- **Unit check:** while the unit card is up, the readout's second line says "Check the file's units" (ruler, secondary) and no bed is drawn: no verdict on a size that's probably wrong. The card sits at the bottom, above the toolbar, in thumb reach, and the model reframes above it as it does for a tool panel.
+- **Unit check:** while the unit card is up, the readout's second line says "Check the file's units" (ruler, secondary) and no bed is drawn: no verdict on a size that's probably wrong. The card is the same card as a tool panel (24pt corners, max 440pt) and sits where one does, at the bottom above the toolbar, in thumb reach; the model reframes above it.
 - **Fit when already fit:** Fit (and double-tap) on a model that's already framed doesn't stand still: the camera eases out about 6% and back over half a second, with a light tap on iPhone. No message. With Reduce Motion, the tap alone.
-- **Bottom-bar glyphs:** Fit to Screen is `viewfinder` ("frame the shot"; the old diagonal arrows read as full screen); Preset Views is `move.3d`; Display (wireframe, grid, printer) is always `slider.horizontal.3`, a view-options glyph. It no longer turns into the printer once one is chosen: the menu holds more than the printer, the chosen printer is named on the size chip, and the printer drawing read as a framed picture at toolbar size. The custom `printer3d` glyph (a template SVG: frame, gantry, nozzle, a part on the bed) stays where it reads, in the menu and on "No printer selected". SF Symbols' `printer` is a paper printer, so it isn't used. Save to Library, beside Share, is `tray.and.arrow.down` (into your library), not a plus: "+" means the library's Add menu.
+- **Bottom-bar glyphs:** Fit to Screen is `viewfinder` ("frame the shot"; the old diagonal arrows read as full screen); Preset Views is `move.3d`; Display (wireframe, grid, printer) is always `slider.horizontal.3`, a view-options glyph. It no longer turns into the printer once one is chosen: the menu holds more than the printer, the chosen printer is named on the size chip, and the printer drawing read as a framed picture at toolbar size. The custom `printer3d` glyph (a template SVG: frame, gantry, nozzle, a part on the bed) stays where it reads, in the menu and on "No printer selected". SF Symbols' `printer` is a paper printer, so it isn't used. Save to Library, beside Share, is `tray.and.arrow.down` (into your library), not a plus: "+" means the library's Add menu. The same glyph is Save to Library in Browse's context menus and swipe actions; once saved it becomes the checkmark.
 - **My Models | Browse:** (stored as Library and Browse) the segmented control is labelled My Models rather than a third "Library" under the tab and title. It is the first thing in each root list's own content, under the large title, so it scrolls and pulls to refresh with the list rather than staying pinned above it.
-- **Tips (TipKit):** a short tour per screen for new users, one tip at a time in control order: the library (Add, My Models | Browse or Add Location on the Mac, View Options) and the viewer (the size chip, Fit, Preset Views, Tools, Display, Info). Toolbar items can't anchor TipKit popovers on iOS 26, so bar tips are a card floating above the bars (regular glass, 24pt corners, max 440pt, the control's own glyph in the tint); the size chip's tip is a popover on the chip. The viewer's tips wait for the gesture hint. Every tip has a small close button and "Turn Off Tips" as a quiet footnote link, not a filled button, since most people should read rather than dismiss. Using a control retires its tip. Settings › Tips has Show Tips and Show All Tips Again (a new generation of tip ids).
+- **Tips (TipKit):** a short tour per screen for new users, one tip at a time in control order: the library (Add, My Models | Browse or Add Location on the Mac, View Options) and the viewer (the size chip, Fit, Preset Views, Tools, Display, Info). Toolbar items can't anchor TipKit popovers on iOS 26, so bar tips are a card floating above the bars (regular glass, 24pt corners, max 440pt, the control's own glyph in the tint); the size chip's tip is a popover on the chip. The viewer's tips wait for the gesture hint. Every tip has a small close button (drawn at 30pt, a 44pt tap) and "Turn Off Tips" as a quiet footnote link, not a filled button, since most people should read rather than dismiss. Using a control retires its tip. Settings › Tips has Show Tips and Show All Tips Again (a new generation of tip ids).
 - **Tool panel:** one viewer tool at a time (Measure, Lay Flat, Cross-Section), opened from the Tools menu, whose button takes the open tool's symbol and the tint. Its controls sit in a regular-glass panel (24pt corners, max 440pt wide) above the bottom toolbar, in place of the gesture hint, with a 44pt close button. Measure markers are ink on a background-coloured halo, never the accent, since the model is often Filament Orange.
 - **States:** toggles in the toolbar fill with the tint when on. A completed action swaps its symbol in place (plus becomes a checkmark) rather than disappearing.
 - **Switches** in lists and sheets stay system green: on iOS green means "on", and tinting them orange would make them read as brand decoration. Filament Orange drives every other interactive element.
@@ -224,7 +226,7 @@ Gently rounded and consistent with iOS. Thumbnail and folder tiles use a 14pt co
 - Pushes use the zoom transition from a card into the viewer; files opened from other apps present the viewer full-screen with a Close button.
 
 ### Toast
-- A capsule of regular glass at the bottom edge with a filled checkmark and Card Title text ("Saved to Library as …"); slides up with a snappy spring and leaves after about 2.5 to 3 seconds.
+- A capsule of regular glass at the bottom edge with a filled checkmark and Card Title text ("Saved to Library as …"); slides up with a snappy spring (fades, with Reduce Motion) and leaves after 3 seconds, 6 with an Undo. It's the same chip as the gesture hint. It clears the tab bar on iPhone and the viewer's bottom toolbar on iPhone and iPad; `toastHost` works that out itself.
 
 ### Model Stage (signature)
 On iPhone, when the info sheet sits at its medium height, the model scales down and glides up to stay whole between the chips and the sheet.
@@ -244,10 +246,37 @@ The viewer and every thumbnail are the same object at two scales: a Stage or Til
 - Two short beats, one per model opened: first "Drag to turn · Pinch to zoom" (hand.draw), then "Double-tap to fit the model" (hand.tap), the way back when a model is lost off-screen. Each is a regular-glass capsule above the bottom toolbar in Card Title type, fades on the first touch or after 6 seconds, and advances only once the model has been moved while it showed. Never shown with VoiceOver on; there the canvas offers custom actions instead (turn, tilt, front, top, isometric, fit). One line on the smallest iPhone; no tours or coach marks elsewhere.
 
 ### Errors
-- Never the system's error sentence. Say what happened and what to do, in a heading and one or two plain sentences ("File Not Found" / "It was moved, renamed or deleted since Facets last saw it."), with the next action as a button (Try Again, Remove from Recents). Alerts for failed actions name the action ("Couldn't Rename").
+- Never the system's error sentence. Say what happened and what to do, in a heading and one or two plain sentences ("File Not Found" / "It was moved, renamed or deleted, or Facets no longer has access to it."; for a folder, "The folder was moved or deleted, or Facets no longer has access to it."), with the next action as a button (Try Again, Remove from Recents). Alerts for failed actions name the action ("Couldn't Rename").
 
 ### Empty States
 - System `ContentUnavailableView` with an SF Symbol (`cube.transparent`, `clock`, `magnifyingglass`), a one-line title and a short practical description; at most one prominent action.
+
+## Shared pieces
+
+One job, one piece. Screens build from these and never re-type what they hold: every size, radius, spacing, padding and timing is a token in `Shared/Tokens.swift` (`Spacing`, `Radius`, `Size`, `Stroke`, `ChipPadding`, `CardPadding`, `Motion`), every glyph a constant in `Facets/UI/Symbols.swift`. Values tuned between the spacing steps keep names of their own (`Spacing.rowText` 3, `snug` 6, `roomy` 10). Platform differences live inside the piece, never in a screen.
+
+| Job | Use | Never |
+|---|---|---|
+| A size, radius, spacing, padding, line width | `Spacing`, `Radius`, `Size`, `Stroke`, `ChipPadding`, `CardPadding` (Tokens) | A number typed into a screen |
+| An animation or how long something stays | `Motion` tokens; `Motion.animation(_:reduceMotion:)`, `Motion.transition(_:reduceMotion:)` | `.snappy`, `.easeIn(duration:)` or `.seconds(…)` in a screen; motion that ignores Reduce Motion |
+| A glyph | `Symbol.<concept>` (Symbols) | A symbol name in a string; one concept with two glyphs |
+| A list row with a picture (library list, search, Recents, Recently Deleted) | `ThumbnailRow` | An HStack of thumbnail and text; a row's own line limits or VoiceOver grouping |
+| The picture in that row | `RowThumbnail` (inside `ThumbnailRow`) | A radius passed to `ModelThumbnail` for a row |
+| A floating card (tool panel, tip, unit card, loading panel) | `.glassCard(...)` | `glassEffect` in a rounded rect by hand |
+| A chip over the content (readout, plate picker, gesture hint, toast) | `.glassChip(ChipPadding.…)`, or `.glassChip(interactive:)` on a control whose label carries the padding | A capsule of glass by hand |
+| A card's close button | `CardCloseButton` (`.panel`, `.tip`) | A close button under 44pt to tap |
+| A sheet's Done | `.doneButton(shown:action:)` | A Done toolbar item by hand |
+| A colour as a dot | `ColorSwatch(color:size:)` | A stroked circle by hand |
+| A confirmation | `ToastCenter.show` / `warn` with `.toastHost()` (`aboveBottomToolbar:` in the iOS viewer) | A clearance worked out in a screen |
+| A failed action | `.errorAlert(...)` with a title naming the action | The system's error sentence |
+| A rename | `.renameAlert(...)` | An alert with a text field by hand |
+| A row or card action (Delete, Rename, Remove, Restore) | `RowAction` | A button with its own title, symbol or role |
+| Whole-list actions (Restore All, Delete All) | `.listActions(shown:leading:trailing:)` | A toolbar on iOS and a bar on the Mac, each by hand |
+| An error said in plain words | `FriendlyError` | `error.localizedDescription` on screen |
+| A file only in iCloud | `ICloudFile` | Parsing `.icloud` names in place |
+| Reading a model that may be in iCloud | `CoordinatedRead.model(at:)` | `ModelLoader.load` without a coordinator |
+| A short use of a picked file or bookmark | `url.withSecurityScope { }` | Unbalanced `start`/`stopAccessingSecurityScopedResource` |
+| A model's tidy name | `Format.title(fromFileName:)`, `Format.title(of:)` | Trimming extensions and underscores in a screen |
 
 ## Do's and Don'ts
 
@@ -258,7 +287,7 @@ The viewer and every thumbnail are the same object at two scales: a Stage or Til
 - **Do** let Liquid Glass carry anything that floats, and group related glass controls in one capsule or container.
 - **Do** keep thumbnails at 14pt corners in grids and 10pt in list rows.
 - **Do** swap a symbol in place to confirm an action (plus to checkmark) instead of removing the control.
-- **Do** honour Reduce Motion: camera moves and inertia snap instead of animating.
+- **Do** honour Reduce Motion: camera moves and inertia snap instead of animating, panels and toasts fade instead of sliding (`Motion.animation` and `Motion.transition`).
 
 ### Don't:
 - **Don't** introduce custom fonts or hard-coded text sizes.

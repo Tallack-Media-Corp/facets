@@ -67,10 +67,10 @@ struct PrinterBedPicker: View {
         } label: {
             HStack {
                 // Colour, not hierarchical styles: inside a button those resolve to the tint.
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Spacing.hair) {
                     Text(title).foregroundStyle(Color.primary)
                     if let note {
-                        HStack(spacing: 4) {
+                        HStack(spacing: Spacing.xs) {
                             Image(systemName: note.symbol)
                             Text(note.text)
                         }
@@ -80,7 +80,7 @@ struct PrinterBedPicker: View {
                 }
                 Spacer()
                 if let detail { Text(detail).foregroundStyle(Color.secondary).monospacedDigit() }
-                Image(systemName: "checkmark")
+                Image(systemName: Symbol.chosen)
                     .fontWeight(.semibold)
                     .foregroundStyle(.tint)
                     .opacity(settings.bedID == id ? 1 : 0)

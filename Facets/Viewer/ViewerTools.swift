@@ -18,9 +18,9 @@ enum ViewerTool: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .measure: "ruler"
-        case .layFlat: "rotate.right"
-        case .section: "square.split.1x2"
+        case .measure: Symbol.measure
+        case .layFlat: Symbol.layFlat
+        case .section: Symbol.crossSection
         }
     }
 
@@ -58,30 +58,18 @@ struct ToolPanel: View {
     @AccessibilityFocusState private var titleFocused: Bool
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: Spacing.roomy) {
             HStack(alignment: .firstTextBaseline) {
                 Label(tool.title, systemImage: tool.symbol)
                     .font(.subheadline.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityFocused($titleFocused)
                 Spacer()
-                Button("Close", systemImage: "xmark", action: close)
-                    .labelStyle(.iconOnly)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.rect)
-                    .padding(.vertical, -12)
-                    .padding(.trailing, -10)
-                    .accessibilityLabel("Close \(tool.title)")
+                CardCloseButton(label: Text("Close \(tool.title)"), action: close)
             }
             content
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(maxWidth: 440)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
-        .padding(.horizontal, 12)
+        .glassCard(padding: CardPadding.toolPanel, margin: Spacing.md)
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .onAppear { titleFocused = true }
         .onChange(of: tool) { titleFocused = true }
@@ -103,7 +91,7 @@ struct ToolPanel: View {
         if points.count == 2 {
             let delta = abs(points[1] - points[0])
             HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Spacing.hair) {
                     Text(Format.dimension(simd_distance(points[0], points[1]), units: units))
                         .font(.title2.weight(.semibold).monospacedDigit())
                     Text("X \(Format.dimension(delta.x, units: units)) · Y \(Format.dimension(delta.y, units: units)) · Z \(Format.dimension(delta.z, units: units))")
@@ -113,7 +101,7 @@ struct ToolPanel: View {
                 .accessibilityElement(children: .combine)
                 Spacer()
                 Button(action: clearPoints) {
-                    Text("Clear").frame(minHeight: 44).padding(.horizontal, 4)
+                    Text("Clear").frame(minHeight: Size.minTapTarget).padding(.horizontal, Spacing.xs)
                 }
                 .buttonStyle(.glass)
             }
@@ -137,10 +125,10 @@ struct ToolPanel: View {
     // MARK: Lay flat
 
     private var layFlat: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Spacing.roomy) {
             Group {
                 if autoState == .alreadyBest {
-                    Label("Already the best way up to print.", systemImage: "checkmark")
+                    Label("Already the best way up to print.", systemImage: Symbol.alreadyBest)
                         .foregroundStyle(.primary)
                 } else {
                     Text(voiceOver
@@ -152,25 +140,25 @@ struct ToolPanel: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentTransition(.opacity)
-            .animation(.easeInOut(duration: 0.2), value: autoState)
-            HStack(spacing: 8) {
+            .animation(Motion.crossfade, value: autoState)
+            HStack(spacing: Spacing.sm) {
                 Button(action: autoOrient) {
                     toolLabel("Auto") {
                         if autoState == .working {
                             ProgressView().controlSize(.small)
                         } else {
-                            Image(systemName: "wand.and.sparkles")
+                            Image(systemName: Symbol.autoOrient)
                         }
                     }
                 }
                 .buttonStyle(.glass)
                 .disabled(autoState == .working)
                 .accessibilityHint("Turns the model onto the face a slicer would print it on")
-                turnButton("Turn", symbol: "arrow.clockwise", axis: [0, 0, 1], hint: "A quarter turn on the bed")
-                turnButton("Tip", symbol: "arrow.down.forward", axis: [1, 0, 0], hint: "A quarter turn, front edge down")
-                turnButton("Roll", symbol: "arrow.turn.right.down", axis: [0, 1, 0], hint: "A quarter turn onto its side")
+                turnButton("Turn", symbol: Symbol.turn, axis: [0, 0, 1], hint: "A quarter turn on the bed")
+                turnButton("Tip", symbol: Symbol.tipOver, axis: [1, 0, 0], hint: "A quarter turn, front edge down")
+                turnButton("Roll", symbol: Symbol.roll, axis: [0, 1, 0], hint: "A quarter turn onto its side")
                 Button(action: resetOrientation) {
-                    toolLabel("Reset", symbol: "arrow.uturn.backward")
+                    toolLabel("Reset", symbol: Symbol.resetOrientation)
                 }
                 .buttonStyle(.glass)
                 .disabled(!isTurned)
@@ -195,8 +183,8 @@ struct ToolPanel: View {
     /// The glyphs sit in one height, so every title lines up (and Auto's doesn't
     /// jump while it works).
     private func toolLabel(_ title: LocalizedStringResource, @ViewBuilder icon: () -> some View) -> some View {
-        VStack(spacing: 2) {
-            icon().frame(height: 22)
+        VStack(spacing: Spacing.hair) {
+            icon().frame(height: Size.toolGlyphHeight)
             // One line that shrinks a little to fit ("Zurücksetzen", "Restablecer"),
             // rather than wrapping or cutting off.
             Text(title).font(.caption2.weight(.medium))
@@ -204,22 +192,22 @@ struct ToolPanel: View {
                 .minimumScaleFactor(0.7)
                 .allowsTightening(true)
         }
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .frame(maxWidth: .infinity, minHeight: Size.minTapTarget)
     }
 
     // MARK: Section
 
     private var section: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Spacing.snug) {
             Text("Cut at \(Format.dimension(sectionHeight, units: units))")
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(.secondary)
             Slider(value: $sectionFraction, in: 0...1) {
                 Text("Cut height")
             } minimumValueLabel: {
-                Image(systemName: "square.bottomhalf.filled").accessibilityHidden(true)
+                Image(systemName: Symbol.cutLow).accessibilityHidden(true)
             } maximumValueLabel: {
-                Image(systemName: "square.fill").accessibilityHidden(true)
+                Image(systemName: Symbol.cutHigh).accessibilityHidden(true)
             }
             .accessibilityValue(Format.dimension(sectionHeight, units: units))
         }

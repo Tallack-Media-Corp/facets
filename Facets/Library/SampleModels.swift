@@ -38,6 +38,6 @@ private struct SampleButton: View {
     @Environment(\.openModel) private var openModel
 
     var body: some View {
-        Button(title, systemImage: "sailboat") { openModel(file) }
+        Button(title, systemImage: Symbol.sampleModel) { openModel(file) }
     }
 }

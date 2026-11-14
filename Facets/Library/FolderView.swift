@@ -35,6 +35,7 @@ struct FolderView: View {
     @AppStorage("library.layout") private var layout: LibraryLayout = .grid
     @AppStorage("library.sort") private var sort: LibrarySort = .name
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var items: [LibraryItem] = []
     @State private var loaded = false
@@ -96,18 +97,18 @@ struct FolderView: View {
             }
             .overlay {
                 if dropTargeted {
-                    RoundedRectangle(cornerRadius: 24)
-                        .strokeBorder(.tint, style: StrokeStyle(lineWidth: 3, dash: [10, 6]))
-                        .padding(12)
+                    RoundedRectangle(cornerRadius: Radius.dropTarget)
+                        .strokeBorder(.tint, style: StrokeStyle(lineWidth: Stroke.outline, dash: Stroke.dropTargetDash))
+                        .padding(Spacing.md)
                         .allowsHitTesting(false)
                 }
             }
             // The new-user tour, a card at a time above the tab bar.
             .overlay(alignment: .bottom) {
                 FloatingTip(tip: libraryTip)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, Spacing.md)
                     .clearOfFold()
-                    .animation(.snappy, value: libraryTip?.id)
+                    .animation(Motion.animation(Motion.standard, reduceMotion: reduceMotion), value: libraryTip?.id)
             }
             .overlay {
                 if !loaded {
@@ -159,7 +160,7 @@ struct FolderView: View {
     @ViewBuilder
     private var content: some View {
         if items.isEmpty, loaded, isBrowsing {
-            ContentUnavailableView("No Models Here", systemImage: "cube.transparent", description: Text("This folder has no STL, 3MF or OBJ files. Subfolders show up here too."))
+            ContentUnavailableView("No Models Here", systemImage: Symbol.noModels, description: Text("This folder has no STL, 3MF or OBJ files. Subfolders show up here too."))
         } else if items.isEmpty, loaded {
             ScrollView {
                 if showsSectionPicker {
@@ -168,10 +169,10 @@ struct FolderView: View {
                         .padding(.top, LibrarySectionPicker.listTopMargin)
                 }
                 ContentUnavailableView {
-                    Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: "cube.transparent")
+                    Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: Symbol.noModels)
                 } description: {
                     Text(Self.emptyHint)
-                        .frame(maxWidth: 480)
+                        .frame(maxWidth: Size.emptyStateTextMaxWidth)
                 } actions: {
                     Button("Import Files") { importing = true }
                         .buttonStyle(.glassProminent)
@@ -183,7 +184,7 @@ struct FolderView: View {
                             .controlSize(.large)
                     }
                 }
-                .padding(.top, 80)
+                .padding(.top, Spacing.emptyStateTop)
             }
         } else if layout == .grid, !dynamicTypeSize.isAccessibilitySize {
             // At accessibility text sizes two columns can't hold a name; rows can.
@@ -192,9 +193,9 @@ struct FolderView: View {
                     LibrarySectionPicker()
                         .padding(.horizontal)
                         .padding(.top, LibrarySectionPicker.listTopMargin)
-                        .padding(.bottom, 8)
+                        .padding(.bottom, Spacing.sm)
                 }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 16, alignment: .top)], spacing: 20) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: Size.gridCardMin, maximum: Size.gridCardMax), spacing: Spacing.lg, alignment: .top)], spacing: Spacing.xl) {
                     ForEach(items) { item in
                         #if os(macOS)
                         macCard(item)
@@ -207,7 +208,7 @@ struct FolderView: View {
                         .contextMenu { actions(for: item) } preview: {
                             if !item.isFolder {
                                 ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0, isDownloaded: item.isDownloaded)
-                                    .frame(width: 300, height: 300)
+                                    .frame(width: Size.contextPreview, height: Size.contextPreview)
                                     // Previews render outside this view's environment.
                                     .environment(settings)
                             }
@@ -216,14 +217,13 @@ struct FolderView: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 24)
+                .padding(.bottom, Spacing.xxl)
+                .padding(.top, showsSectionPicker ? 0 : LibraryCard.outlineRoom)
                 #if os(macOS)
-                // Room above the first row for a selected card's outline, which sits
-                // 3 pt outside the picture: flush, it ran under the toolbar's edge.
-                .padding(.top, showsSectionPicker ? 0 : 12)
                 .onGeometryChange(for: Int.self) { geometry in
-                    // As the adaptive grid fits them: 150 pt minimum, 16 pt apart.
-                    max(1, Int((geometry.size.width - 32 + 16) / (150 + 16)))
+                    // As the adaptive grid fits them: the cards' minimum width, 16 pt
+                    // apart, inside 16 pt margins.
+                    max(1, Int((geometry.size.width - 2 * Spacing.lg + Spacing.lg) / (Size.gridCardMin + Spacing.lg)))
                 } action: { columnCount = $0 }
                 // A click on the background, between or below the cards, clears the
                 // selection. It sits behind the cards, filling the visible area, so
@@ -261,7 +261,7 @@ struct FolderView: View {
                     .swipeActions(edge: .trailing) {
                         if isBrowsing {
                             if !item.isFolder, !isSaved(item) {
-                                Button("Save to Library", systemImage: "plus") { save(item) }
+                                Button("Save to Library", systemImage: Symbol.saveToLibrary) { save(item) }
                                     .tint(.accentColor)
                             }
                         } else {
@@ -280,8 +280,8 @@ struct FolderView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Picker("Layout", selection: $layout) {
-                    Label("Icons", systemImage: "square.grid.2x2").tag(LibraryLayout.grid)
-                    Label("List", systemImage: "list.bullet").tag(LibraryLayout.list)
+                    Label("Icons", systemImage: Symbol.iconsLayout).tag(LibraryLayout.grid)
+                    Label("List", systemImage: Symbol.listLayout).tag(LibraryLayout.list)
                 }
                 // Nothing to sort in an empty folder.
                 if !items.isEmpty {
@@ -290,25 +290,25 @@ struct FolderView: View {
                     }
                 }
             } label: {
-                Label("View Options", systemImage: "ellipsis")
+                Label("View Options", systemImage: Symbol.viewOptions)
             }
             .toolbarMenuIndicator()
         }
         if !isBrowsing {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button("Import Files…", systemImage: "square.and.arrow.down") {
+                Button("Import Files…", systemImage: Symbol.importFiles) {
                     importing = true
                     AddModelsTip().invalidate(reason: .actionPerformed)
                 }
-                Button("New Folder", systemImage: "folder.badge.plus") {
+                Button("New Folder", systemImage: Symbol.newFolder) {
                     perform(String(localized: "Couldn't Create Folder")) {
                         let url = try library.createFolder(in: folder)
                         beginRename(LibraryItem(url: url, isFolder: true, size: nil, modified: nil, childCount: 0))
                     }
                 }
             } label: {
-                Label("Add", systemImage: "plus")
+                Label("Add", systemImage: Symbol.add)
             }
             .toolbarMenuIndicator()
         }
@@ -319,16 +319,16 @@ struct FolderView: View {
     private func actions(for item: LibraryItem) -> some View {
         if !item.isFolder {
             ShareLink(item: item.url) {
-                Label("Share", systemImage: "square.and.arrow.up")
+                Label("Share", systemImage: Symbol.share)
             }
         }
         if isBrowsing {
             if !item.isFolder {
                 if isSaved(item) {
-                    Button("Saved to Library", systemImage: "checkmark") {}
+                    Button("Saved to Library", systemImage: Symbol.saved) {}
                         .disabled(true)
                 } else {
-                    Button("Save to Library", systemImage: "plus") { save(item) }
+                    Button("Save to Library", systemImage: Symbol.saveToLibrary) { save(item) }
                 }
             }
         } else {
@@ -339,8 +339,8 @@ struct FolderView: View {
     @ViewBuilder
     private func libraryActions(for item: LibraryItem) -> some View {
         RowAction.rename { beginRename(item) }
-        Button("Duplicate", systemImage: "plus.square.on.square") { perform(String(localized: "Couldn't Duplicate")) { try await library.duplicate(item) } }
-        Button("Move…", systemImage: "folder") { moving = item }
+        Button("Duplicate", systemImage: Symbol.duplicate) { perform(String(localized: "Couldn't Duplicate")) { try await library.duplicate(item) } }
+        Button("Move…", systemImage: Symbol.move) { moving = item }
         Divider()
         RowAction.delete { requestDelete(item) }
     }
@@ -411,7 +411,7 @@ struct FolderView: View {
                 MainActor.assumeIsolated { undo() }
             }
             undoManager?.setActionName("Delete \(name)")
-            toasts.show(String(localized: "Deleted \"\(name)\"", comment: "Toast after deleting, with the item's name"), symbol: "trash.fill", actionTitle: String(localized: "Undo"), action: undo)
+            toasts.show(String(localized: "Deleted \"\(name)\"", comment: "Toast after deleting, with the item's name"), symbol: Symbol.deleted, actionTitle: String(localized: "Undo"), action: undo)
             #if os(macOS)
             selection.subtract(items.map(\.url))
             #endif
@@ -546,7 +546,7 @@ struct LibraryCard: View {
     var isSelected = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             Group {
                 if item.isFolder {
                     FolderTile()
@@ -557,33 +557,44 @@ struct LibraryCard: View {
             .aspectRatio(1, contentMode: .fit)
             .overlay {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(.tint, lineWidth: 3)
-                        .padding(-3)
+                    RoundedRectangle(cornerRadius: Radius.selectionOutline)
+                        .strokeBorder(.tint, lineWidth: Stroke.outline)
+                        .padding(-Stroke.outline)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Spacing.hair) {
                 Text(item.displayName)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     // Primary text on a tint wash: white on Filament Orange falls short
                     // of 4.5:1 at this size.
-                    .padding(.horizontal, isSelected ? 4 : 0)
-                    .background(isSelected ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 4))
-                    .padding(.horizontal, isSelected ? -4 : 0)
+                    .padding(.horizontal, isSelected ? Spacing.xs : 0)
+                    .background(isSelected ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: Radius.selectionWash))
+                    .padding(.horizontal, isSelected ? -Spacing.xs : 0)
                 Text(LibraryRow.subtitle(for: item))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, Spacing.hair)
         }
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
         .accessibilityHint(item.isFolder ? "Opens the folder" : "Opens the model")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// Room a grid leaves above its first row for a selected card's outline, which
+    /// sits 3 pt outside the picture: flush, it ran under the Mac toolbar's edge.
+    /// Only the Mac selects cards.
+    static var outlineRoom: CGFloat {
+        #if os(macOS)
+        Spacing.md
+        #else
+        0
+        #endif
     }
 }
 
@@ -592,12 +603,12 @@ struct FolderTile: View {
     @Environment(ViewerSettings.self) private var settings: ViewerSettings?
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 14)
+        RoundedRectangle(cornerRadius: Radius.tile)
             .fill(showsBackdrop ? AnyShapeStyle(Palette.tileGradient(pureBlack: settings?.pureBlack ?? false)) : AnyShapeStyle(.clear))
             .overlay {
                 // Inset in proportion, so the glyph fills a 52pt row tile and a grid tile alike.
                 GeometryReader { geometry in
-                    Image(systemName: "folder.fill")
+                    Image(systemName: Symbol.folderTile)
                         .resizable()
                         .scaledToFit()
                         .foregroundStyle(.tint.opacity(0.85))
@@ -610,32 +621,20 @@ struct FolderTile: View {
 
 struct LibraryRow: View {
     let item: LibraryItem
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Search results say which folder each is in.
+    var folder: String?
 
     var body: some View {
-        HStack(spacing: 12) {
-            RowThumbnail {
-                if item.isFolder {
-                    FolderTile(showsBackdrop: false)
-                } else {
-                    ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 10, showsBackdrop: false, isDownloaded: item.isDownloaded)
-                }
+        ThumbnailRow(title: item.displayName, location: folder) {
+            if item.isFolder {
+                FolderTile(showsBackdrop: false)
+            } else {
+                // The row rounds the corners.
+                ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0, showsBackdrop: false, isDownloaded: item.isDownloaded)
             }
-
-            // At accessibility sizes names wrap rather than truncate; that's the point
-            // of showing rows there.
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.displayName)
-                    .font(.headline)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-                Text(Self.subtitle(for: item))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-            }
+        } caption: {
+            Text(Self.subtitle(for: item))
         }
-        .accessibilityElement(children: .combine)
     }
 
     static func subtitle(for item: LibraryItem) -> String {
@@ -671,7 +670,7 @@ struct MoveSheet: View {
                     onMove(folder)
                     dismiss()
                 } label: {
-                    Label(name(of: folder), systemImage: folder == library.root ? "tray.full" : "folder")
+                    Label(name(of: folder), systemImage: folder == library.root ? Symbol.library : Symbol.folder)
                 }
                 .disabled(isCurrent || isSelf)
             }
@@ -679,7 +678,7 @@ struct MoveSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", systemImage: "xmark") { dismiss() }
+                    Button("Cancel", systemImage: Symbol.close) { dismiss() }
                 }
             }
         }

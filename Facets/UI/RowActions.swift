@@ -5,19 +5,19 @@ import SwiftUI
 /// ("Remove from Recents").
 enum RowAction {
     static func delete(_ title: LocalizedStringKey = "Delete", action: @escaping () -> Void) -> some View {
-        Button(title, systemImage: "trash", role: .destructive, action: action)
+        Button(title, systemImage: Symbol.delete, role: .destructive, action: action)
     }
 
     static func rename(action: @escaping () -> Void) -> some View {
-        Button("Rename", systemImage: "pencil", action: action)
+        Button("Rename", systemImage: Symbol.rename, action: action)
     }
 
     /// Takes something off a list without touching the file.
     static func remove(_ title: LocalizedStringKey = "Remove", action: @escaping () -> Void) -> some View {
-        Button(title, systemImage: "minus.circle", role: .destructive, action: action)
+        Button(title, systemImage: Symbol.remove, role: .destructive, action: action)
     }
 
     static func restore(action: @escaping () -> Void) -> some View {
-        Button("Restore", systemImage: "arrow.uturn.backward", action: action)
+        Button("Restore", systemImage: Symbol.restore, action: action)
     }
 }

@@ -73,8 +73,8 @@ extension BedFit.Verdict {
     /// The sign beside a verdict: a tick when it fits, a warning when it doesn't.
     var symbol: String {
         switch self {
-        case .fits, .fitsTurned: "checkmark.circle"
-        case .tooBig, .offPlate: "exclamationmark.triangle.fill"
+        case .fits, .fitsTurned: Symbol.fits
+        case .tooBig, .offPlate: Symbol.warning
         }
     }
 }

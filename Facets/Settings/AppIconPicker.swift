@@ -23,21 +23,21 @@ struct AppIconPicker: View {
     @State private var failure: String?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Spacing.md) {
             ForEach(Self.options) { option in
                 let selected = current == option.iconName
                 Button {
                     choose(option)
                 } label: {
-                    VStack(spacing: 6) {
+                    VStack(spacing: Spacing.snug) {
                         Image(option.preview)
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 64, height: 64)
+                            .frame(width: Size.iconPreview, height: Size.iconPreview)
                         Text(option.title)
                             .font(.caption)
                             .foregroundStyle(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        Image(systemName: selected ? Symbol.choiceOn : Symbol.choiceOff)
                             .foregroundStyle(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                     }
                     .frame(maxWidth: .infinity)
@@ -49,7 +49,7 @@ struct AppIconPicker: View {
                 .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Spacing.xs)
         .onAppear { current = UIApplication.shared.alternateIconName }
         .errorAlert("Couldn't Change the Icon", message: $failure)
     }

@@ -5,7 +5,7 @@ struct ModelThumbnail: View {
     let url: URL
     var size: Int64?
     var modified: Date?
-    var cornerRadius: CGFloat = 14
+    var cornerRadius = Radius.tile
     /// The studio backdrop behind the model: on for cards, off in list rows, where
     /// the row's own background is enough.
     var showsBackdrop = true
@@ -35,11 +35,11 @@ struct ModelThumbnail: View {
                         .scaledToFit()
                         .padding(geometry.size.width * (showsBackdrop ? 0.08 : 0.02))
                 } else if !isDownloaded {
-                    Image(systemName: "icloud.and.arrow.down")
+                    Image(systemName: Symbol.notDownloaded)
                         .font(.system(size: max(14, geometry.size.width * (showsBackdrop ? 0.18 : 0.4)), weight: .light))
                         .foregroundStyle(.secondary)
                 } else {
-                    Image(systemName: failed ? "exclamationmark.triangle" : "cube.transparent")
+                    Image(systemName: failed ? Symbol.failed : Symbol.thumbnailPlaceholder)
                         .font(.system(size: max(14, geometry.size.width * (showsBackdrop ? 0.28 : 0.45)), weight: .light))
                         .foregroundStyle(.tertiary)
                         .symbolEffect(.pulse, isActive: !failed)
@@ -50,7 +50,7 @@ struct ModelThumbnail: View {
             .overlay(alignment: .bottomTrailing) {
                 // Pictured, but not on this device: it downloads when opened.
                 if !isDownloaded, image != nil {
-                    Image(systemName: "icloud")
+                    Image(systemName: Symbol.inCloud)
                         .font(.system(size: max(9, geometry.size.width * (showsBackdrop ? 0.09 : 0.22)), weight: .semibold))
                         .foregroundStyle(.secondary)
                         .padding(geometry.size.width * 0.05)
