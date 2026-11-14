@@ -5,6 +5,8 @@ struct RecentlyDeletedView: View {
     @Environment(FileLibrary.self) private var library
     @Environment(ToastCenter.self) private var toasts
     @State private var items: [FileLibrary.DeletedItem] = []
+    /// Not "Nothing Deleted" before the first read is in.
+    @State private var loaded = false
     @State private var confirmingEmpty = false
     /// Deleting for good can't be undone, so even one item asks first.
     @State private var purging: FileLibrary.DeletedItem?
@@ -19,7 +21,7 @@ struct RecentlyDeletedView: View {
                                 FolderTile(showsBackdrop: false)
                             } else {
                                 // Drawn from the file where it waits; a cube while it renders.
-                                ModelThumbnail(url: item.stored, cornerRadius: 10, showsBackdrop: false, isDownloaded: FileManager.default.fileExists(atPath: item.stored.path))
+                                ModelThumbnail(url: item.stored, cornerRadius: 10, showsBackdrop: false, isDownloaded: item.isDownloaded)
                             }
                         }
                         .accessibilityHidden(true)
@@ -53,7 +55,7 @@ struct RecentlyDeletedView: View {
             }
         }
         .overlay {
-            if items.isEmpty {
+            if loaded, items.isEmpty {
                 ContentUnavailableView("Nothing Deleted", systemImage: "trash", description: Text("Models and folders you delete stay here for 30 days, so you can put them back."))
             }
         }
@@ -77,8 +79,13 @@ struct RecentlyDeletedView: View {
         } message: {
             Text("It can't be restored after this.")
         }
-        .onAppear(perform: reload)
-        .onChange(of: library.revision) { reload() }
+        // On appear and each change; a newer change cancels the older read's result.
+        .task(id: library.revision) {
+            let found = await library.recentlyDeleted()
+            guard !Task.isCancelled else { return }
+            items = found
+            loaded = true
+        }
     }
 
     private func detail(for item: FileLibrary.DeletedItem) -> String {
@@ -88,10 +95,6 @@ struct RecentlyDeletedView: View {
         let when = String(localized: "Deleted \(deleted)", comment: "When an item was deleted, as in 'Deleted yesterday'")
         let left = String(localized: "\(daysLeft) days left", comment: "Days until a deleted item is gone for good")
         return "\(when) · \(left)"
-    }
-
-    private func reload() {
-        items = library.recentlyDeleted()
     }
 
     private func restore(_ chosen: [FileLibrary.DeletedItem]) {

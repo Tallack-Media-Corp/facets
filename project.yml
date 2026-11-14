@@ -395,6 +395,7 @@ targets:
       - path: Facets/UI/Format.swift
       - path: Facets/Settings/ViewerSettings.swift
       - path: Facets/Settings/PrinterBeds.swift
+      - path: Facets/App/LibraryFingerprint.swift
       - path: Shared
     dependencies:
       - package: MeshKit

@@ -45,7 +45,7 @@ import Testing
         #expect(names == ["Bracket.stl"])
     }
 
-    @Test func deleteSkipsWhatsGoneAndKeepsUndo() throws {
+    @Test func deleteSkipsWhatsGoneAndKeepsUndo() async throws {
         let present = try file("a.stl")
         let gone = LibraryItem(url: root.appending(path: "gone.stl"), isFolder: false, size: nil, modified: nil, childCount: nil)
         let deleted = try library.delete([gone, present])
@@ -53,9 +53,32 @@ import Testing
         // No empty slot left for the one that failed.
         let slots = try FileManager.default.contentsOfDirectory(atPath: root.appending(path: ".recently-deleted").path)
         #expect(slots.count == 1)
-        #expect(library.recentlyDeleted().map(\.name) == ["a"])
+        #expect(await library.recentlyDeleted().map(\.name) == ["a"])
         try library.restore(deleted)
         #expect(listed() == ["a.stl"])
+    }
+
+    @Test func restoreSkipsWhatFailsAndKeepsGoing() async throws {
+        let deleted = try library.delete([try file("a.stl"), try file("b.stl")])
+        // A read-only slot can't give up its file, so "a" fails first.
+        let stuck = try #require(deleted.first { $0.name == "a" }).stored.deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: stuck.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stuck.path) }
+        let before = library.revision
+        let restored = try library.restore(deleted)
+        #expect(restored.map(\.lastPathComponent) == ["b.stl"])
+        #expect(library.revision > before)
+        #expect(listed() == ["b.stl"])
+        // The one that failed is still there to restore, note and all.
+        #expect(await library.recentlyDeleted().map(\.name) == ["a"])
+    }
+
+    @Test func restoreOfNothingThatWorksThrows() throws {
+        let deleted = try library.delete([try file("a.stl")])
+        let slot = deleted[0].stored.deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: slot.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: slot.path) }
+        #expect(throws: (any Error).self) { try library.restore(deleted) }
     }
 
     @Test func deleteOfNothingThatExistsThrows() {

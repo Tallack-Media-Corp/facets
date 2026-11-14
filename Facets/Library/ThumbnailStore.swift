@@ -29,6 +29,8 @@ actor ThumbnailStore {
         directory = URL.cachesDirectory.appending(path: "Thumbnails", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         memory.countLimit = 300
+        // Costs are decoded bytes (see remember).
+        memory.totalCostLimit = 80_000_000
     }
 
     /// The settings a thumbnail is drawn with, so changing the model colour redraws them.
@@ -54,16 +56,25 @@ actor ThumbnailStore {
         memory.object(forKey: key as NSString)
     }
 
-    func thumbnail(for url: URL, size: Int64?, modified: Date?, pixelSize: Int, look: Look) async -> PlatformImage? {
+    /// The picture from memory or this device's disk, off the actor so it never waits
+    /// behind a render or an iCloud read, and off the main thread as it reads a file.
+    @concurrent nonisolated func local(for url: URL, size: Int64?, modified: Date?, pixelSize: Int, look: Look) async -> PlatformImage? {
         let key = Self.key(for: url, size: size, modified: modified, pixelSize: pixelSize, look: look)
         if let image = memory.object(forKey: key as NSString) { return image }
         let file = directory.appending(path: "\(key).png")
-        if let image = PlatformImage(contentsOfFile: file.path) {
-            memory.setObject(image, forKey: key as NSString)
-            // Drawn before the shared copy existed: share it now.
-            shareIfMissing(file, for: url, modified: modified, pixelSize: pixelSize, look: look)
-            return image
-        }
+        guard let image = Self.image(at: file.path) else { return nil }
+        remember(image, forKey: key)
+        // Read now, so the local trim drops the least recently used first. (Never in
+        // the shared folder: a new date there would sync.)
+        try? FileManager.default.setAttributes([.modificationDate: Date.now], ofItemAtPath: file.path)
+        // Drawn before the shared copy existed: share it now, without waiting.
+        Task { await shareIfMissing(file, for: url, modified: modified, pixelSize: pixelSize, look: look) }
+        return image
+    }
+
+    func thumbnail(for url: URL, size: Int64?, modified: Date?, pixelSize: Int, look: Look) async -> PlatformImage? {
+        let key = Self.key(for: url, size: size, modified: modified, pixelSize: pixelSize, look: look)
+        if let image = await local(for: url, size: size, modified: modified, pixelSize: pixelSize, look: look) { return image }
         // The cell scrolled away while it waited its turn.
         guard !Task.isCancelled else { return nil }
 
@@ -101,7 +112,7 @@ actor ThumbnailStore {
         appearance.usesFileColors = look.usesFileColors
         guard let cgImage = snapshotter?.image(of: model, pixelSize: pixelSize, appearance: appearance) else { return nil }
         let image = PlatformImage.from(cgImage)
-        memory.setObject(image, forKey: key as NSString)
+        remember(image, forKey: key)
         let file = directory.appending(path: "\(key).png")
         if let destination = CGImageDestinationCreateWithURL(file as CFURL, UTType.png.identifier as CFString, 1, nil) {
             CGImageDestinationAddImage(destination, cgImage, nil)
@@ -111,13 +122,39 @@ actor ThumbnailStore {
         return image
     }
 
+    /// Reads a picture file, decoded on iOS here rather than on the main thread as it
+    /// first draws.
+    nonisolated private static func image(at path: String) -> PlatformImage? {
+        let image = PlatformImage(contentsOfFile: path)
+        #if os(iOS)
+        return image?.preparingForDisplay() ?? image
+        #else
+        return image
+        #endif
+    }
+
+    /// Caches a picture at its decoded size in bytes, so the memory limit holds.
+    nonisolated private func remember(_ image: PlatformImage, forKey key: String) {
+        #if os(iOS)
+        let pixels = Int(image.size.width * image.scale) * Int(image.size.height * image.scale)
+        #else
+        let pixels = image.representations.first.map { $0.pixelsWide * $0.pixelsHigh } ?? 0
+        #endif
+        memory.setObject(image, forKey: key as NSString, cost: pixels * 4)
+    }
+
     private static let downloads = DownloadGate(limit: 2)
+    /// Shared pictures still in iCloud fetch a few at a time: each read holds a thread.
+    private static let sharedReads = DownloadGate(limit: 2)
 
     /// Makes sure a file's data is on the device, downloading it from iCloud (or a
     /// storage provider) if need be. Runs off the actor; false if it couldn't.
     nonisolated private static func ensureLocal(_ url: URL) async -> Bool {
         let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus
-        if status == nil || status == .current || status == .downloaded { return true }
+        if status == .current || status == .downloaded { return true }
+        // No status: local, unless only an old-style placeholder (".Name.stl.icloud")
+        // is there, which the coordinated read below fetches.
+        if status == nil, FileManager.default.fileExists(atPath: url.path) { return true }
         await downloads.enter()
         defer { Task { await downloads.leave() } }
         guard !Task.isCancelled else { return false }
@@ -133,7 +170,7 @@ actor ThumbnailStore {
 
     /// The library's hidden thumbnail folder, when the library is in iCloud Drive.
     /// (Files hides dot-folders, and the library list skips them.)
-    private var sharedDirectory: URL? {
+    nonisolated private var sharedDirectory: URL? {
         guard LibraryLocation.kind == .iCloud else { return nil }
         return LibraryLocation.current.appending(path: ".thumbnails", directoryHint: .isDirectory)
     }
@@ -161,7 +198,8 @@ actor ThumbnailStore {
     /// thumbnail itself may still be in the cloud; reading it coordinated fetches it,
     /// and it's small.
     /// Tries the size asked for, then larger (scaled down cleanly), then smaller.
-    func sharedThumbnail(for url: URL, modified: Date?, pixelSize: Int, look: Look) async -> PlatformImage? {
+    /// Off the actor, like ensureLocal: a read that waits on iCloud holds up nothing else.
+    @concurrent nonisolated func sharedThumbnail(for url: URL, modified: Date?, pixelSize: Int, look: Look) async -> PlatformImage? {
         guard let shared = sharedDirectory else { return nil }
         let sizes = [pixelSize] + [512, 256, 128].filter { $0 > pixelSize } + [512, 256, 128].filter { $0 < pixelSize }
         for size in sizes {
@@ -171,14 +209,21 @@ actor ThumbnailStore {
             // Only ask for files that are there (in the cloud or not); a coordinated
             // read of a missing one would just fail, slowly.
             let placeholder = shared.appending(path: ".\(key).png.icloud")
-            guard FileManager.default.fileExists(atPath: file.path) || FileManager.default.fileExists(atPath: placeholder.path) else { continue }
+            let isHere = FileManager.default.fileExists(atPath: file.path)
+            guard isHere || FileManager.default.fileExists(atPath: placeholder.path) else { continue }
+            if !isHere { await Self.sharedReads.enter() }
+            guard !Task.isCancelled else {
+                if !isHere { await Self.sharedReads.leave() }
+                return nil
+            }
             var image: PlatformImage?
             var error: NSError?
             NSFileCoordinator().coordinate(readingItemAt: file, options: [], error: &error) { readURL in
-                image = PlatformImage(contentsOfFile: readURL.path)
+                image = Self.image(at: readURL.path)
             }
+            if !isHere { await Self.sharedReads.leave() }
             if let image {
-                memory.setObject(image, forKey: "shared-\(key)" as NSString)
+                remember(image, forKey: "shared-\(key)")
                 return image
             }
         }
@@ -208,7 +253,7 @@ actor ThumbnailStore {
         for url in (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] where !isCurrent(url.lastPathComponent) {
             try? fileManager.removeItem(at: url)
         }
-        Self.trim(directory, to: 200_000_000, coordinated: false)
+        Self.trim(directory, to: 500_000_000, coordinated: false)
         guard let shared = sharedDirectory else { return }
         for url in (try? fileManager.contentsOfDirectory(at: shared, includingPropertiesForKeys: nil)) ?? [] where !isCurrent(url.lastPathComponent) {
             // A placeholder (".name.png.icloud") stands for the file itself.
@@ -224,9 +269,9 @@ actor ThumbnailStore {
         }
         // Pictures of models since deleted, renamed or recoloured are never asked for
         // again; past a cap the oldest go, and anything still shown is redrawn.
-        // shortcut: oldest-first, not per model; remove a model's pictures on purge if
-        // redraws ever show.
-        Self.trim(shared, to: 100_000_000, coordinated: true)
+        // shortcut: oldest-first, not per model, and about 3,000 models' pictures fit;
+        // remove a model's pictures on purge if redraws ever show.
+        Self.trim(shared, to: 300_000_000, coordinated: true)
     }
 
     private static func trim(_ folder: URL, to limit: Int64, coordinated: Bool) {

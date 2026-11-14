@@ -59,10 +59,11 @@ struct ModelThumbnail: View {
             .task(id: "\(key)|\(isDownloaded)") {
                 image = nil
                 failed = false
-                var result: PlatformImage?
-                if isDownloaded {
+                // A picture already drawn here comes first, never queued behind a render.
+                var result = await ThumbnailStore.shared.local(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
+                if result == nil, isDownloaded {
                     result = await ThumbnailStore.shared.thumbnail(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
-                } else {
+                } else if result == nil {
                     result = await ThumbnailStore.shared.sharedThumbnail(for: url, modified: modified, pixelSize: pixels, look: look)
                     // No device has drawn it yet: fetch a reasonably small file once and
                     // draw it, which shares the picture with the others too. A folder

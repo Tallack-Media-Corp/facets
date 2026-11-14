@@ -67,7 +67,7 @@ struct SettingsView: View {
                         NavigationLink {
                             PrinterBedPicker()
                         } label: {
-                            LabeledContent("Printer Bed", value: settings.bed?.title ?? "None")
+                            LabeledContent("Printer Bed", value: settings.bed?.title ?? String(localized: "None"))
                         }
                     }
                 } header: {
@@ -235,7 +235,7 @@ private struct AboutView: View {
                 Label("Drag to turn the model", systemImage: "hand.draw")
                 Label("Pinch to zoom, two fingers to move", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
                 Label("Twist two fingers to spin", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
-                Label("Double tap to fit the model", systemImage: "hand.tap")
+                Label("Double-tap to fit the model", systemImage: "hand.tap")
             }
             #endif
             Section {

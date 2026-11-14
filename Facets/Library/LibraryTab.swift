@@ -34,12 +34,12 @@ struct LibraryTab: View {
             Group {
                 #if os(macOS)
                 // Browse locations are sidebar items on the Mac; no switch here.
-                FolderView(folder: library.root, title: "Library")
+                FolderView(folder: library.root, title: String(localized: "Library"))
                     .id(library.root)
                 #else
                 switch section {
                 case .library:
-                    FolderView(folder: library.root, title: "Library", showsSectionPicker: true)
+                    FolderView(folder: library.root, title: String(localized: "Library"), showsSectionPicker: true)
                         // Moving to iCloud Drive changes the folder underneath.
                         .id(library.root)
                 case .browse: BrowseView(path: $path)

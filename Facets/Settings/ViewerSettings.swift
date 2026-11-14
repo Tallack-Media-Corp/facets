@@ -38,6 +38,12 @@ enum MeasurementUnits: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var symbol: String { self == .millimetres ? "mm" : "in" }
     var title: String { self == .millimetres ? String(localized: "Millimetres") : String(localized: "Inches") }
+
+    /// The units set in Facets, or the locale's when none is; the app and Shortcuts both read this.
+    static func saved(in defaults: UserDefaults = .standard, locale: Locale = .current) -> MeasurementUnits {
+        MeasurementUnits(rawValue: defaults.string(forKey: "viewer.units") ?? "")
+            ?? (locale.measurementSystem == .us ? .inches : .millimetres)
+    }
 }
 
 /// A preset model colour, named the way filament is.
@@ -177,8 +183,7 @@ final class ViewerSettings {
         customBedWidth = defaults.object(forKey: "viewer.bed.width") as? Float ?? 256
         customBedDepth = defaults.object(forKey: "viewer.bed.depth") as? Float ?? 256
         customBedHeight = defaults.object(forKey: "viewer.bed.height") as? Float ?? 256
-        units = MeasurementUnits(rawValue: defaults.string(forKey: "viewer.units") ?? "")
-            ?? (Locale.current.measurementSystem == .us ? .inches : .millimetres)
+        units = MeasurementUnits.saved(in: defaults)
         // Earlier builds kept Pure Black only here; let Quick Look see it too.
         SharedSettings.pureBlack = pureBlack
     }

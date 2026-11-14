@@ -694,7 +694,7 @@ struct MoveSheet: View {
     }
 
     private func name(of folder: URL) -> String {
-        if folder == library.root { return "Library" }
+        if folder == library.root { return String(localized: "Library") }
         return library.relativeFolder(of: folder.appending(path: "x")) ?? folder.lastPathComponent
     }
 }

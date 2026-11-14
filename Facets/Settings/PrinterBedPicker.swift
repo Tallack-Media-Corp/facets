@@ -16,7 +16,7 @@ struct PrinterBedPicker: View {
         @Bindable var settings = settings
         Form {
             Section {
-                row(title: "None", id: nil)
+                row(title: String(localized: "None"), id: nil)
             } footer: {
                 Text(verdict == nil
                      ? "Pick your printer to see its bed under every model, and whether the model fits."

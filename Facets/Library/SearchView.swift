@@ -17,6 +17,8 @@ struct SearchView: View {
     }
 
     var body: some View {
+        // Filtered and sorted once per update; the list and its overlay both use it.
+        let results = results
         NavigationStack {
             List(results) { item in
                 OpenModelButton(file: ModelFileRef(url: item.url, isExternal: false)) {

@@ -3870,34 +3870,6 @@
         }
       }
     },
-    "Double tap to fit the model": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Zum Einpassen zweimal tippen"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toca dos veces para encuadrar el modelo"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Touchez deux fois pour cadrer le modèle"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ダブルタップでモデル全体を表示"
-          }
-        }
-      }
-    },
     "Double-click an STL, 3MF or OBJ in the Finder, or choose File › Open.": {
       "localizations": {
         "de": {

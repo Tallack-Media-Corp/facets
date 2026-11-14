@@ -48,6 +48,8 @@ final class FileLibrary {
     private(set) var revision = 0
 
     private let fileManager = FileManager.default
+    /// The bump already scheduled for outside changes (noteExternalChange).
+    @ObservationIgnored private var externalChange: Task<Void, Never>?
 
     /// Tests pass a temporary folder.
     init(root: URL = LibraryLocation.current, location: LibraryLocation.Kind = LibraryLocation.kind) {
@@ -288,6 +290,8 @@ final class FileLibrary {
         let original: URL
         let deletedAt: Date
         let isFolder: Bool
+        /// False while the slot is still only iCloud placeholders on this device.
+        var isDownloaded = true
 
         var id: URL { stored }
         var name: String { isFolder ? original.lastPathComponent : original.deletingPathExtension().lastPathComponent }
@@ -341,9 +345,12 @@ final class FileLibrary {
 
     /// Puts deleted items back where they were, or under a new name if that spot is
     /// taken now, or at the library root if their folder is gone.
+    /// One that fails is skipped and stays in Recently Deleted; it throws only when
+    /// none could be put back.
     @discardableResult
     func restore(_ items: [DeletedItem]) throws -> [URL] {
         var restored: [URL] = []
+        var firstError: Error?
         // A slot not downloaded yet holds the item's iCloud placeholder; the coordinated
         // move fetches it.
         let placeholder = { (url: URL) in url.deletingLastPathComponent().appending(path: ".\(url.lastPathComponent).icloud") }
@@ -357,16 +364,30 @@ final class FileLibrary {
             }
             if !fileManager.fileExists(atPath: folder.path) { folder = root }
             let destination = uniqueURL(for: item.original.lastPathComponent, in: folder)
-            try Self.coordinatedMove(item.stored, to: destination)
-            try? fileManager.removeItem(at: item.stored.deletingLastPathComponent())
+            do {
+                try Self.coordinatedMove(item.stored, to: destination)
+            } catch {
+                firstError = firstError ?? error
+                continue
+            }
+            // Coordinated, as purge does, so the emptied slot (its .origin note) goes in iCloud too.
+            try? Self.coordinatedWrite(item.stored.deletingLastPathComponent(), options: .forDeleting) {
+                try FileManager.default.removeItem(at: $0)
+            }
             restored.append(destination)
         }
         revision += 1
+        if restored.isEmpty, let firstError { throw firstError }
         return restored
     }
 
-    func recentlyDeleted() -> [DeletedItem] {
-        Self.deletedItems(in: trash == deviceTrash ? [trash] : [trash, deviceTrash], root: root)
+    /// Read off the main thread: each slot's note may have to come from iCloud.
+    func recentlyDeleted() async -> [DeletedItem] {
+        let folders = trash == deviceTrash ? [trash] : [trash, deviceTrash]
+        let root = root
+        return await Task.detached(priority: .userInitiated) {
+            FileLibrary.deletedItems(in: folders, root: root)
+        }.value
     }
 
     /// Reads the trash folders. On a device where a slot hasn't downloaded yet, its
@@ -392,7 +413,7 @@ final class FileLibrary {
             let stored = slot.appending(path: storedName)
             let date = (try? slot.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .now
             let isFolder = (try? stored.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-            return DeletedItem(stored: stored, original: original, deletedAt: date, isFolder: isFolder)
+            return DeletedItem(stored: stored, original: original, deletedAt: date, isFolder: isFolder, isDownloaded: fileManager.fileExists(atPath: stored.path))
         }
         .sorted { $0.deletedAt > $1.deletedAt }
     }
@@ -513,9 +534,16 @@ final class FileLibrary {
         return destination
     }
 
-    /// Something outside the app changed the folder (Files, Finder, a drop).
+    /// Something outside the app changed the folder (Files, Finder, a drop). A copy or
+    /// sync fires many of these, so open folders relist at most once per 300 ms, and
+    /// still every 300 ms through a long sync.
     func noteExternalChange() {
-        revision += 1
+        guard externalChange == nil else { return }
+        externalChange = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            self?.externalChange = nil
+            self?.revision += 1
+        }
     }
 
     /// "Name.stl", then "Name 2.stl", "Name 3.stl"…

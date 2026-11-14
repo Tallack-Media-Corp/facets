@@ -73,25 +73,70 @@ enum LibraryIndex {
 enum SpotlightIndexer {
     static let domain = "library"
 
-    /// Replaces the index with what's in the library now. Cheap enough to run on
-    /// launch and whenever the app goes to the background.
+    /// Brings the index up to date with the library. Run on launch, whenever the app
+    /// goes to the background and per Mac window, so it does nothing when nothing
+    /// changed since this launch indexed. Once per launch regardless: the system can
+    /// wipe the index without telling us.
     static func reindex() {
         Task.detached(priority: .utility) {
-            let items = LibraryIndex.models().map { url -> CSSearchableItem in
+            let models = LibraryIndex.models().map { url in
+                (url: url, modified: try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+            }
+            let defaults = UserDefaults.standard
+            let fingerprint = LibraryFingerprint.of(models, language: Bundle.main.preferredLocalizations.first ?? "")
+            // Done already, or another call (launch and first window) is on it.
+            guard await fingerprints.claim(fingerprint) else { return }
+            let items = models.map { url, modified -> CSSearchableItem in
                 let type = UTType(filenameExtension: url.pathExtension) ?? .data
                 let attributes = CSSearchableItemAttributeSet(contentType: type)
                 attributes.title = Format.title(fromFileName: url.deletingPathExtension().lastPathComponent)
                 let format = url.pathExtension.uppercased()
                 attributes.contentDescription = LibraryIndex.folderName(of: url).map { String(localized: "\(format) model in \($0)", comment: "Spotlight: a model's format and folder, as in 'STL model in Brackets'") } ?? String(localized: "\(format) model", comment: "Spotlight: a model's format, as in 'STL model'")
                 attributes.contentURL = url
-                attributes.contentModificationDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                attributes.contentModificationDate = modified
                 return CSSearchableItem(uniqueIdentifier: LibraryIndex.id(for: url), domainIdentifier: domain, attributeSet: attributes)
             }
+            let ids = items.map(\.uniqueIdentifier)
             let index = CSSearchableIndex.default()
-            try? await index.deleteSearchableItems(withDomainIdentifiers: [domain])
-            try? await index.indexSearchableItems(items)
+            // Indexed before what's gone is removed, so a suspension midway never leaves
+            // the index empty. Without a list from last time (an older build), clear first.
+            let previous = defaults.stringArray(forKey: idsKey)
+            let gone = Set(previous ?? []).subtracting(ids)
+            do {
+                if previous == nil { try await index.deleteSearchableItems(withDomainIdentifiers: [domain]) }
+                try await index.indexSearchableItems(items)
+                if !gone.isEmpty { try await index.deleteSearchableItems(withIdentifiers: Array(gone)) }
+            } catch {
+                await fingerprints.finish(fingerprint, succeeded: false) // The next call tries again.
+                return
+            }
+            // shortcut: the ids sit in UserDefaults (tens of KB at a few thousand models);
+            // move them to a file if libraries grow far beyond that.
+            defaults.set(ids, forKey: idsKey)
+            await fingerprints.finish(fingerprint, succeeded: true)
             // Siri phrases that name a model ("Open Benchy in Facets") need the names.
             FacetsShortcuts.updateAppShortcutParameters()
+        }
+    }
+
+    private static let idsKey = "spotlight.ids"
+    private static let fingerprints = Fingerprints()
+
+    /// What this launch has indexed, and what a call is indexing now. In memory only.
+    private actor Fingerprints {
+        private var done: String?
+        private var running: String?
+
+        /// True when this library still needs indexing and no other call has it.
+        func claim(_ fingerprint: String) -> Bool {
+            guard fingerprint != done, fingerprint != running else { return false }
+            running = fingerprint
+            return true
+        }
+
+        func finish(_ fingerprint: String, succeeded: Bool) {
+            if running == fingerprint { running = nil }
+            if succeeded { done = fingerprint }
         }
     }
 
@@ -190,7 +235,7 @@ struct GetModelDimensionsIntent: AppIntent {
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         let url = model.url
         let loaded = try await Task.detached(priority: .userInitiated) { try LibraryIndex.load(url) }.value
-        let units = MeasurementUnits(rawValue: UserDefaults.standard.string(forKey: "viewer.units") ?? "") ?? .millimetres
+        let units = MeasurementUnits.saved()
         // A multi-plate project is laid out across several plates; measure the one
         // the viewer opens on, not the whole layout.
         let plate = loaded.plates.first?.id
