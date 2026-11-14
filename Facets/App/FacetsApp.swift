@@ -75,6 +75,16 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         MainActor.assumeIsolated { MacOpener.shared.open(urls) }
     }
+
+    /// A library model picked in Spotlight. Taken here like a Finder open, since no
+    /// window group makes a window for it any more.
+    func application(_ application: NSApplication, continue userActivity: NSUserActivity,
+                     restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
+        guard userActivity.activityType == CSSearchableItemActionType,
+              let url = SpotlightIndexer.url(for: userActivity) else { return false }
+        MainActor.assumeIsolated { MacOpener.shared.open([url]) }
+        return true
+    }
 }
 
 /// Puts its window in front once it's on screen, and again just after, so a model
@@ -267,12 +277,14 @@ private struct SceneRoot: View {
             // An open window takes the file rather than the app making a new one
             // (on the Mac, the model then gets a window of its own).
             .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
-            // A library model picked from a Spotlight search.
+            #if os(iOS)
+            // A library model picked from a Spotlight search. (On the Mac, MacAppDelegate.)
             .onContinueUserActivity(CSSearchableItemActionType) { activity in
                 if let url = SpotlightIndexer.url(for: activity) {
                     router.presented = ModelFileRef(url: url, isExternal: false)
                 }
             }
+            #endif
             // A model a Shortcut asked to open: the window in front takes it.
             .onChange(of: pending.file) { claimPendingOpen() }
             .onChange(of: scenePhase) { _, phase in
