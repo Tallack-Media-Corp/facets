@@ -43,6 +43,22 @@ enum LibraryLocation {
         }.value
     }
 
+    /// The path below the library folder, for a URL inside it; nil outside it, and in
+    /// its Recently Deleted unless `includingDeleted` (thumbnails draw those rows too).
+    /// Symlinks resolved, so "/var/…" and "/private/var/…" agree.
+    static func relativePath(of url: URL, in root: URL = current, includingDeleted: Bool = false) -> String? {
+        let base = root.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        guard path.hasPrefix(base) else { return nil }
+        let relative = String(path.dropFirst(base.count))
+        return !includingDeleted && relative.hasPrefix(".recently-deleted/") ? nil : relative
+    }
+
+    /// In the library (and, unless `includingDeleted`, not in its Recently Deleted).
+    static func contains(_ url: URL, in root: URL = current, includingDeleted: Bool = false) -> Bool {
+        relativePath(of: url, in: root, includingDeleted: includingDeleted) != nil
+    }
+
     static func use(_ root: URL, kind: Kind) {
         state.withLock { $0 = (root, kind) }
         if kind == .iCloud {

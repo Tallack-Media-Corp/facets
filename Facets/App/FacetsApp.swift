@@ -143,15 +143,14 @@ final class MacOpener {
 
     private func drain() {
         guard let openWindow, !waiting.isEmpty else { return }
-        let root = LibraryLocation.current.standardizedFileURL.resolvingSymlinksInPath().path + "/"
         // Opening a window can bring up another that calls back in here, so take the
         // files first or they open twice.
         let urls = waiting
         waiting.removeAll()
         let launching = !windowSeen
         for url in urls {
-            let inLibrary = url.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root)
-            openWindow(value: ModelFileRef(url: url, isExternal: !inLibrary))
+            // No FileLibrary here: files can arrive before any window has one.
+            openWindow(value: ModelFileRef(url: url))
         }
         // At launch the library comes too; once running, only if the setting asks.
         if libraryWindows == 0, launching || UserDefaults.standard.bool(forKey: ViewerSettings.showsLibraryOnOpenKey) {
@@ -182,12 +181,12 @@ private struct OpenCommands: Commands {
                 panel.allowsMultipleSelection = true
                 guard panel.runModal() == .OK else { return }
                 for url in panel.urls {
-                    openWindow(value: ModelFileRef(url: url, isExternal: !library.contains(url)))
+                    openWindow(value: ModelFileRef(url: url, libraryRoot: library.root))
                 }
             }
             .keyboardShortcut("o")
             Button("Add Location…") {
-                guard let url = LocationPanel.choose(), let location = try? locations.add(url) else { return }
+                guard let location = LocationPanel.addLocation(to: locations) else { return }
                 router?.tab = .location(location.id)
             }
             .keyboardShortcut("o", modifiers: [.command, .shift])
@@ -234,11 +233,7 @@ private struct ModelWindow: View {
         .environment(toasts)
         // "Find in Files…" and "Open Another File…" ask the router for a file; here
         // that's another window.
-        .onChange(of: router.presented) { _, next in
-            guard let next else { return }
-            openWindow(value: next)
-            router.presented = nil
-        }
+        .opensPresentedModelsInWindows(router)
     }
 }
 #endif
@@ -319,10 +314,10 @@ private struct SceneRoot: View {
         }
         switch env["FACETS_TAB"] {
         case "browse":
-            UserDefaults.standard.set("Browse", forKey: "library.section")
+            UserDefaults.standard.set(LibraryTab.Section.browse.rawValue, forKey: LibraryTab.sectionKey)
             router.tab = .library
         case "library":
-            UserDefaults.standard.set("Library", forKey: "library.section")
+            UserDefaults.standard.set(LibraryTab.Section.library.rawValue, forKey: LibraryTab.sectionKey)
             router.tab = .library
         case "recents": router.tab = .recents
         case "settings": router.tab = .settings

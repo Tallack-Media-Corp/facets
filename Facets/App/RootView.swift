@@ -4,9 +4,6 @@ struct RootView: View {
     @Environment(Router.self) private var router
     @Environment(LocationsStore.self) private var locations
     @Environment(\.horizontalSizeClass) private var sizeClass
-    #if os(macOS)
-    @Environment(\.openWindow) private var openWindow
-    #endif
 
     var body: some View {
         @Bindable var router = router
@@ -30,7 +27,7 @@ struct RootView: View {
                         LocationTab(location: location)
                     }
                     .contextMenu {
-                        Button("Remove from Sidebar", systemImage: "minus.circle", role: .destructive) {
+                        RowAction.remove("Remove from Sidebar") {
                             if router.tab == .location(location.id) { router.tab = .library }
                             locations.remove(location)
                         }
@@ -64,13 +61,7 @@ struct RootView: View {
         }
         .toastHost(clearance: 24)
         // On the Mac a model from Finder or another app opens in a window of its own.
-        // Initial too: a file that launched the app arrives before this window is
-        // watching, and would otherwise sit unopened.
-        .onChange(of: router.presented, initial: true) { _, file in
-            guard let file else { return }
-            openWindow(value: file)
-            router.presented = nil
-        }
+        .opensPresentedModelsInWindows(router)
         #endif
     }
 }

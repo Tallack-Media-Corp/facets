@@ -193,7 +193,7 @@ struct ModelInfoSheet: View {
 
     private var printerName: String {
         guard let printer, printer.id != PrinterBed.customID else { return String(localized: "a Bambu Lab printer", comment: "In 'Estimated from the model's shape for a Bambu Lab printer'") }
-        return String(localized: "the \(printer.title)", comment: "A printer named in a fit message, as in 'Fits the Bambu Lab A1 as oriented'")
+        return printer.sentenceName
     }
 
     /// The object's colour as drawn: its file colour, or the model colour.

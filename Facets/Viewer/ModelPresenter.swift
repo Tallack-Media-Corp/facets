@@ -40,6 +40,32 @@ private struct ModelPresenter: ViewModifier {
     }
 }
 
+#if os(macOS)
+extension View {
+    /// A model a window's router is asked to present (a Finder open, Spotlight, a
+    /// Shortcut, Open Another File…) opens in a window of its own. Initial too: a
+    /// file that launched the app arrives before the window is watching, and would
+    /// otherwise sit unopened.
+    func opensPresentedModelsInWindows(_ router: Router) -> some View {
+        modifier(WindowPresenter(router: router))
+    }
+}
+
+private struct WindowPresenter: ViewModifier {
+    let router: Router
+    @Environment(\.openWindow) private var openWindow
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: router.presented, initial: true) { _, file in
+                guard let file else { return }
+                openWindow(value: file)
+                router.presented = nil
+            }
+    }
+}
+#endif
+
 /// A row or card that opens a model. Reads `openModel` where it sits, so it works
 /// inside the view that applies `presentsModels()`.
 struct OpenModelButton<Label: View>: View {

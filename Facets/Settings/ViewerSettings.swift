@@ -38,10 +38,15 @@ enum MeasurementUnits: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var symbol: String { self == .millimetres ? "mm" : "in" }
     var title: String { self == .millimetres ? String(localized: "Millimetres") : String(localized: "Inches") }
+    /// Millimetres in one of these units.
+    var mmPerUnit: Double { self == .inches ? 25.4 : 1 }
+
+    /// Where the choice is kept.
+    static let defaultsKey = "viewer.units"
 
     /// The units set in Facets, or the locale's when none is; the app and Shortcuts both read this.
     static func saved(in defaults: UserDefaults = .standard, locale: Locale = .current) -> MeasurementUnits {
-        MeasurementUnits(rawValue: defaults.string(forKey: "viewer.units") ?? "")
+        MeasurementUnits(rawValue: defaults.string(forKey: defaultsKey) ?? "")
             ?? (locale.measurementSystem == .us ? .inches : .millimetres)
     }
 }
@@ -122,7 +127,7 @@ final class ViewerSettings {
     var fitBed: PrinterBed? { checksFit ? bed : nil }
 
     var units: MeasurementUnits {
-        didSet { defaults.set(units.rawValue, forKey: "viewer.units") }
+        didSet { defaults.set(units.rawValue, forKey: MeasurementUnits.defaultsKey) }
     }
 
     /// The printer bed drawn in the viewer: a preset id, "custom", or nil for none.

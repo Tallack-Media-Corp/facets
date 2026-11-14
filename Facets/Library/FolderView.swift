@@ -49,8 +49,10 @@ struct FolderView: View {
     /// Bumped per reload, so a slow read finishing late can't replace a newer one.
     @State private var loadGeneration = 0
     @State private var dropTargeted = false
-    /// Browsed models copied to the library this visit, on top of `hasCopy`.
+    /// Browsed models copied to the library this visit, on top of `copies`.
     @State private var saved: Set<URL> = []
+    /// Browsed models the library already has a copy of, found with the listing.
+    @State private var copies: Set<URL> = []
 
     /// The new-user tour of the library root (see FacetsTips).
     @State private var libraryTips = TipGroup(.ordered) {
@@ -124,12 +126,8 @@ struct FolderView: View {
                     watcher = FolderWatcher(url: folder) { [library] in library.noteExternalChange() }
                 }
             }
-            .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-                TextField("Name", text: $renameText)
-                Button("Cancel", role: .cancel) {}
-                Button("Rename") {
-                    if let item = renaming { perform(String(localized: "Couldn't Rename")) { try library.rename(item, to: renameText) } }
-                }
+            .renameAlert("Rename", item: $renaming, text: $renameText) { item in
+                perform(String(localized: "Couldn't Rename")) { try library.rename(item, to: renameText) }
             }
             .confirmationDialog(
                 deleteTitle,
@@ -147,11 +145,7 @@ struct FolderView: View {
                     perform(String(localized: "Couldn't Move")) { try library.move([item], to: destination) }
                 }
             }
-            .alert(failure?.title ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(failure?.message ?? "")
-            }
+            .errorAlert($failure)
     }
 
     private var keyedContent: some View {
@@ -271,8 +265,8 @@ struct FolderView: View {
                                     .tint(.accentColor)
                             }
                         } else {
-                            Button("Delete", systemImage: "trash", role: .destructive) { requestDelete(item) }
-                            Button("Rename", systemImage: "pencil") { beginRename(item) }
+                            RowAction.delete { requestDelete(item) }
+                            RowAction.rename { beginRename(item) }
                         }
                     }
                 }
@@ -344,11 +338,11 @@ struct FolderView: View {
 
     @ViewBuilder
     private func libraryActions(for item: LibraryItem) -> some View {
-        Button("Rename", systemImage: "pencil") { beginRename(item) }
+        RowAction.rename { beginRename(item) }
         Button("Duplicate", systemImage: "plus.square.on.square") { perform(String(localized: "Couldn't Duplicate")) { try await library.duplicate(item) } }
         Button("Move…", systemImage: "folder") { moving = item }
         Divider()
-        Button("Delete", systemImage: "trash", role: .destructive) { requestDelete(item) }
+        RowAction.delete { requestDelete(item) }
     }
 
     private var deleteTitle: String {
@@ -374,14 +368,14 @@ struct FolderView: View {
     }
 
     private func isSaved(_ item: LibraryItem) -> Bool {
-        saved.contains(item.url) || library.hasCopy(of: item.url, size: item.size)
+        saved.contains(item.url) || copies.contains(item.url)
     }
 
     private func save(_ item: LibraryItem) {
         perform(String(localized: "Couldn't Save to Library")) {
-            guard let copy = try await library.importFiles([item.url], into: library.root).first else { return }
+            guard let name = try await library.saveCopy(of: item.url) else { return }
             saved.insert(item.url)
-            toasts.show(String(localized: "Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))"))
+            toasts.show(String(localized: "Saved to Library as \(name)"))
         }
     }
 
@@ -410,7 +404,7 @@ struct FolderView: View {
                 do {
                     try library.restore(deleted)
                 } catch {
-                    toasts.show(String(localized: "Couldn't put \(name) back. It's still in Settings › Recently Deleted."), symbol: "exclamationmark.triangle.fill")
+                    toasts.warn(String(localized: "Couldn't put \(name) back. It's still in Settings › Recently Deleted."))
                 }
             }
             undoManager?.registerUndo(withTarget: library) { _ in
@@ -441,12 +435,16 @@ struct FolderView: View {
     private func load() async {
         loadGeneration += 1
         let generation = loadGeneration
-        let folder = folder, sort = sort, root = library.root
-        let listed = await Task.detached(priority: .userInitiated) {
-            FileLibrary.scan(folder, sort: sort, root: root)
+        let folder = folder, sort = sort, root = library.root, isBrowsing = isBrowsing
+        let (listed, found) = await Task.detached(priority: .userInitiated) {
+            let listed = FileLibrary.scan(folder, sort: sort, root: root)
+            // Browsing: which models the library already has, so their rows say so.
+            let found = isBrowsing ? Set(listed.filter { !$0.isFolder && FileLibrary.hasCopy(of: $0.url, size: $0.size, root: root) }.map(\.url)) : []
+            return (listed, found)
         }.value
         guard generation == loadGeneration else { return }
         items = listed
+        copies = found
         loaded = true
         guard listed.contains(where: \.isFolder) else { return }
         Task {
@@ -507,13 +505,13 @@ struct FolderView: View {
             switch (added, missed) {
             case (0, _) where importError != nil:
                 // The files were fine; copying them failed (no space, iCloud).
-                toasts.show(total == 1 ? String(localized: "Couldn't add that file. \(FriendlyError(file: importError!).message)") : String(localized: "Couldn't add those files. \(FriendlyError(file: importError!).message)"), symbol: "exclamationmark.triangle.fill")
+                toasts.warn(total == 1 ? String(localized: "Couldn't add that file. \(FriendlyError(file: importError!).message)") : String(localized: "Couldn't add those files. \(FriendlyError(file: importError!).message)"))
             case (0, _):
-                toasts.show(total == 1 ? String(localized: "Couldn't add that file. Only STL, 3MF and OBJ files can go in the library.") : String(localized: "Couldn't add those files. Only STL, 3MF and OBJ files can go in the library."), symbol: "exclamationmark.triangle.fill")
+                toasts.warn(total == 1 ? String(localized: "Couldn't add that file. Only STL, 3MF and OBJ files can go in the library.") : String(localized: "Couldn't add those files. Only STL, 3MF and OBJ files can go in the library."))
             case (_, 0):
                 toasts.show(String(localized: "Added \(added) models"))
             default:
-                toasts.show(String(localized: "Added \(added) of \(total). The others aren't STL, 3MF or OBJ files."), symbol: "exclamationmark.triangle.fill")
+                toasts.warn(String(localized: "Added \(added) of \(total). The others aren't STL, 3MF or OBJ files."))
             }
         }
         return true
@@ -686,7 +684,7 @@ struct MoveSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .overlay { if folders == nil { ProgressView() } }
+        .overlay { if folders == nil { ProgressView().accessibilityLabel("Loading folder") } }
         .task {
             let root = library.root
             folders = await Task.detached(priority: .userInitiated) { FileLibrary.allFolders(in: root) }.value
@@ -750,7 +748,7 @@ extension FolderView {
             }
             if !isBrowsing {
                 Divider()
-                Button("Delete \(chosen.count) Items", systemImage: "trash", role: .destructive) { requestDelete(chosen) }
+                RowAction.delete("Delete \(chosen.count) Items") { requestDelete(chosen) }
             }
         }
     }

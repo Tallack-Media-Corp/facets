@@ -12,6 +12,12 @@ struct PrinterBed: Identifiable, Hashable {
     let height: Float
 
     var title: String { id == Self.customID ? String(localized: "Custom Bed") : "\(make) \(name)" }
+    /// The printer as a sentence names it: "Fits the Bambu Lab A1 as oriented".
+    var sentenceName: String {
+        id == Self.customID
+            ? String(localized: "your custom bed", comment: "Printer named in a fit message, as in 'Fits your custom bed as oriented'")
+            : String(localized: "the \(title)", comment: "A printer named in a fit message, as in 'Fits the Bambu Lab A1 as oriented'")
+    }
 
     /// Bambu Lab sizes, heights included, are the `printable_area` and
     /// `printable_height` those printers write into their own project files. The others
@@ -59,6 +65,16 @@ extension PrinterBed {
         case "creality-k1", "creality-k2plus", "voron-24-350", "prusa-coreone", "prusa-xl": .coreXY
         case "creality-ender3v3", "elegoo-n4pro", "prusa-mk4s", "prusa-mini": .bedSlinger
         default: .bambuCoreXY
+        }
+    }
+}
+
+extension BedFit.Verdict {
+    /// The sign beside a verdict: a tick when it fits, a warning when it doesn't.
+    var symbol: String {
+        switch self {
+        case .fits, .fitsTurned: "checkmark.circle"
+        case .tooBig, .offPlate: "exclamationmark.triangle.fill"
         }
     }
 }

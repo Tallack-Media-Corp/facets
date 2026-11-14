@@ -392,6 +392,10 @@ targets:
       - path: FacetsTests
       - path: Facets/Library/FileLibrary.swift
       - path: Facets/Library/LibraryLocation.swift
+      - path: Facets/Library/ICloudFile.swift
+      - path: Facets/Library/CoordinatedRead.swift
+      - path: Facets/Library/ThumbnailStore.swift
+      - path: Facets/UI/Platform.swift
       - path: Facets/UI/Format.swift
       - path: Facets/Settings/ViewerSettings.swift
       - path: Facets/Settings/PrinterBeds.swift

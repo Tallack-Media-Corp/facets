@@ -39,18 +39,8 @@ struct BrowseView: View {
             }
         }
         .navigationTitle("Browse")
-        .alert("Rename Location", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-            TextField("Name", text: $renameText)
-            Button("Cancel", role: .cancel) {}
-            Button("Rename") {
-                if let location = renaming { locations.rename(location, to: renameText) }
-            }
-        }
-        .alert("Couldn't Open That", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
-        }
+        .renameAlert("Rename Location", item: $renaming, text: $renameText) { locations.rename($0, to: renameText) }
+        .errorAlert("Couldn't Open That", message: $errorMessage)
     }
 
     private func handle(_ result: Result<URL, Error>) {
@@ -65,9 +55,7 @@ struct BrowseView: View {
     /// Goes by what was picked, not which button picked it: a folder becomes a
     /// location, a model opens.
     private func picked(_ url: URL) {
-        let scoped = url.startAccessingSecurityScopedResource()
-        let isFolder = LocationsStore.isFolder(url) || url.hasDirectoryPath
-        if scoped { url.stopAccessingSecurityScopedResource() }
+        let isFolder = url.withSecurityScope { LocationsStore.isFolder(url) || url.hasDirectoryPath }
         guard isFolder else {
             openModel(ModelFileRef(url: url, isExternal: true))
             return
@@ -110,14 +98,14 @@ struct BrowseView: View {
             }
         }
         .swipeActions {
-            Button("Remove", systemImage: "minus.circle", role: .destructive) { locations.remove(location) }
+            RowAction.remove { locations.remove(location) }
         }
         .contextMenu {
-            Button("Rename", systemImage: "pencil") {
+            RowAction.rename {
                 renameText = location.name
                 renaming = location
             }
-            Button("Remove from Browse", systemImage: "minus.circle", role: .destructive) { locations.remove(location) }
+            RowAction.remove("Remove from Browse") { locations.remove(location) }
         }
     }
 }

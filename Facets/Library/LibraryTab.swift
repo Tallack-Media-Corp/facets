@@ -24,10 +24,13 @@ struct LibraryTab: View {
         var title: String { self == .library ? String(localized: "My Models") : String(localized: "Browse") }
     }
 
+    /// Where the Library | Browse choice is kept.
+    static let sectionKey = "library.section"
+
     @Environment(FileLibrary.self) private var library
     @Namespace private var zoom
     @State private var path: [LibraryRoute] = []
-    @AppStorage("library.section") private var section: Section = .library
+    @AppStorage(LibraryTab.sectionKey) private var section: Section = .library
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -92,7 +95,7 @@ struct LibrarySectionPicker: View {
     /// iPad).
     static let listTopMargin: CGFloat = 8.5
 
-    @AppStorage("library.section") private var section: LibraryTab.Section = .library
+    @AppStorage(LibraryTab.sectionKey) private var section: LibraryTab.Section = .library
 
     var body: some View {
         Picker("Section", selection: $section) {

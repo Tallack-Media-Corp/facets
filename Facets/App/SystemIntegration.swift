@@ -22,8 +22,7 @@ enum LibraryIndex {
                 enumerator.skipDescendants()
                 continue
             }
-            if name.hasPrefix("."), name.hasSuffix(".icloud") {
-                let real = url.deletingLastPathComponent().appending(path: String(name.dropFirst().dropLast(".icloud".count)))
+            if let real = ICloudFile.realURL(ofPlaceholder: url) {
                 if ModelLoader.isSupported(real) { result.append(real.standardizedFileURL) }
             } else if !name.hasPrefix("."), ModelLoader.isSupported(url) {
                 result.append(url.standardizedFileURL)
@@ -32,27 +31,8 @@ enum LibraryIndex {
         return result
     }
 
-    /// There, or only in iCloud.
-    static func exists(_ url: URL) -> Bool {
-        FileManager.default.fileExists(atPath: url.path)
-            || FileManager.default.fileExists(atPath: url.deletingLastPathComponent().appending(path: ".\(url.lastPathComponent).icloud").path)
-    }
-
-    /// Reads a model through a file coordinator, which downloads one only in iCloud.
-    static func load(_ url: URL) throws -> Model3D {
-        var coordinatorError: NSError?
-        var result: Result<Model3D, Error> = .failure(ModelError.emptyFile)
-        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinatorError) { readURL in
-            result = Result { try ModelLoader.load(readURL) }
-        }
-        if let coordinatorError { throw coordinatorError }
-        return try result.get()
-    }
-
     static func id(for url: URL) -> String {
-        let base = root.resolvingSymlinksInPath().path + "/"
-        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
-        return path.hasPrefix(base) ? String(path.dropFirst(base.count)) : url.lastPathComponent
+        LibraryLocation.relativePath(of: url, in: root) ?? url.lastPathComponent
     }
 
     static func url(for id: String) -> URL {
@@ -89,7 +69,7 @@ enum SpotlightIndexer {
             let items = models.map { url, modified -> CSSearchableItem in
                 let type = UTType(filenameExtension: url.pathExtension) ?? .data
                 let attributes = CSSearchableItemAttributeSet(contentType: type)
-                attributes.title = Format.title(fromFileName: url.deletingPathExtension().lastPathComponent)
+                attributes.title = Format.title(of: url)
                 let format = url.pathExtension.uppercased()
                 attributes.contentDescription = LibraryIndex.folderName(of: url).map { String(localized: "\(format) model in \($0)", comment: "Spotlight: a model's format and folder, as in 'STL model in Brackets'") } ?? String(localized: "\(format) model", comment: "Spotlight: a model's format, as in 'STL model'")
                 attributes.contentURL = url
@@ -144,7 +124,7 @@ enum SpotlightIndexer {
     static func url(for activity: NSUserActivity) -> URL? {
         guard let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String else { return nil }
         let url = LibraryIndex.url(for: id)
-        return LibraryIndex.exists(url) ? url : nil
+        return ICloudFile.existsHereOrInCloud(url) ? url : nil
     }
 }
 
@@ -162,7 +142,7 @@ struct ModelEntity: AppEntity {
 
     init(url: URL) {
         id = LibraryIndex.id(for: url)
-        name = Format.title(fromFileName: url.deletingPathExtension().lastPathComponent)
+        name = Format.title(of: url)
         folder = LibraryIndex.folderName(of: url)
     }
 
@@ -181,7 +161,7 @@ struct ModelEntityQuery: EntityStringQuery {
     func entities(for identifiers: [String]) async throws -> [ModelEntity] {
         identifiers.compactMap { id in
             let url = LibraryIndex.url(for: id)
-            return LibraryIndex.exists(url) ? ModelEntity(url: url) : nil
+            return ICloudFile.existsHereOrInCloud(url) ? ModelEntity(url: url) : nil
         }
     }
 
@@ -234,7 +214,7 @@ struct GetModelDimensionsIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         let url = model.url
-        let loaded = try await Task.detached(priority: .userInitiated) { try LibraryIndex.load(url) }.value
+        let loaded = try await Task.detached(priority: .userInitiated) { try CoordinatedRead.model(at: url) }.value
         let units = MeasurementUnits.saved()
         // A multi-plate project is laid out across several plates; measure the one
         // the viewer opens on, not the whole layout.

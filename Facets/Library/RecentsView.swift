@@ -18,10 +18,10 @@ struct RecentsView: View {
                     }
                     .buttonStyle(.plain)
                     .swipeActions {
-                        Button("Remove", systemImage: "minus.circle", role: .destructive) { recents.remove(entry) }
+                        RowAction.remove { recents.remove(entry) }
                     }
                     .contextMenu {
-                        Button("Remove from Recents", systemImage: "minus.circle", role: .destructive) { recents.remove(entry) }
+                        RowAction.remove("Remove from Recents") { recents.remove(entry) }
                     }
                 }
             }
@@ -46,7 +46,7 @@ struct RecentsView: View {
             } message: {
                 Text("The files themselves aren't touched.")
             }
-            .alert("File Not Found", isPresented: Binding(get: { missing != nil }, set: { if !$0 { missing = nil } })) {
+            .alert("File Not Found", isPresented: $missing.isPresent) {
                 Button("Remove from Recents", role: .destructive) {
                     if let missing { recents.remove(missing) }
                 }
@@ -62,7 +62,7 @@ struct RecentsView: View {
             missing = entry
             return
         }
-        router.presented = ModelFileRef(url: url, isExternal: !library.contains(url))
+        router.presented = ModelFileRef(url: url, libraryRoot: library.root)
     }
 }
 

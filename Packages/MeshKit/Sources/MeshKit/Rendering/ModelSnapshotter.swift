@@ -32,34 +32,21 @@ public final class ModelSnapshotter {
         if let pitch { camera.pitch = pitch }
         camera.fitTightly(renderer.visibleParts, aspect: 1, fill: fill)
 
-        let msaa = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: RenderContext.colorFormat, width: size, height: size, mipmapped: false)
-        msaa.textureType = .type2DMultisample
-        msaa.sampleCount = RenderContext.sampleCount
-        msaa.usage = .renderTarget
-        msaa.storageMode = .private
-
         let resolve = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: RenderContext.colorFormat, width: size, height: size, mipmapped: false)
         resolve.usage = [.renderTarget, .shaderRead]
         resolve.storageMode = .shared
 
-        let depth = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: RenderContext.depthFormat, width: size, height: size, mipmapped: false)
-        depth.textureType = .type2DMultisample
-        depth.sampleCount = RenderContext.sampleCount
-        depth.usage = .renderTarget
-        depth.storageMode = .private
-
-        guard let colorTexture = context.device.makeTexture(descriptor: msaa),
+        guard let targets = context.makeTargets(width: size, height: size, storage: .private),
               let resolveTexture = context.device.makeTexture(descriptor: resolve),
-              let depthTexture = context.device.makeTexture(descriptor: depth),
               let commands = context.queue.makeCommandBuffer() else { return nil }
 
         let pass = MTLRenderPassDescriptor()
-        pass.colorAttachments[0].texture = colorTexture
+        pass.colorAttachments[0].texture = targets.color
         pass.colorAttachments[0].resolveTexture = resolveTexture
         pass.colorAttachments[0].loadAction = .clear
         pass.colorAttachments[0].storeAction = .multisampleResolve
         pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-        pass.depthAttachment.texture = depthTexture
+        pass.depthAttachment.texture = targets.depth
         pass.depthAttachment.loadAction = .clear
         pass.depthAttachment.storeAction = .dontCare
         pass.depthAttachment.clearDepth = 1

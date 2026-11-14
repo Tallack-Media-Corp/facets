@@ -56,7 +56,7 @@ struct LocationTab: View {
         .onChange(of: relinking) {
             guard relinking else { return }
             relinking = false
-            guard let url = LocationPanel.choose(), let fresh = try? locations.add(url) else { return }
+            guard let fresh = LocationPanel.addLocation(to: locations) else { return }
             // The new entry takes the old one's place, and stays the one showing.
             router.tab = .location(fresh.id)
             // Picking the same folder hands back this very entry: keep it.
@@ -79,6 +79,29 @@ enum LocationPanel {
         panel.prompt = String(localized: "Add", comment: "Open panel button that adds the chosen folder")
         panel.message = String(localized: "Choose a folder to browse its STL, 3MF and OBJ files without importing them.")
         return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    /// Asks for a folder and adds it to Browse: the sidebar's button, File › Add
+    /// Location… and choosing a lost folder again. Nil when cancelled, or when it
+    /// failed, after saying why. An AppKit alert, so the menu command, which has no
+    /// view of its own, can say it too: a sheet on the front window, or on its own
+    /// with no window open.
+    static func addLocation(to locations: LocationsStore) -> LocationsStore.Location? {
+        guard let url = choose() else { return nil }
+        do {
+            return try locations.add(url)
+        } catch {
+            Logger(subsystem: "Facets", category: "locations").error("Add Location failed: \(error as NSError, privacy: .public)")
+            let alert = NSAlert()
+            alert.messageText = String(localized: "Couldn't Add That Folder")
+            alert.informativeText = FriendlyError(file: error).message
+            if let window = NSApp.keyWindow {
+                alert.beginSheetModal(for: window)
+            } else {
+                alert.runModal()
+            }
+            return nil
+        }
     }
 }
 
@@ -106,18 +129,12 @@ struct SidebarFoot: View {
 struct AddLocationButton: View {
     @Environment(LocationsStore.self) private var locations
     @Environment(Router.self) private var router
-    @State private var errorMessage: String?
 
     var body: some View {
         Button {
             BrowseTip().invalidate(reason: .actionPerformed)
-            guard let url = LocationPanel.choose() else { return }
-            do {
-                router.tab = .location(try locations.add(url).id)
-            } catch {
-                Logger(subsystem: "Facets", category: "locations").error("Add Location failed: \(error as NSError, privacy: .public)")
-                errorMessage = FriendlyError(file: error).message
-            }
+            guard let location = LocationPanel.addLocation(to: locations) else { return }
+            router.tab = .location(location.id)
         } label: {
             Label {
                 // One line: the sidebar bar offers less width than the sidebar shows.
@@ -130,11 +147,6 @@ struct AddLocationButton: View {
             .labelStyle(.titleAndIcon)
             .foregroundStyle(.secondary)
             .help("Browse a folder's STL, 3MF and OBJ files without importing them")
-            .alert("Couldn't Add That Folder", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
     }
 }
 #endif

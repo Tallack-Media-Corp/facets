@@ -231,17 +231,13 @@ struct ViewerScreen: View {
         .onChange(of: appearance.hiddenObjects) { measurePoints = [] }
         .onChange(of: tool) { panelHeight = 0 }
         .onChange(of: unitSuggestions) { panelHeight = 0 }
-        .alert("Couldn't Save", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(saveError ?? "")
-        }
+        .errorAlert("Couldn't Save to Library", message: $saveError)
         // Relink a moved file: open the one picked, and point Recents at it instead.
         .fileImporter(isPresented: $findingFile, allowedContentTypes: UTType.models) { result in
             guard case .success(let url) = result else { return }
             recents.remove(fileAt: file.url)
             dismiss()
-            router.presented = ModelFileRef(url: url, isExternal: !library.contains(url))
+            router.presented = ModelFileRef(url: url, libraryRoot: library.root)
         }
         .sheet(isPresented: $choosingPrinter) {
             NavigationStack {
@@ -400,7 +396,7 @@ struct ViewerScreen: View {
             Picker("Printer", selection: Binding(get: { settings.bedID }, set: { settings.bedID = $0 })) {
                 Text("None").tag(String?.none)
                 ForEach(settings.recentBeds) { bed in
-                    Text(bed.id == PrinterBed.customID ? String(localized: "Custom Bed") : bed.title).tag(Optional(bed.id))
+                    Text(bed.title).tag(Optional(bed.id))
                 }
             }
             .pickerStyle(.inline)
@@ -435,22 +431,20 @@ struct ViewerScreen: View {
     /// "Fits the Bambu Lab A1 as oriented", "Fits the Prusa MK4S turned 90°",
     /// "Too tall for the Bambu Lab A1 by 12.0 mm", or for a slicer project laid out
     /// partly off its plate, "Fits the Bambu Lab A1, but runs off the plate as arranged".
-    private func fitNote(for model: Model3D) -> (text: String, tooBig: Bool)? {
+    private func fitNote(for model: Model3D) -> (text: String, tooBig: Bool, symbol: String)? {
         guard let bed = settings.fitBed,
               let fit = model.bedFit(width: bed.width, depth: bed.depth, height: bed.height, plateID: appearance.plateID, hidden: appearance.hiddenObjects) else { return nil }
-        // The printer as these sentences name it; each sentence is whole, so it can
-        // be translated with its own word order.
-        let name = bed.id == PrinterBed.customID
-            ? String(localized: "your custom bed", comment: "Printer named in a fit message, as in 'Fits your custom bed as oriented'")
-            : String(localized: "the \(bed.title)", comment: "A printer named in a fit message, as in 'Fits the Bambu Lab A1 as oriented'")
+        // Each sentence is whole, so it can be translated with its own word order.
+        let name = bed.sentenceName
         let units = settings.units
+        let symbol = fit.verdict.symbol
         switch fit.verdict {
         case .fits:
-            return (String(localized: "Fits \(name) as oriented"), false)
+            return (String(localized: "Fits \(name) as oriented"), false, symbol)
         case .fitsTurned:
-            return (String(localized: "Fits \(name) turned 90°"), false)
+            return (String(localized: "Fits \(name) turned 90°"), false, symbol)
         case .offPlate:
-            return (String(localized: "Fits \(name), but runs off the plate as arranged"), true)
+            return (String(localized: "Fits \(name), but runs off the plate as arranged"), true, symbol)
         case .tooBig(let over):
             var sides: [(short: String, long: String)] = []
             if over.width > 0.05 {
@@ -465,9 +459,9 @@ struct ViewerScreen: View {
                 let by = Format.dimension(over.height, units: units)
                 sides.append((String(localized: "\(by) too tall"), String(localized: "Too tall for \(name) by \(by)")))
             }
-            if sides.count == 1, let side = sides.first { return (side.long, true) }
+            if sides.count == 1, let side = sides.first { return (side.long, true, symbol) }
             let detail = sides.map(\.short).formatted(.list(type: .and))
-            return (String(localized: "Too big for \(name): \(detail)"), true)
+            return (String(localized: "Too big for \(name): \(detail)"), true, symbol)
         }
     }
 
@@ -535,11 +529,7 @@ struct ViewerScreen: View {
                 isTurned: arranged != nil,
                 autoState: autoOrient,
                 clearPoints: { measurePoints = [] },
-                // From the menu, with Lay Flat open so its answer can be seen.
-            autoOrient: {
-                if tool != .layFlat { open(.layFlat) }
-                autoOrientModel()
-            },
+                autoOrient: { autoOrientShowingLayFlat() },
                 turn: { axis in reorient(by: quarterTurn(about: axis), feel: .tick) },
                 resetOrientation: resetOrientation,
                 close: { closeTool() }
@@ -757,6 +747,12 @@ struct ViewerScreen: View {
         }
     }
 
+    /// Auto Orient from the menu or the panel, with Lay Flat open so its answer can be seen.
+    private func autoOrientShowingLayFlat() {
+        if tool != .layFlat { open(.layFlat) }
+        autoOrientModel()
+    }
+
     private func resetOrientation() {
         feedback.tick += 1
         autoOrient = .idle
@@ -807,11 +803,7 @@ struct ViewerScreen: View {
             toggleGrid: { appearance.showsGrid.toggle() },
             toggleWireframe: { appearance.wireframe.toggle() },
             toggleTool: { open($0) },
-            // From the menu, with Lay Flat open so its answer can be seen.
-            autoOrient: {
-                if tool != .layFlat { open(.layFlat) }
-                autoOrientModel()
-            },
+            autoOrient: { autoOrientShowingLayFlat() },
             openTool: tool,
             showsGrid: appearance.showsGrid,
             wireframe: appearance.wireframe
@@ -902,11 +894,11 @@ struct ViewerScreen: View {
         }
         let values = try? url.resourceValues(forKeys: [.fileSizeKey, .ubiquitousItemDownloadingStatusKey])
         fileSize = values?.fileSize.map(Int64.init)
-        let wasInCloud = values?.ubiquitousItemDownloadingStatus == .notDownloaded
+        let wasInCloud = values?.ubiquitousItemDownloadingStatus.map { !ICloudFile.isDownloaded(status: $0) } ?? false
         recents.record(file)
         do {
             let model = try await Task.detached(priority: .userInitiated) {
-                try Self.loadCoordinated(url)
+                try Self.loadForViewing(url)
             }.value
             // A multi-plate project opens on its first plate, like the slicer.
             appearance.plateID = model.plates.first?.id
@@ -945,15 +937,10 @@ struct ViewerScreen: View {
         }
     }
 
-    /// Reads through a file coordinator, so a file in iCloud Drive downloads first.
-    nonisolated private static func loadCoordinated(_ url: URL) throws -> Model3D {
-        var coordinatorError: NSError?
-        var result: Result<Model3D, Error> = .failure(ModelError.emptyFile)
-        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinatorError) { readURL in
-            result = Result { try ModelLoader.load(readURL) }
-        }
-        if let coordinatorError { throw coordinatorError }
-        let model = try result.get()
+    /// Reads through a file coordinator, so a file in iCloud Drive downloads first,
+    /// and turns away a model too big for this device to draw.
+    nonisolated private static func loadForViewing(_ url: URL) throws -> Model3D {
+        let model = try CoordinatedRead.model(at: url)
         if let context = RenderContext.shared, !context.canDisplay(model) { throw ModelError.tooLarge }
         return model
     }
@@ -961,10 +948,9 @@ struct ViewerScreen: View {
     private func saveToLibrary() {
         Task {
             do {
-                let copies = try await library.importFiles([file.url], into: library.root)
-                guard let copy = copies.first else { return }
+                guard let name = try await library.saveCopy(of: file.url) else { return }
                 withAnimation(.snappy) { isSaved = true }
-                toasts.show(String(localized: "Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))"))
+                toasts.show(String(localized: "Saved to Library as \(name)"))
             } catch {
                 saveError = FriendlyError(file: error).message
             }
@@ -979,7 +965,7 @@ private struct ViewerChips: View {
     @Binding var plateID: Int?
     let dimensions: String
     let spokenDimensions: String
-    let fitNote: (text: String, tooBig: Bool)?
+    let fitNote: (text: String, tooBig: Bool, symbol: String)?
     /// No printer chosen: the readout says so and opens the printer list.
     /// Off: the readout is just the dimensions.
     let checksFit: Bool
@@ -1068,7 +1054,7 @@ private struct ViewerChips: View {
                         Text(fitNote.text)
                             .foregroundStyle(fitNote.tooBig ? Color.primary : Color.secondary)
                     } icon: {
-                        Image(systemName: fitNote.tooBig ? "exclamationmark.triangle.fill" : "checkmark.circle")
+                        Image(systemName: fitNote.symbol)
                             .foregroundStyle(fitNote.tooBig ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
                     }
                     .font((wide ? Font.subheadline : .caption).weight(.medium).monospacedDigit())

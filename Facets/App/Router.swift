@@ -10,7 +10,15 @@ struct ModelFileRef: Identifiable, Hashable, Codable {
 
     var id: URL { url }
     var name: String { url.deletingPathExtension().lastPathComponent }
-    var displayName: String { Format.title(fromFileName: name) }
+    var displayName: String { Format.title(of: url) }
+}
+
+extension ModelFileRef {
+    /// External unless it's in the library (and not in its Recently Deleted). The
+    /// root defaults to the library's, for opens that come before any FileLibrary.
+    init(url: URL, libraryRoot: URL = LibraryLocation.current) {
+        self.init(url: url, isExternal: !LibraryLocation.contains(url, in: libraryRoot))
+    }
 }
 
 /// App-wide navigation: the selected tab, and a file another app asked us to open.
@@ -41,7 +49,7 @@ final class Router {
             presented = ModelFileRef(url: moved, isExternal: false)
             return
         }
-        presented = ModelFileRef(url: url, isExternal: !library.contains(url))
+        presented = ModelFileRef(url: url, libraryRoot: library.root)
     }
 }
 

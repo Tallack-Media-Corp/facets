@@ -24,6 +24,8 @@ actor ThumbnailStore {
     nonisolated(unsafe) private let memory = NSCache<NSString, PlatformImage>()
     private var snapshotter: ModelSnapshotter?
     private let directory: URL
+    /// Every Mac window asks for the clean-up; it runs once a launch.
+    private var pruned = false
 
     init() {
         directory = URL.cachesDirectory.appending(path: "Thumbnails", directoryHint: .isDirectory)
@@ -78,39 +80,57 @@ actor ThumbnailStore {
         // The cell scrolled away while it waited its turn.
         guard !Task.isCancelled else { return nil }
 
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        // A file that's only in iCloud downloads first, outside this actor: while it
-        // does, cached and shared pictures keep coming. At most two at a time.
-        guard await Self.ensureLocal(url), !Task.isCancelled else { return nil }
-        // Rendering stays one at a time, so only one big model is in memory.
-        var model: Model3D?
-        var error: NSError?
-        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { readURL in
-            model = try? ModelLoader.load(readURL)
+        return await url.withSecurityScope {
+            // A file that's only in iCloud downloads first, outside this actor: while it
+            // does, cached and shared pictures keep coming. At most two at a time.
+            guard await Self.ensureLocal(url), !Task.isCancelled else { return nil }
+            // Rendering stays one at a time, so only one big model is in memory.
+            guard let model = try? CoordinatedRead.model(at: url),
+                  let cgImage = draw(model, pixelSize: pixelSize, look: look) else { return nil }
+            return keep(cgImage, key: key, url: url, modified: modified, pixelSize: pixelSize, look: look)
         }
-        guard let model else { return nil }
-        return render(model, key: key, url: url, modified: modified, pixelSize: pixelSize, look: look)
     }
 
     /// Draws a model the viewer already has open into the library's pictures, at the
     /// sizes the grid and list use. A big model only in iCloud is never downloaded
     /// just for its thumbnail (ModelThumbnail.fetchLimit), so this is how it gets
     /// one, here and, through the shared folder, on the user's other devices.
+    /// The large one is drawn once and the small one scaled from it, so the mesh goes
+    /// to the GPU once.
     func store(_ model: Model3D, for url: URL, size: Int64?, modified: Date?, look: Look) {
-        for pixelSize in [256, 512] {
+        var drawn: CGImage?
+        for pixelSize in [512, 256] {
             let key = Self.key(for: url, size: size, modified: modified, pixelSize: pixelSize, look: look)
             if memory.object(forKey: key as NSString) != nil { continue }
             if FileManager.default.fileExists(atPath: directory.appending(path: "\(key).png").path) { continue }
-            _ = render(model, key: key, url: url, modified: modified, pixelSize: pixelSize, look: look)
+            guard let cgImage = drawn.flatMap({ Self.scaled($0, to: pixelSize) }) ?? draw(model, pixelSize: pixelSize, look: look) else { continue }
+            drawn = drawn ?? cgImage
+            _ = keep(cgImage, key: key, url: url, modified: modified, pixelSize: pixelSize, look: look)
         }
     }
 
-    private func render(_ model: Model3D, key: String, url: URL, modified: Date?, pixelSize: Int, look: Look) -> PlatformImage? {
+    private func draw(_ model: Model3D, pixelSize: Int, look: Look) -> CGImage? {
         if snapshotter == nil { snapshotter = ModelSnapshotter() }
         var appearance = RenderAppearance(baseColor: RenderAppearance.linearColor(hex: look.colorHex) ?? RenderAppearance.defaultColor)
         appearance.usesFileColors = look.usesFileColors
-        guard let cgImage = snapshotter?.image(of: model, pixelSize: pixelSize, appearance: appearance) else { return nil }
+        return snapshotter?.image(of: model, pixelSize: pixelSize, appearance: appearance)
+    }
+
+    /// A drawn picture at a smaller size, smoothly; nil if Core Graphics can't, and
+    /// the caller draws that size itself.
+    nonisolated static func scaled(_ image: CGImage, to pixelSize: Int) -> CGImage? {
+        let width = image.width * pixelSize / max(image.width, image.height)
+        let height = image.height * pixelSize / max(image.width, image.height)
+        guard let space = image.colorSpace,
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
+
+    /// Caches a drawn picture here, and in the library's shared folder.
+    private func keep(_ cgImage: CGImage, key: String, url: URL, modified: Date?, pixelSize: Int, look: Look) -> PlatformImage {
         let image = PlatformImage.from(cgImage)
         remember(image, forKey: key)
         let file = directory.appending(path: "\(key).png")
@@ -151,10 +171,9 @@ actor ThumbnailStore {
     /// storage provider) if need be. Runs off the actor; false if it couldn't.
     nonisolated private static func ensureLocal(_ url: URL) async -> Bool {
         let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus
-        if status == .current || status == .downloaded { return true }
         // No status: local, unless only an old-style placeholder (".Name.stl.icloud")
         // is there, which the coordinated read below fetches.
-        if status == nil, FileManager.default.fileExists(atPath: url.path) { return true }
+        if ICloudFile.isDownloaded(status: status), status != nil || FileManager.default.fileExists(atPath: url.path) { return true }
         await downloads.enter()
         defer { Task { await downloads.leave() } }
         guard !Task.isCancelled else { return false }
@@ -177,14 +196,14 @@ actor ThumbnailStore {
 
     /// Path-free, so the same file on another device finds it: name, date, size of
     /// picture and look.
-    private static func sharedKey(for url: URL, modified: Date?, pixelSize: Int, look: Look) -> String {
+    static func sharedKey(for url: URL, modified: Date?, pixelSize: Int, look: Look) -> String {
         let raw = "\(url.lastPathComponent)|\(Int(modified?.timeIntervalSince1970 ?? 0))|\(pixelSize)|\(look.colorHex)|\(look.usesFileColors)"
         return versionPrefix + SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     /// Copies a drawn picture into the shared folder, for library files only.
     private func shareIfMissing(_ file: URL, for url: URL, modified: Date?, pixelSize: Int, look: Look) {
-        guard let shared = sharedDirectory, url.standardizedFileURL.path.hasPrefix(LibraryLocation.current.path + "/") else { return }
+        guard let shared = sharedDirectory, LibraryLocation.contains(url, includingDeleted: true) else { return }
         let destination = shared.appending(path: "\(Self.sharedKey(for: url, modified: modified, pixelSize: pixelSize, look: look)).png")
         guard !FileManager.default.fileExists(atPath: destination.path) else { return }
         try? FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
@@ -208,9 +227,8 @@ actor ThumbnailStore {
             let file = shared.appending(path: "\(key).png")
             // Only ask for files that are there (in the cloud or not); a coordinated
             // read of a missing one would just fail, slowly.
-            let placeholder = shared.appending(path: ".\(key).png.icloud")
             let isHere = FileManager.default.fileExists(atPath: file.path)
-            guard isHere || FileManager.default.fileExists(atPath: placeholder.path) else { continue }
+            guard isHere || FileManager.default.fileExists(atPath: ICloudFile.placeholderURL(for: file).path) else { continue }
             if !isHere { await Self.sharedReads.enter() }
             guard !Task.isCancelled else {
                 if !isHere { await Self.sharedReads.leave() }
@@ -248,6 +266,8 @@ actor ThumbnailStore {
     /// folder, so each look change doesn't leave a set behind in iCloud Drive.
     /// (Other devices on an older build redraw theirs until they update.)
     func pruneStale() {
+        guard !pruned else { return }
+        pruned = true
         let fileManager = FileManager.default
         let isCurrent = { (name: String) in name.hasPrefix(Self.versionPrefix) || name.hasPrefix(".\(Self.versionPrefix)") }
         for url in (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] where !isCurrent(url.lastPathComponent) {
@@ -257,11 +277,7 @@ actor ThumbnailStore {
         guard let shared = sharedDirectory else { return }
         for url in (try? fileManager.contentsOfDirectory(at: shared, includingPropertiesForKeys: nil)) ?? [] where !isCurrent(url.lastPathComponent) {
             // A placeholder (".name.png.icloud") stands for the file itself.
-            var target = url
-            let name = url.lastPathComponent
-            if name.hasPrefix("."), name.hasSuffix(".icloud") {
-                target = url.deletingLastPathComponent().appending(path: String(name.dropFirst().dropLast(".icloud".count)))
-            }
+            let target = ICloudFile.realURL(ofPlaceholder: url) ?? url
             var error: NSError?
             NSFileCoordinator().coordinate(writingItemAt: target, options: .forDeleting, error: &error) { item in
                 try? fileManager.removeItem(at: item)

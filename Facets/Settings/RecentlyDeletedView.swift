@@ -42,15 +42,15 @@ struct RecentlyDeletedView: View {
                         .accessibilityLabel(String(localized: "Restore \(item.displayName)"))
                 }
                 .swipeActions(edge: .leading) {
-                    Button("Restore", systemImage: "arrow.uturn.backward") { restore([item]) }
+                    RowAction.restore { restore([item]) }
                         .tint(.accentColor)
                 }
                 .swipeActions(edge: .trailing) {
-                    Button("Delete Now", systemImage: "trash", role: .destructive) { purging = item }
+                    RowAction.delete("Delete Now") { purging = item }
                 }
                 .contextMenu {
-                    Button("Restore", systemImage: "arrow.uturn.backward") { restore([item]) }
-                    Button("Delete Now", systemImage: "trash", role: .destructive) { purging = item }
+                    RowAction.restore { restore([item]) }
+                    RowAction.delete("Delete Now") { purging = item }
                 }
             }
         }
@@ -72,7 +72,7 @@ struct RecentlyDeletedView: View {
         } message: {
             Text("They can't be restored after this.")
         }
-        .confirmationDialog(String(localized: "Delete \"\(purging?.displayName ?? "")\" for good?"), isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }), titleVisibility: .visible) {
+        .confirmationDialog(String(localized: "Delete \"\(purging?.displayName ?? "")\" for good?"), isPresented: $purging.isPresent, titleVisibility: .visible) {
             Button("Delete Now", role: .destructive) {
                 if let purging { purge([purging]) }
             }
@@ -101,12 +101,12 @@ struct RecentlyDeletedView: View {
         do {
             let restored = try library.restore(chosen)
             if restored.count == 1, let first = restored.first {
-                toasts.show(String(localized: "Restored \(Format.title(fromFileName: first.deletingPathExtension().lastPathComponent))"))
+                toasts.show(String(localized: "Restored \(Format.title(of: first))"))
             } else {
                 toasts.show(String(localized: "Restored \(restored.count) items"))
             }
         } catch {
-            toasts.show(String(localized: "Couldn't restore. There may not be enough space."), symbol: "exclamationmark.triangle.fill")
+            toasts.warn(String(localized: "Couldn't restore. There may not be enough space."))
         }
     }
 

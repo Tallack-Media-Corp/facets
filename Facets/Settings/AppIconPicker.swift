@@ -51,11 +51,7 @@ struct AppIconPicker: View {
         }
         .padding(.vertical, 4)
         .onAppear { current = UIApplication.shared.alternateIconName }
-        .alert("Couldn't Change the Icon", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(failure ?? "")
-        }
+        .errorAlert("Couldn't Change the Icon", message: $failure)
     }
 
     private func choose(_ option: Option) {

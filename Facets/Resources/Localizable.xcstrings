@@ -2835,34 +2835,6 @@
         }
       }
     },
-    "Couldn't Save": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sichern fehlgeschlagen"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No se ha podido guardar"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Impossible d'enregistrer"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存できませんでした"
-          }
-        }
-      }
-    },
     "Couldn't Save to Library": {
       "localizations": {
         "de": {

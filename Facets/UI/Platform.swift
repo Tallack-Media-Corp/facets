@@ -60,6 +60,24 @@ enum Bookmark {
     }
 }
 
+extension URL {
+    /// Runs `body` inside the URL's security scope, for a file the user picked or a
+    /// bookmark resolved. Short uses only; one held while a folder or model stays
+    /// open starts and stops on its own.
+    func withSecurityScope<T>(_ body: () throws -> T) rethrows -> T {
+        let scoped = startAccessingSecurityScopedResource()
+        defer { if scoped { stopAccessingSecurityScopedResource() } }
+        return try body()
+    }
+
+    /// The same, across awaits, on the caller's actor.
+    nonisolated(nonsending) func withSecurityScope<T>(_ body: () async throws -> T) async rethrows -> T {
+        let scoped = startAccessingSecurityScopedResource()
+        defer { if scoped { stopAccessingSecurityScopedResource() } }
+        return try await body()
+    }
+}
+
 /// VoiceOver, on either platform.
 @MainActor
 enum Spoken {

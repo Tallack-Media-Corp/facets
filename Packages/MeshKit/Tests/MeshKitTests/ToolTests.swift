@@ -228,6 +228,65 @@ import simd
     }
 }
 
+@Suite struct PartBoundsTests {
+    private func translation(_ t: SIMD3<Float>) -> simd_float4x4 {
+        var m = matrix_identity_float4x4
+        m.columns.3 = SIMD4(t, 1)
+        return m
+    }
+
+    /// What a part works out by walking every triangle: the reference the shortcuts must match.
+    private func slow(_ geometry: MeshGeometry, _ transform: simd_float4x4) -> (Bounds, SurfaceStats) {
+        var b = Bounds.empty
+        let p = geometry.positions
+        for i in geometry.indices.map({ $0.map(Int.init) }) ?? Array(0..<geometry.vertexCount) {
+            let v = transform * SIMD4(p[i * 3], p[i * 3 + 1], p[i * 3 + 2], 1)
+            b.add(SIMD3(v.x, v.y, v.z))
+        }
+        let surface = MeshGeometry.surface(positions: p, indices: geometry.indices, transform: transform, outward: geometry.volume < 0 ? -1 : 1)
+        return (b, surface)
+    }
+
+    @Test func movedPartMatchesTheSlowWay() {
+        // A 10 × 20 × 30 box floating 5 up, so its underside is an overhang.
+        let box = cubeTriangles.flatMap { $0.flatMap { [$0.x * 10, $0.y * 20, $0.z * 30 + 5] } }
+        let geometry = MeshGeometry(positions: box)
+        let t = translation([12.5, -40, 7.25])
+        let part = ModelPart(id: 0, name: "b", geometry: geometry, transform: t)
+        let (bounds, surface) = slow(geometry, t)
+        #expect(part.bounds == bounds)
+        #expect(surface.overhang > 0)
+        #expect(abs(part.surface.overhangMoment - surface.overhangMoment) <= abs(surface.overhangMoment) * 1e-5)
+        for field in [\SurfaceStats.up, \.down, \.side, \.total, \.overhang] {
+            #expect(abs(part.surface[keyPath: field] - surface[keyPath: field]) < 0.01)
+        }
+    }
+
+    @Test func strayVertexNeverCountsWhereverThePartIs() {
+        // A 10 × 20 × 30 box as indexed triangles, plus one vertex far away that no
+        // triangle uses.
+        var positions = cubeTriangles.flatMap { $0.flatMap { [$0.x * 10, $0.y * 20, $0.z * 30] } }
+        let indices = (0..<UInt32(positions.count / 3)).map { $0 }
+        positions += [1000, 1000, 1000]
+        let geometry = MeshGeometry(positions: positions, indices: indices)
+        var turn = matrix_identity_float4x4
+        let r = quarterTurn(about: [0, 0, 1])
+        turn.columns.0 = SIMD4(r.columns.0, 0)
+        turn.columns.1 = SIMD4(r.columns.1, 0)
+        turn.columns.2 = SIMD4(r.columns.2, 0)
+        let placed = [
+            (matrix_identity_float4x4, SIMD3<Float>(10, 20, 30)),
+            (translation([3, 4, 5]), SIMD3<Float>(10, 20, 30)),
+            (translation([3, 4, 5]) * turn, SIMD3<Float>(20, 10, 30)),
+        ]
+        for (transform, size) in placed {
+            let part = ModelPart(id: 0, name: "b", geometry: geometry, transform: transform)
+            #expect(simd_distance(part.bounds.size, size) < 0.001, "size was \(part.bounds.size)")
+            #expect(part.bounds == slow(geometry, transform).0)
+        }
+    }
+}
+
 @Suite struct UnitGuessTests {
     @Test func tinyModelsSuggestAnotherUnit() {
         // kako.stl from MakerWorld: 0.34 × 0.055 × 0.28, in metres.

@@ -269,21 +269,27 @@ public struct ModelPart: Sendable, Identifiable {
             SIMD3(transform.columns.1.x, transform.columns.1.y, transform.columns.1.z),
             SIMD3(transform.columns.2.x, transform.columns.2.y, transform.columns.2.z)
         )
-        // Moved but not turned or scaled: the mesh's own surface stats hold.
+        // Moved but not turned or scaled (how slicers place most build items): the
+        // mesh's own bounds and surface stats hold, shifted. Only z moves the surface.
         if linear == matrix_identity_float3x3 {
-            surface = geometry.surface.raised(by: transform.columns.3.z)
+            let offset = SIMD3(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z)
+            surface = geometry.surface.raised(by: offset.z)
+            bounds = geometry.bounds.isEmpty ? geometry.bounds : Bounds(min: geometry.bounds.min + offset, max: geometry.bounds.max + offset)
         } else {
             let outward: Double = geometry.volume * simd_determinant(linear) < 0 ? -1 : 1
             surface = MeshGeometry.surface(positions: geometry.positions, indices: geometry.indices, transform: transform, outward: outward)
-        }
-        if transform == matrix_identity_float4x4 {
-            bounds = geometry.bounds
-        } else {
             var b = Bounds.empty
             geometry.positions.withUnsafeBufferPointer { p in
-                for i in 0..<(p.count / 3) {
+                let count = p.count / 3
+                func add(_ i: Int) {
                     let v = transform * SIMD4(p[i * 3], p[i * 3 + 1], p[i * 3 + 2], 1)
                     b.add(SIMD3(v.x, v.y, v.z))
+                }
+                // As in MeshGeometry: only the vertices triangles use.
+                if let indices = geometry.indices {
+                    for i in indices where Int(i) < count { add(Int(i)) }
+                } else {
+                    for i in 0..<count { add(i) }
                 }
             }
             bounds = b

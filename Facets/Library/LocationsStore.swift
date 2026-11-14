@@ -27,13 +27,13 @@ final class LocationsStore {
             locations = saved.filter { location in
                 var stale = false
                 guard let url = try? Bookmark.resolve(location.bookmark, isStale: &stale) else { return true }
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                // Only a definite file goes. A provider that's offline or slow to
-                // answer reads as nothing, and the location must survive that.
-                let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
-                guard let isDirectory = values?.isDirectory else { return true }
-                return isDirectory && values?.isPackage != true
+                return url.withSecurityScope {
+                    // Only a definite file goes. A provider that's offline or slow to
+                    // answer reads as nothing, and the location must survive that.
+                    let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+                    guard let isDirectory = values?.isDirectory else { return true }
+                    return isDirectory && values?.isPackage != true
+                }
             }
             if locations.count != saved.count { save() }
         }
@@ -49,18 +49,18 @@ final class LocationsStore {
     /// just keeps the existing entry.
     @discardableResult
     func add(_ url: URL) throws -> Location {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard Self.isFolder(url) else { throw CocoaError(.fileReadUnsupportedScheme) }
-        let path = url.standardizedFileURL.path
-        if let existing = locations.first(where: { self.url(for: $0)?.standardizedFileURL.path == path }) {
-            return existing
+        try url.withSecurityScope {
+            guard Self.isFolder(url) else { throw CocoaError(.fileReadUnsupportedScheme) }
+            let path = url.standardizedFileURL.path
+            if let existing = locations.first(where: { self.url(for: $0)?.standardizedFileURL.path == path }) {
+                return existing
+            }
+            let bookmark = try Bookmark.make(url)
+            let location = Location(id: UUID(), name: Self.displayName(of: url), bookmark: bookmark, isCloud: Self.isCloud(url))
+            locations.append(location)
+            save()
+            return location
         }
-        let bookmark = try Bookmark.make(url)
-        let location = Location(id: UUID(), name: Self.displayName(of: url), bookmark: bookmark, isCloud: Self.isCloud(url))
-        locations.append(location)
-        save()
-        return location
     }
 
     /// The folder's URL with access started, or nil if it's gone or access was revoked.

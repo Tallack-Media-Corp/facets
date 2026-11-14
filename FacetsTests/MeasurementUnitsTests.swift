@@ -15,7 +15,7 @@ import Testing
     @Test func setWinsOverTheLocale() throws {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set("millimetres", forKey: "viewer.units")
+        defaults.set("millimetres", forKey: MeasurementUnits.defaultsKey)
         #expect(MeasurementUnits.saved(in: defaults, locale: Locale(identifier: "en_US")) == .millimetres)
     }
 }

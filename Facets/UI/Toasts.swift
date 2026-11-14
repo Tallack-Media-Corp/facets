@@ -7,9 +7,12 @@ import SwiftUI
 @Observable
 final class ToastCenter {
     struct Toast: Identifiable {
+        enum Kind { case success, warning }
+
         let id = UUID()
         let message: String
         let symbol: String
+        var kind = Kind.success
         var actionTitle: String?
         var action: (() -> Void)?
     }
@@ -20,7 +23,16 @@ final class ToastCenter {
     /// Shows a toast, replacing any already up. One with an action stays a little
     /// longer so there's time to reach it.
     func show(_ message: String, symbol: String = "checkmark.circle.fill", actionTitle: String? = nil, action: (() -> Void)? = nil) {
-        let toast = Toast(message: message, symbol: symbol, actionTitle: actionTitle, action: action)
+        post(Toast(message: message, symbol: symbol, actionTitle: actionTitle, action: action))
+    }
+
+    /// Something didn't work: a warning sign, and a warning tap.
+    func warn(_ message: String) {
+        post(Toast(message: message, symbol: "exclamationmark.triangle.fill", kind: .warning))
+    }
+
+    private func post(_ toast: Toast) {
+        let message = toast.message, actionTitle = toast.actionTitle, action = toast.action
         withAnimation(.snappy) { current = toast }
         var announcement = message
         if let actionTitle { announcement = String(localized: "\(message). \(actionTitle) is available.", comment: "VoiceOver: a toast's message, then its button") }
@@ -82,7 +94,7 @@ private struct ToastHost: ViewModifier {
             // A warning toast taps like a warning; everything else like a success.
             .sensoryFeedback(trigger: toasts.current?.id) { _, _ in
                 guard let toast = toasts.current else { return nil }
-                return toast.symbol.contains("exclamationmark") ? .warning : .success
+                return toast.kind == .warning ? .warning : .success
             }
             .overlay(alignment: .bottom) {
                 if let toast = toasts.current {

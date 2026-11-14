@@ -92,7 +92,7 @@ struct ModelThumbnail: View {
     static let browseFetchLimit: Int64 = 5_000_000
 
     private var fetchLimit: Int64 {
-        if url.standardizedFileURL.path.hasPrefix(LibraryLocation.current.standardizedFileURL.path + "/") { return Self.fetchLimit }
+        if LibraryLocation.contains(url, includingDeleted: true) { return Self.fetchLimit }
         return settings?.fetchesBrowsePreviews == true ? Self.browseFetchLimit : 0
     }
 
