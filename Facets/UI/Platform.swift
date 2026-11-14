@@ -96,6 +96,36 @@ extension ToolbarItemPlacement {
 }
 
 extension View {
+    /// Actions on a whole list (Restore All, Delete All), one at each end: the bottom
+    /// toolbar on iPhone and iPad. On the Mac, a bar under the list: a page pushed in
+    /// the Settings window has no toolbar of its own, and the title bar put them as
+    /// loose pills beside the back button.
+    func listActions<Leading: View, Trailing: View>(shown: Bool, @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing) -> some View {
+        let leading = leading()
+        let trailing = trailing()
+        #if os(iOS)
+        return toolbar {
+            if shown {
+                ToolbarItem(placement: .bottomBar) { leading }
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+                ToolbarItem(placement: .bottomBar) { trailing }
+            }
+        }
+        #else
+        return safeAreaInset(edge: .bottom, spacing: 0) {
+            if shown {
+                HStack {
+                    leading
+                    Spacer()
+                    trailing
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+            }
+        }
+        #endif
+    }
+
     /// The number pad for measurements on iPhone and iPad.
     func decimalKeyboard() -> some View {
         #if os(iOS)

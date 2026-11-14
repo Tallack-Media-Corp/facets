@@ -614,20 +614,16 @@ struct LibraryRow: View {
     let item: LibraryItem
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// Grows with the text, up to a point, so the picture still reads beside big type.
-    @ScaledMetric(relativeTo: .headline) private var thumbnailSize: CGFloat = 52
 
     var body: some View {
         HStack(spacing: 12) {
-            Group {
+            RowThumbnail {
                 if item.isFolder {
                     FolderTile(showsBackdrop: false)
                 } else {
                     ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 10, showsBackdrop: false, isDownloaded: item.isDownloaded)
                 }
             }
-            .frame(width: min(thumbnailSize, 88), height: min(thumbnailSize, 88))
-            .clipShape(.rect(cornerRadius: 10))
 
             // At accessibility sizes names wrap rather than truncate; that's the point
             // of showing rows there.

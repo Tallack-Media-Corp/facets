@@ -13,20 +13,32 @@ struct RecentlyDeletedView: View {
         List {
             ForEach(items) { item in
                 HStack(spacing: 12) {
-                    Image(systemName: item.isFolder ? "folder" : "cube")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28)
+                    HStack(spacing: 12) {
+                        RowThumbnail {
+                            if item.isFolder {
+                                FolderTile(showsBackdrop: false)
+                            } else {
+                                // Drawn from the file where it waits; a cube while it renders.
+                                ModelThumbnail(url: item.stored, cornerRadius: 10, showsBackdrop: false, isDownloaded: FileManager.default.fileExists(atPath: item.stored.path))
+                            }
+                        }
                         .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(item.displayName)
-                            .font(.headline)
-                            .lineLimit(3)
-                        Text(detail(for: item))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.displayName)
+                                .font(.headline)
+                                .lineLimit(3)
+                            Text(detail(for: item))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .accessibilityElement(children: .combine)
+                    Spacer(minLength: 8)
+                    // In sight on every row, not only behind a swipe or a right-click.
+                    Button("Restore") { restore([item]) }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel(String(localized: "Restore \(item.displayName)"))
                 }
-                .accessibilityElement(children: .combine)
                 .swipeActions(edge: .leading) {
                     Button("Restore", systemImage: "arrow.uturn.backward") { restore([item]) }
                         .tint(.accentColor)
@@ -47,16 +59,10 @@ struct RecentlyDeletedView: View {
         }
         .navigationTitle("Recently Deleted")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if !items.isEmpty {
-                ToolbarItem(placement: .bottomControls) {
-                    Button("Restore All") { restore(items) }
-                }
-                ToolbarSpacer(.flexible, placement: .bottomControls)
-                ToolbarItem(placement: .bottomControls) {
-                    Button("Delete All", role: .destructive) { confirmingEmpty = true }
-                }
-            }
+        .listActions(shown: !items.isEmpty) {
+            Button("Restore All") { restore(items) }
+        } trailing: {
+            Button("Delete All", role: .destructive) { confirmingEmpty = true }
         }
         .hidesTabBar()
         .confirmationDialog(items.count == 1 ? String(localized: "Delete this item for good?") : String(localized: "Delete all \(items.count) items for good?"), isPresented: $confirmingEmpty, titleVisibility: .visible) {

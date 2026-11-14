@@ -72,11 +72,10 @@ private struct RecentRow: View {
     private var isAvailable: Bool { state?.isAvailable ?? true }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .headline) private var thumbnailSize: CGFloat = 52
 
     var body: some View {
         HStack(spacing: 12) {
-            Group {
+            RowThumbnail {
                 if let state, let url = state.url, state.isAvailable {
                     // Keyed on the file itself, as the library is, so the two share
                     // one cached picture and reopening doesn't redraw it.
@@ -89,7 +88,6 @@ private struct RecentRow: View {
                     Color.clear
                 }
             }
-            .frame(width: min(thumbnailSize, 88), height: min(thumbnailSize, 88))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.displayName)

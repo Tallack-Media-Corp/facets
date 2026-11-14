@@ -8,6 +8,7 @@ import UIKit
 final class PreviewViewController: UIViewController, QLPreviewingController {
     private let canvas = ModelCanvasView()
     private let backdrop = CAGradientLayer()
+    private let plateBar = PlateBar()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -20,6 +21,13 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
             canvas.topAnchor.constraint(equalTo: view.topAnchor),
             canvas.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+        plateBar.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(plateBar)
+        NSLayoutConstraint.activate([
+            plateBar.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            plateBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+        ])
+        plateBar.onChange = { [weak self] id in self?.canvas.renderAppearance.plateID = id }
         updateColors()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: PreviewViewController, _) in
             controller.updateColors()
@@ -46,6 +54,70 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
         }.value
         canvas.renderAppearance.plateID = model.plates.first?.id
         canvas.setModel(model)
+        plateBar.show(model.plates)
+    }
+}
+
+/// "‹ Plate 2 of 4 ›" under a multi-plate project: it says there's more than one, and
+/// where Quick Look lets the preview be touched, the arrows step through them.
+private final class PlateBar: UIVisualEffectView {
+    var onChange: ((Int) -> Void)?
+    private var steps = PlateSteps()
+    private let label = UILabel()
+    private let backButton = UIButton(type: .system)
+    private let forwardButton = UIButton(type: .system)
+
+    init() {
+        super.init(effect: UIGlassEffect())
+        cornerConfiguration = .capsule()
+        isHidden = true
+        label.font = UIFont.preferredFont(forTextStyle: .subheadline).withTraits(.traitBold)
+        label.adjustsFontForContentSizeCategory = true
+        for (button, symbol, name, by) in [(backButton, "chevron.left", PlateSteps.previousName, -1), (forwardButton, "chevron.right", PlateSteps.nextName, 1)] {
+            button.setImage(UIImage(systemName: symbol), for: .normal)
+            button.accessibilityLabel = name
+            button.addAction(UIAction { [weak self] _ in self?.step(by) }, for: .primaryActionTriggered)
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 44),
+                button.heightAnchor.constraint(equalToConstant: 44),
+            ])
+        }
+        let stack = UIStackView(arrangedSubviews: [backButton, label, forwardButton])
+        stack.alignment = .center
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    func show(_ plates: [Plate]) {
+        steps = PlateSteps(plates: plates)
+        isHidden = !steps.isNeeded
+        update()
+    }
+
+    private func step(_ by: Int) {
+        guard let id = steps.step(by) else { return }
+        update()
+        onChange?(id)
+    }
+
+    private func update() {
+        label.text = steps.title
+        backButton.isEnabled = steps.canGoBack
+        forwardButton.isEnabled = steps.canGoForward
+    }
+}
+
+private extension UIFont {
+    func withTraits(_ traits: UIFontDescriptor.SymbolicTraits) -> UIFont {
+        fontDescriptor.withSymbolicTraits(traits).map { UIFont(descriptor: $0, size: 0) } ?? self
     }
 }
 #else
@@ -56,6 +128,7 @@ import Quartz
 /// in 3D, on Quick Look's own background.
 final class PreviewViewController: NSViewController, QLPreviewingController {
     private let canvas = ModelCanvasView()
+    private let plateBar = PlateBar()
 
     override func loadView() {
         let stage = StageView()
@@ -65,6 +138,13 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
         canvas.frame = stage.bounds
         canvas.autoresizingMask = [.width, .height]
         stage.addSubview(canvas)
+        plateBar.translatesAutoresizingMaskIntoConstraints = false
+        stage.addSubview(plateBar)
+        NSLayoutConstraint.activate([
+            plateBar.centerXAnchor.constraint(equalTo: stage.centerXAnchor),
+            plateBar.bottomAnchor.constraint(equalTo: stage.bottomAnchor, constant: -16),
+        ])
+        plateBar.onChange = { [weak self] id in self?.canvas.renderAppearance.plateID = id }
         view = stage
         preferredContentSize = NSSize(width: 800, height: 600)
     }
@@ -76,6 +156,57 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
         }.value
         canvas.renderAppearance.plateID = model.plates.first?.id
         canvas.setModel(model)
+        plateBar.show(model.plates)
+    }
+}
+
+/// "‹ Plate 2 of 4 ›" under a multi-plate project, as on iOS.
+private final class PlateBar: NSGlassEffectView {
+    var onChange: ((Int) -> Void)?
+    private var steps = PlateSteps()
+    private let label = NSTextField(labelWithString: "")
+    private lazy var backButton = button("chevron.left", PlateSteps.previousName, #selector(goBack))
+    private lazy var forwardButton = button("chevron.right", PlateSteps.nextName, #selector(goForward))
+
+    init() {
+        super.init(frame: .zero)
+        isHidden = true
+        label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        let stack = NSStackView(views: [backButton, label, forwardButton])
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
+        contentView = stack
+        cornerRadius = 16
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    private func button(_ symbol: String, _ name: String, _ action: Selector) -> NSButton {
+        let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: name) ?? NSImage(), target: self, action: action)
+        button.isBordered = false
+        button.setAccessibilityLabel(name)
+        return button
+    }
+
+    func show(_ plates: [Plate]) {
+        steps = PlateSteps(plates: plates)
+        isHidden = !steps.isNeeded
+        update()
+    }
+
+    @objc private func goBack() { step(-1) }
+    @objc private func goForward() { step(1) }
+
+    private func step(_ by: Int) {
+        guard let id = steps.step(by) else { return }
+        update()
+        onChange?(id)
+    }
+
+    private func update() {
+        label.stringValue = steps.title
+        backButton.isEnabled = steps.canGoBack
+        forwardButton.isEnabled = steps.canGoForward
     }
 }
 
@@ -98,6 +229,30 @@ private final class StageView: NSView {
     }
 }
 #endif
+
+/// Which plate of a multi-plate project the preview shows.
+struct PlateSteps {
+    var plates: [Plate] = []
+    private(set) var index = 0
+
+    static let previousName = String(localized: "Previous Plate")
+    static let nextName = String(localized: "Next Plate")
+
+    var isNeeded: Bool { plates.count > 1 }
+    var canGoBack: Bool { index > 0 }
+    var canGoForward: Bool { index < plates.count - 1 }
+    var title: String {
+        String(localized: "Plate \(index + 1) of \(plates.count)", comment: "Quick Look: which plate of a multi-plate project is shown")
+    }
+
+    /// Moves by one plate; the new plate's id, or nil at either end.
+    mutating func step(_ by: Int) -> Int? {
+        let next = index + by
+        guard plates.indices.contains(next) else { return nil }
+        index = next
+        return plates[next].id
+    }
+}
 
 /// The preview extension has a small memory budget, and a mesh lives twice (in memory
 /// and in its Metal buffer). Past these, it says so instead of being stopped
