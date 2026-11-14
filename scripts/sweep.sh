@@ -21,7 +21,7 @@ OUT=.build/sweep
 TOOLS=.build/sweep/tools
 WAIT=${SWEEP_WAIT:-5}
 ONLY=${SWEEP_ONLY:-.}
-platforms=(${@:-iphone ipad mac})
+platforms=("$@"); (( $#platforms )) || platforms=(iphone ipad mac)
 appearances=(light dark)
 
 # Room first: a build and a few hundred screenshots.
