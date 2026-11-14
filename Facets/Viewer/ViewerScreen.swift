@@ -900,7 +900,9 @@ struct ViewerScreen: View {
         if file.isExternal, !isAccessing {
             isAccessing = url.startAccessingSecurityScopedResource()
         }
-        fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .ubiquitousItemDownloadingStatusKey])
+        fileSize = values?.fileSize.map(Int64.init)
+        let wasInCloud = values?.ubiquitousItemDownloadingStatus == .notDownloaded
         recents.record(file)
         do {
             let model = try await Task.detached(priority: .userInitiated) {
@@ -910,10 +912,10 @@ struct ViewerScreen: View {
             appearance.plateID = model.plates.first?.id
             original = model
             phase = .loaded(model)
-            // Reading it downloaded it if it was only in iCloud; open folders list it
-            // again so its cloud badge goes. (A download leaves the folder's own entries
-            // alone on the Mac, so the folder watcher doesn't see it.)
-            library.noteExternalChange()
+            // Reading it downloaded it; open folders list it again so its cloud badge
+            // goes. (A download leaves the folder's own entries alone on the Mac, so
+            // the folder watcher doesn't see it.)
+            if wasInCloud { library.noteExternalChange() }
             checkUnits(of: model)
             storeThumbnail(of: model)
             offerGestureHint()

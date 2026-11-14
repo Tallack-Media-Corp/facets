@@ -166,7 +166,12 @@ struct OpenModelIntent: OpenIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        #if os(macOS)
+        // Its own window, like a Finder open: a library window may not be open to take it.
+        MacOpener.shared.open([target.url])
+        #else
         PendingOpen.shared.file = ModelFileRef(url: target.url, isExternal: false)
+        #endif
         return .result()
     }
 }

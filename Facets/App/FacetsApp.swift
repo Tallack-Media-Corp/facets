@@ -54,6 +54,8 @@ struct FacetsApp: App {
         }
         .defaultSize(width: 900, height: 700)
         .handlesExternalEvents(matching: [])
+        // No File › New › New Model Window: a model window without a file is empty.
+        .commandsRemoved()
         // A restored window would hold a bare URL without the user's permission to it.
         .restorationBehavior(.disabled)
 
@@ -133,7 +135,9 @@ final class MacOpener {
 
     /// Called by the menu commands, which exist before any window does.
     func prepare(_ action: OpenWindowAction) {
-        if openWindow == nil { openWindow = action }
+        // Menus re-evaluate on every focus change; only the first call matters.
+        guard openWindow == nil else { return }
+        openWindow = action
         drain()
     }
 
