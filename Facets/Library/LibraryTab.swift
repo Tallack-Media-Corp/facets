@@ -24,22 +24,25 @@ struct LibraryTab: View {
         var title: String { self == .library ? String(localized: "My Models") : String(localized: "Browse") }
     }
 
+    /// Where the Library | Browse choice is kept.
+    static let sectionKey = "library.section"
+
     @Environment(FileLibrary.self) private var library
     @Namespace private var zoom
     @State private var path: [LibraryRoute] = []
-    @AppStorage("library.section") private var section: Section = .library
+    @AppStorage(LibraryTab.sectionKey) private var section: Section = .library
 
     var body: some View {
         NavigationStack(path: $path) {
             Group {
                 #if os(macOS)
                 // Browse locations are sidebar items on the Mac; no switch here.
-                FolderView(folder: library.root, title: "Library")
+                FolderView(folder: library.root, title: String(localized: "Library"))
                     .id(library.root)
                 #else
                 switch section {
                 case .library:
-                    FolderView(folder: library.root, title: "Library", showsSectionPicker: true)
+                    FolderView(folder: library.root, title: String(localized: "Library"), showsSectionPicker: true)
                         // Moving to iCloud Drive changes the folder underneath.
                         .id(library.root)
                 case .browse: BrowseView(path: $path)
@@ -92,7 +95,7 @@ struct LibrarySectionPicker: View {
     /// iPad).
     static let listTopMargin: CGFloat = 8.5
 
-    @AppStorage("library.section") private var section: LibraryTab.Section = .library
+    @AppStorage(LibraryTab.sectionKey) private var section: LibraryTab.Section = .library
 
     var body: some View {
         Picker("Section", selection: $section) {
@@ -101,7 +104,7 @@ struct LibrarySectionPicker: View {
         .pickerStyle(.segmented)
         .onChange(of: section) { if section == .browse { BrowseTip().invalidate(reason: .actionPerformed) } }
         .labelsHidden()
-        .frame(maxWidth: 320)
+        .frame(maxWidth: Size.segmentedMaxWidth)
         .frame(maxWidth: .infinity)
     }
 }
@@ -111,6 +114,6 @@ extension View {
     func sectionPickerRow() -> some View {
         listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16))
+            .listRowInsets(EdgeInsets(top: 0, leading: Spacing.lg, bottom: Spacing.xs, trailing: Spacing.lg))
     }
 }

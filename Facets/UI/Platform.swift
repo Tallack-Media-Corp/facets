@@ -60,6 +60,24 @@ enum Bookmark {
     }
 }
 
+extension URL {
+    /// Runs `body` inside the URL's security scope, for a file the user picked or a
+    /// bookmark resolved. Short uses only; one held while a folder or model stays
+    /// open starts and stops on its own.
+    func withSecurityScope<T>(_ body: () throws -> T) rethrows -> T {
+        let scoped = startAccessingSecurityScopedResource()
+        defer { if scoped { stopAccessingSecurityScopedResource() } }
+        return try body()
+    }
+
+    /// The same, across awaits, on the caller's actor.
+    nonisolated(nonsending) func withSecurityScope<T>(_ body: () async throws -> T) async rethrows -> T {
+        let scoped = startAccessingSecurityScopedResource()
+        defer { if scoped { stopAccessingSecurityScopedResource() } }
+        return try await body()
+    }
+}
+
 /// VoiceOver, on either platform.
 @MainActor
 enum Spoken {
@@ -96,6 +114,50 @@ extension ToolbarItemPlacement {
 }
 
 extension View {
+    /// Actions on a whole list (Restore All, Delete All), one at each end: the bottom
+    /// toolbar on iPhone and iPad. On the Mac, a bar under the list: a page pushed in
+    /// the Settings window has no toolbar of its own, and the title bar put them as
+    /// loose pills beside the back button.
+    func listActions<Leading: View, Trailing: View>(shown: Bool, @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing) -> some View {
+        let leading = leading()
+        let trailing = trailing()
+        #if os(iOS)
+        return toolbar {
+            if shown {
+                ToolbarItem(placement: .bottomBar) { leading }
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+                ToolbarItem(placement: .bottomBar) { trailing }
+            }
+        }
+        #else
+        return safeAreaInset(edge: .bottom, spacing: 0) {
+            if shown {
+                HStack {
+                    leading
+                    Spacer()
+                    trailing
+                }
+                .padding(.horizontal, Spacing.xl)
+                .padding(.vertical, Spacing.md)
+            }
+        }
+        #endif
+    }
+
+    /// The content of a sheet that's a list or form. On the Mac a sheet takes its
+    /// content's ideal size (a List reports almost none, a Form all of it), so it gets
+    /// a frame that scrolls, and the grouped style Settings uses. iPhone and iPad keep
+    /// their detents.
+    func sheetSize() -> some View {
+        #if os(macOS)
+        formStyle(.grouped)
+            .frame(minWidth: Size.macSheetWidth.min, idealWidth: Size.macSheetWidth.ideal, maxWidth: Size.macSheetWidth.max,
+                   minHeight: Size.macSheetHeight.min, idealHeight: Size.macSheetHeight.ideal, maxHeight: Size.macSheetHeight.max)
+        #else
+        self
+        #endif
+    }
+
     /// The number pad for measurements on iPhone and iPad.
     func decimalKeyboard() -> some View {
         #if os(iOS)

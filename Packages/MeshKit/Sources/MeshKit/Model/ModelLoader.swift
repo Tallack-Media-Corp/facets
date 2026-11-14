@@ -40,4 +40,12 @@ public enum ModelLoader {
     static func isZip(_ data: Data) -> Bool {
         data.count >= 4 && data.prefix(4).elementsEqual([0x50, 0x4B, 0x03, 0x04])
     }
+
+    /// Whether the file is a ZIP package (a 3MF, whatever its name), from its first
+    /// four bytes, the same test `load` uses. False if it can't be read.
+    public static func isZip(at url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        return (try? handle.read(upToCount: 4)).map(isZip) ?? false
+    }
 }

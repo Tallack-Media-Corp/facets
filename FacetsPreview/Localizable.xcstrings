@@ -1,0 +1,132 @@
+{
+  "sourceLanguage": "en",
+  "version": "1.0",
+  "strings": {
+    "Plate %lld of %lld": {
+      "comment": "Quick Look: which plate of a multi-plate project is shown",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Platte %1$lld von %2$lld"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placa %1$lld de %2$lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plateau %1$lld sur %2$lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレート %1$lld/%2$lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Plate %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Previous Plate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorherige Platte"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placa anterior"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plateau précédent"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前のプレート"
+          }
+        }
+      }
+    },
+    "Next Plate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächste Platte"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placa siguiente"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plateau suivant"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次のプレート"
+          }
+        }
+      }
+    },
+    "Plate %lld of %lld, %@": {
+      "comment": "Quick Look, VoiceOver: which plate is shown, then its name",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Platte %1$lld von %2$lld, %3$@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placa %1$lld de %2$lld, %3$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plateau %1$lld sur %2$lld, %3$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレート %1$lld/%2$lld、%3$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Plate %1$lld of %2$lld, %3$@"
+          }
+        }
+      }
+    }
+  }
+}

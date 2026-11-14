@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 /// Files opened recently, inside or outside the library. External files are kept as
 /// security-scoped bookmarks, so a model opened from iCloud Drive or another app's
@@ -36,13 +37,16 @@ final class RecentsStore {
         guard !SampleModels.isSample(file.url) else { return }
         guard let bookmark = try? Bookmark.make(file.url) else { return }
         let path = file.url.standardizedFileURL.path
-        let libraryPath = Self.libraryPath(of: file.url)
+        let libraryPath = LibraryLocation.relativePath(of: file.url)
         // The same file, however it was remembered, and dead rows of the same name
-        // (left from before the container moved).
+        // (left from before the container moved). Each bookmark resolved once: this
+        // runs on the main thread as a model opens.
         entries.removeAll { entry in
             if let libraryPath, entry.libraryPath == libraryPath { return true }
-            if entry.name == file.name, entry.fileExtension == file.url.pathExtension.uppercased(), resolve(entry) == nil { return true }
-            return resolve(entry)?.standardizedFileURL.path == path
+            guard let resolved = resolve(entry) else {
+                return entry.name == file.name && entry.fileExtension == file.url.pathExtension.uppercased()
+            }
+            return resolved.standardizedFileURL.path == path
         }
         entries.insert(Entry(
             id: UUID(),
@@ -57,15 +61,6 @@ final class RecentsStore {
         save()
     }
 
-    /// The path below the library folder, for a file in the library (not in Recently Deleted).
-    nonisolated static func libraryPath(of url: URL) -> String? {
-        let root = LibraryLocation.current.standardizedFileURL.resolvingSymlinksInPath().path + "/"
-        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
-        guard path.hasPrefix(root) else { return nil }
-        let relative = String(path.dropFirst(root.count))
-        return relative.hasPrefix(".recently-deleted/") ? nil : relative
-    }
-
     func resolve(_ entry: Entry) -> URL? {
         Self.location(of: entry.libraryPath, bookmark: entry.bookmark)
     }
@@ -76,19 +71,11 @@ final class RecentsStore {
         return try? Bookmark.resolve(bookmark, isStale: &stale)
     }
 
-    /// There, or in iCloud as a placeholder (it downloads when opened).
-    nonisolated private static func exists(_ url: URL) -> Bool {
-        let fileManager = FileManager.default
-        return fileManager.fileExists(atPath: url.path)
-            || fileManager.fileExists(atPath: url.deletingLastPathComponent().appending(path: ".\(url.lastPathComponent).icloud").path)
-    }
-
-    /// Whether the entry's file is still there and openable.
+    /// Whether the entry's file is still there and openable (in iCloud counts: it
+    /// downloads when opened).
     func isAvailable(_ entry: Entry) -> Bool {
         guard let url = resolve(entry) else { return false }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        return Self.exists(url)
+        return url.withSecurityScope { ICloudFile.existsHereOrInCloud(url) }
     }
 
     /// What a row shows about an entry's file. Resolving a bookmark and reading the
@@ -104,16 +91,14 @@ final class RecentsStore {
 
     nonisolated static func fileState(for entry: Entry) -> FileState {
         guard let url = location(of: entry.libraryPath, bookmark: entry.bookmark) else { return FileState() }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        let fileManager = FileManager.default
-        if !fileManager.fileExists(atPath: url.path) {
-            return FileState(url: url, isAvailable: exists(url), isDownloaded: false)
+        return url.withSecurityScope {
+            if !FileManager.default.fileExists(atPath: url.path) {
+                return FileState(url: url, isAvailable: ICloudFile.existsHereOrInCloud(url), isDownloaded: false)
+            }
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .ubiquitousItemDownloadingStatusKey])
+            return FileState(url: url, isAvailable: true, size: values?.fileSize.map(Int64.init), modified: values?.contentModificationDate,
+                             isDownloaded: ICloudFile.isDownloaded(status: values?.ubiquitousItemDownloadingStatus))
         }
-        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .ubiquitousItemDownloadingStatusKey])
-        let status = values?.ubiquitousItemDownloadingStatus
-        return FileState(url: url, isAvailable: true, size: values?.fileSize.map(Int64.init), modified: values?.contentModificationDate,
-                         isDownloaded: status == nil || status == .current || status == .downloaded)
     }
 
     func contains(fileAt url: URL) -> Bool {
@@ -164,9 +149,11 @@ final class RecentsStore {
     }
 
     private func save() {
-        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(entries) {
-            try? data.write(to: file, options: .atomic)
+        do {
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(entries).write(to: file, options: .atomic)
+        } catch {
+            Logger(subsystem: "Facets", category: "recents").error("Couldn't save Recents: \(error as NSError, privacy: .public)")
         }
     }
 }

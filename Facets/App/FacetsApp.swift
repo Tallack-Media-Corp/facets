@@ -15,21 +15,43 @@ struct FacetsApp: App {
 
     init() {
         FacetsTips.configure()
+        #if os(macOS) && DEBUG
+        // FACETS_APPEARANCE=light|dark: this app's own appearance, for the visual sweep
+        // (the system's is left alone).
+        switch ProcessInfo.processInfo.environment["FACETS_APPEARANCE"] {
+        case "dark": NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        case "light": NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        default: break
+        }
+        #endif
+    }
+
+    /// The visual sweep (FACETS_BACKGROUND=1, debug builds) only looks: on the Mac the
+    /// library is the real one, so no purging or pruning at launch.
+    private static var isSweep: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["FACETS_BACKGROUND"] == "1"
+        #else
+        false
+        #endif
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "library") {
             SceneRoot()
                 .environment(library)
                 .environment(recents)
                 .environment(locations)
                 .environment(settings)
-                .task { await library.purgeExpired() }
-                .task(priority: .background) { await ThumbnailStore.shared.pruneStale() }
+                .task { if !Self.isSweep { await library.purgeExpired() } }
+                .task(priority: .background) { if !Self.isSweep { await ThumbnailStore.shared.pruneStale() } }
                 .task { await library.connectToICloud() }
         }
         #if os(macOS)
         .defaultSize(width: 1100, height: 760)
+        // Files from the Finder go through MacOpener, which decides whether a library
+        // window comes with them; otherwise SwiftUI made one whenever none was open.
+        .handlesExternalEvents(matching: [])
         #endif
         .commands {
             ViewerCommands()
@@ -50,6 +72,9 @@ struct FacetsApp: App {
             }
         }
         .defaultSize(width: 900, height: 700)
+        .handlesExternalEvents(matching: [])
+        // No File › New › New Model Window: a model window without a file is empty.
+        .commandsRemoved()
         // A restored window would hold a bare URL without the user's permission to it.
         .restorationBehavior(.disabled)
 
@@ -71,6 +96,16 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         MainActor.assumeIsolated { MacOpener.shared.open(urls) }
     }
+
+    /// A library model picked in Spotlight. Taken here like a Finder open, since no
+    /// window group makes a window for it any more.
+    func application(_ application: NSApplication, continue userActivity: NSUserActivity,
+                     restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
+        guard userActivity.activityType == CSSearchableItemActionType,
+              let url = SpotlightIndexer.url(for: userActivity) else { return false }
+        MainActor.assumeIsolated { MacOpener.shared.open([url]) }
+        return true
+    }
 }
 
 /// Puts its window in front once it's on screen, and again just after, so a model
@@ -78,6 +113,10 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
 private struct BringToFront: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
+        #if DEBUG
+        // FACETS_BACKGROUND=1 (the visual sweep): never take focus from the person at the Mac.
+        if ProcessInfo.processInfo.environment["FACETS_BACKGROUND"] == "1" { return view }
+        #endif
         Task { @MainActor in
             for delay in [0.05, 0.6, 1.5] {
                 try? await Task.sleep(for: .seconds(delay))
@@ -97,8 +136,13 @@ private struct BringToFront: NSViewRepresentable {
 @MainActor
 final class MacOpener {
     static let shared = MacOpener()
+    static let libraryWindowID = "library" // The id of the first WindowGroup in FacetsApp.
     private var openWindow: OpenWindowAction?
     private var waiting: [URL] = []
+    /// Library windows on screen, counted by SceneRoot as they come and go.
+    var libraryWindows = 0
+    /// False until a window appears. A launch with files opens no window of its own.
+    private var windowSeen = false
 
     func open(_ urls: [URL]) {
         waiting.append(contentsOf: urls.filter(\.isFileURL))
@@ -107,18 +151,34 @@ final class MacOpener {
 
     /// Called by each window as it appears; any one will do (the action is app-wide).
     func register(_ action: OpenWindowAction) {
+        windowSeen = true
+        openWindow = action
+        drain()
+    }
+
+    /// Called by the menu commands, which exist before any window does.
+    func prepare(_ action: OpenWindowAction) {
+        // Menus re-evaluate on every focus change; only the first call matters.
+        guard openWindow == nil else { return }
         openWindow = action
         drain()
     }
 
     private func drain() {
         guard let openWindow, !waiting.isEmpty else { return }
-        let root = LibraryLocation.current.standardizedFileURL.resolvingSymlinksInPath().path + "/"
-        for url in waiting {
-            let inLibrary = url.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root)
-            openWindow(value: ModelFileRef(url: url, isExternal: !inLibrary))
-        }
+        // Opening a window can bring up another that calls back in here, so take the
+        // files first or they open twice.
+        let urls = waiting
         waiting.removeAll()
+        let launching = !windowSeen
+        for url in urls {
+            // No FileLibrary here: files can arrive before any window has one.
+            openWindow(value: ModelFileRef(url: url))
+        }
+        // At launch the library comes too; once running, only if the setting asks.
+        if libraryWindows == 0, launching || UserDefaults.standard.bool(forKey: ViewerSettings.showsLibraryOnOpenKey) {
+            openWindow(id: Self.libraryWindowID)
+        }
     }
 }
 
@@ -136,6 +196,7 @@ private struct OpenCommands: Commands {
     @FocusedValue(\.sceneRouter) private var router
 
     var body: some Commands {
+        let _ = Task { MacOpener.shared.prepare(openWindow) }
         CommandGroup(after: .newItem) {
             Button("Open…") {
                 let panel = NSOpenPanel()
@@ -143,12 +204,12 @@ private struct OpenCommands: Commands {
                 panel.allowsMultipleSelection = true
                 guard panel.runModal() == .OK else { return }
                 for url in panel.urls {
-                    openWindow(value: ModelFileRef(url: url, isExternal: !library.contains(url)))
+                    openWindow(value: ModelFileRef(url: url, libraryRoot: library.root))
                 }
             }
             .keyboardShortcut("o")
             Button("Add Location…") {
-                guard let url = LocationPanel.choose(), let location = try? locations.add(url) else { return }
+                guard let location = LocationPanel.addLocation(to: locations) else { return }
                 router?.tab = .location(location.id)
             }
             .keyboardShortcut("o", modifiers: [.command, .shift])
@@ -170,7 +231,7 @@ private struct SettingsWindow: View {
         SettingsView()
             .formStyle(.grouped)
             .frame(minWidth: 460, idealWidth: 520, minHeight: 480, idealHeight: 640)
-            .toastHost(clearance: 24)
+            .toastHost()
             .environment(toasts)
     }
 }
@@ -183,25 +244,19 @@ private struct ModelWindow: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        NavigationStack {
-            ViewerScreen(file: file)
-        }
+        ViewerScreen(file: file)
         .onAppear { MacOpener.shared.register(openWindow) }
         // On a launch from the Finder the library window comes up after this one and
         // covers it, so the model looked never to have opened. Come to the front.
         .background(BringToFront())
         .formStyle(.grouped)
         // The toast host reads the toast centre, so it goes inside it.
-        .toastHost(clearance: 24)
+        .toastHost()
         .environment(router)
         .environment(toasts)
         // "Find in Files…" and "Open Another File…" ask the router for a file; here
         // that's another window.
-        .onChange(of: router.presented) { _, next in
-            guard let next else { return }
-            openWindow(value: next)
-            router.presented = nil
-        }
+        .opensPresentedModelsInWindows(router)
     }
 }
 #endif
@@ -213,6 +268,7 @@ private struct SceneRoot: View {
     @State private var toasts = ToastCenter()
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     #endif
     @Environment(FileLibrary.self) private var library
     @Environment(ViewerSettings.self) private var settings
@@ -228,21 +284,30 @@ private struct SceneRoot: View {
             #if os(macOS)
             .focusedSceneValue(\.sceneRouter, router)
             // Files from the Finder that came in before this window was up.
-            .onAppear { MacOpener.shared.register(openWindow) }
+            .onAppear {
+                MacOpener.shared.libraryWindows += 1
+                MacOpener.shared.register(openWindow)
+            }
+            .onDisappear { MacOpener.shared.libraryWindows -= 1 }
             #endif
-            // Files, Mail, Messages and the share sheet hand files over here.
+            #if os(iOS)
+            // Files, Mail, Messages and the share sheet hand files over here. On the
+            // Mac, MacOpener has them all; taking them here too opened models twice.
             .onOpenURL { url in
                 router.open(url, library: library)
             }
+            #endif
             // An open window takes the file rather than the app making a new one
             // (on the Mac, the model then gets a window of its own).
             .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
-            // A library model picked from a Spotlight search.
+            #if os(iOS)
+            // A library model picked from a Spotlight search. (On the Mac, MacAppDelegate.)
             .onContinueUserActivity(CSSearchableItemActionType) { activity in
                 if let url = SpotlightIndexer.url(for: activity) {
                     router.presented = ModelFileRef(url: url, isExternal: false)
                 }
             }
+            #endif
             // A model a Shortcut asked to open: the window in front takes it.
             .onChange(of: pending.file) { claimPendingOpen() }
             .onChange(of: scenePhase) { _, phase in
@@ -264,8 +329,13 @@ private struct SceneRoot: View {
     #if DEBUG
     /// Launch options for screenshots and quick checks:
     /// `FACETS_OPEN=<path below Documents>` opens a library file (`sample`, the sample),
-    /// `FACETS_TAB=library|browse|recents|settings|search` picks the screen,
-    /// `FACETS_BED=<preset id>|none` the printer.
+    /// `FACETS_TAB=library|browse|recents|settings|search` picks the screen (on the
+    /// Mac, `settings` opens the Settings window), `FACETS_BED=<preset id>|none` the
+    /// printer, and on a simulator `FACETS_SAMPLE=library` copies the sample into an
+    /// empty library and `FACETS_DELETED=demo` puts it in an empty Recently Deleted. Other screens: FACETS_PAGE (SettingsView), FACETS_SHEET
+    /// (FolderView, ViewerScreen), FACETS_TOOL, FACETS_INFO and FACETS_UNITS
+    /// (ViewerScreen), FACETS_TIPS (FacetsTips), FACETS_BACKGROUND (BringToFront, and no
+    /// launch tidying), FACETS_APPEARANCE (FacetsApp, Mac).
     private func openFromLaunchEnvironment() {
         let env = ProcessInfo.processInfo.environment
         if let bed = env["FACETS_BED"] {
@@ -273,16 +343,35 @@ private struct SceneRoot: View {
         }
         switch env["FACETS_TAB"] {
         case "browse":
-            UserDefaults.standard.set("Browse", forKey: "library.section")
+            UserDefaults.standard.set(LibraryTab.Section.browse.rawValue, forKey: LibraryTab.sectionKey)
             router.tab = .library
         case "library":
-            UserDefaults.standard.set("Library", forKey: "library.section")
+            UserDefaults.standard.set(LibraryTab.Section.library.rawValue, forKey: LibraryTab.sectionKey)
             router.tab = .library
         case "recents": router.tab = .recents
+        #if os(macOS)
+        case "settings": openSettings()
+        #else
         case "settings": router.tab = .settings
+        #endif
         case "search": router.tab = .search
         default: break
         }
+        #if targetEnvironment(simulator)
+        // These write to the library, so simulators only (never the Mac's real one).
+        if let sample = SampleModels.benchy {
+            let wantsModel = env["FACETS_SAMPLE"] == "library", wantsDeleted = env["FACETS_DELETED"] == "demo"
+            Task {
+                if wantsModel, FileLibrary.allModels(in: library.root).isEmpty {
+                    _ = try? await library.importFiles([sample], into: library.root)
+                }
+                if wantsDeleted, await library.recentlyDeleted().isEmpty,
+                   let copy = try? await library.importFiles([sample], into: library.root).first {
+                    _ = try? library.delete([LibraryItem(url: copy, isFolder: false, size: nil, modified: nil)])
+                }
+            }
+        }
+        #endif
         if env["FACETS_OPEN"] == "sample", let url = SampleModels.benchy {
             router.presented = ModelFileRef(url: url, isExternal: true)
         } else if let path = env["FACETS_OPEN"], !path.isEmpty {

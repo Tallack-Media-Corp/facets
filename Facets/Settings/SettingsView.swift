@@ -24,6 +24,10 @@ struct SettingsView: View {
         #endif
     }
     @State private var cacheSize: Int64?
+    #if DEBUG
+    /// FACETS_PAGE=recentlyDeleted|printerBed|about opens that page of Settings.
+    @State private var debugPage = ProcessInfo.processInfo.environment["FACETS_PAGE"]
+    #endif
 
     var body: some View {
         @Bindable var settings = settings
@@ -67,7 +71,7 @@ struct SettingsView: View {
                         NavigationLink {
                             PrinterBedPicker()
                         } label: {
-                            LabeledContent("Printer Bed", value: settings.bed?.title ?? "None")
+                            LabeledContent("Printer Bed", value: settings.bed?.title ?? String(localized: "None"))
                         }
                     }
                 } header: {
@@ -92,6 +96,10 @@ struct SettingsView: View {
                     Button("Show in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([library.root])
                     }
+                    Toggle(isOn: $settings.showsLibraryOnOpen) {
+                        Text("Show Library When Opening a File")
+                        Text("When you open a model from the Finder and no library window is open, open one too.")
+                    }
                     #endif
                     Toggle(isOn: $settings.fetchesBrowsePreviews) {
                         Text("Download Small Models for Previews")
@@ -100,7 +108,7 @@ struct SettingsView: View {
                     NavigationLink {
                         RecentlyDeletedView()
                     } label: {
-                        Label("Recently Deleted", systemImage: "trash")
+                        Label("Recently Deleted", systemImage: Symbol.recentlyDeleted)
                     }
                     Button("Clear Thumbnail Cache") {
                         Task {
@@ -111,7 +119,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Storage")
                 } footer: {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: Spacing.snug) {
                         Text(library.location == .iCloud
                              ? "The library is the Facets folder in iCloud Drive, shared by your iPhone, iPad and Mac."
                              : "To share the library between your devices, sign in to iCloud and turn on iCloud Drive for Facets. Models here move to iCloud Drive when you do.")
@@ -124,12 +132,12 @@ struct SettingsView: View {
                 Section {
                     LabeledContent("Version", value: AppInfo.version)
                     Link(destination: AppInfo.sourceURL) {
-                        Label("Source Code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                        Label("Source Code on GitHub", systemImage: Symbol.sourceCode)
                     }
                     NavigationLink {
                         AboutView()
                     } label: {
-                        Label("About Facets", systemImage: "info.circle")
+                        Label("About Facets", systemImage: Symbol.about)
                     }
                 } header: {
                     Text("About")
@@ -139,6 +147,16 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .task { cacheSize = await ThumbnailStore.shared.diskUsage() }
+            #if DEBUG
+            .navigationDestination(item: $debugPage) { page in
+                switch page {
+                case "recentlyDeleted": RecentlyDeletedView()
+                case "printerBed": PrinterBedPicker()
+                case "about": AboutView()
+                default: EmptyView()
+                }
+            }
+            #endif
         }
     }
 }
@@ -148,23 +166,21 @@ private struct ModelColorPicker: View {
     @Binding var hex: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Spacing.md) {
             // Every preset visible at once, wrapping as the row narrows or text grows.
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44, maximum: 52), spacing: 4)], spacing: 4) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: Size.minTapTarget, maximum: Size.swatchColumnMax), spacing: Spacing.xs)], spacing: Spacing.xs) {
                 ForEach(ModelColorPreset.all) { preset in
                     let selected = preset.hex.caseInsensitiveCompare(hex) == .orderedSame
                     Button {
                         hex = preset.hex
                     } label: {
-                        Circle()
-                            .fill(Color(hex: preset.hex) ?? .gray)
-                            .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
-                            .padding(selected ? 4 : 0)
+                        // Chosen, it shrinks inside a ring of the tint.
+                        ColorSwatch(color: Color(hex: preset.hex) ?? .gray, size: selected ? Size.swatch - 2 * Spacing.xs : Size.swatch)
+                            .frame(width: Size.swatch, height: Size.swatch)
                             .overlay {
-                                if selected { Circle().strokeBorder(.tint, lineWidth: 2.5) }
+                                if selected { Circle().strokeBorder(.tint, lineWidth: Stroke.swatchSelection) }
                             }
-                            .frame(width: 36, height: 36)
-                            .frame(width: 44, height: 44)
+                            .frame(width: Size.minTapTarget, height: Size.minTapTarget)
                             .contentShape(.circle)
                     }
                     .buttonStyle(.plain)
@@ -172,7 +188,7 @@ private struct ModelColorPicker: View {
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, Spacing.hair)
             ColorPicker("Custom Colour", selection: Binding(
                 get: { Color(hex: hex) ?? Color(hex: Palette.filamentOrange) ?? .orange },
                 set: { hex = $0.hexString }
@@ -184,31 +200,56 @@ private struct ModelColorPicker: View {
 private struct AboutView: View {
     @Environment(FileLibrary.self) private var library
 
+    private static var summary: String {
+        #if os(macOS)
+        String(localized: "A small, fast viewer for 3D printing files. Open STL, 3MF and OBJ models from anywhere on your Mac, keep a library of them, and preview them right in the Finder.")
+        #else
+        String(localized: "A small, fast viewer for 3D printing files. Open STL, 3MF and OBJ models from anywhere on your iPhone or iPad, keep a library of them, and preview them right in the Files app.")
+        #endif
+    }
+
     var body: some View {
         Form {
             Section {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
                     Text("Facets")
                         .font(.title2.bold())
-                    Text("A small, fast viewer for 3D printing files. Open STL, 3MF and OBJ models from anywhere on your iPhone or iPad, keep a library of them, and preview them right in the Files app.")
+                    Text(Self.summary)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, Spacing.xs)
             }
+            #if os(macOS)
             Section("Opening Files") {
-                Label("Tap an STL, 3MF or OBJ in Files, Mail or Messages and choose Facets.", systemImage: "doc")
+                Label("Double-click an STL, 3MF or OBJ in the Finder, or choose File › Open.", systemImage: Symbol.document)
+                Label(library.location == .iCloud
+                      ? "Your library is the Facets folder in iCloud Drive."
+                      : "Your library is kept on this Mac. Show in Finder, in Settings, opens it.", systemImage: Symbol.folder)
+                Label("To look through a folder without importing, choose File › Add Location.", systemImage: Symbol.addLocation)
+                Label("Select a model in the Finder and press Space for a 3D Quick Look preview.", systemImage: Symbol.quickLook)
+            }
+            Section("Mouse and Trackpad") {
+                Label("Drag to turn the model; arrow keys turn it in steps", systemImage: Symbol.gestureTurn)
+                Label("Scroll or pinch to zoom; two fingers or Option-drag to move", systemImage: Symbol.gestureMove)
+                Label("Rotate two fingers on the trackpad to spin", systemImage: Symbol.gestureSpin)
+                Label("Double-click to fit the model", systemImage: Symbol.doubleClick)
+            }
+            #else
+            Section("Opening Files") {
+                Label("Tap an STL, 3MF or OBJ in Files, Mail or Messages and choose Facets.", systemImage: Symbol.document)
                 Label(library.location == .iCloud
                       ? "In the Files app, your library is the Facets folder in iCloud Drive."
-                      : "In the Files app, your library is under \(SettingsView.deviceName) › Facets.", systemImage: "folder")
-                Label("To look through a folder without importing, add it under Library › Browse.", systemImage: "folder.badge.plus")
-                Label("Long-press a model in Files for a 3D Quick Look preview.", systemImage: "eye")
+                      : "In the Files app, your library is under \(SettingsView.deviceName) › Facets.", systemImage: Symbol.folder)
+                Label("To look through a folder without importing, add it under Library › Browse.", systemImage: Symbol.addLocation)
+                Label("Long-press a model in Files for a 3D Quick Look preview.", systemImage: Symbol.quickLook)
             }
             Section("Gestures") {
-                Label("Drag to turn the model", systemImage: "hand.draw")
-                Label("Pinch to zoom, two fingers to move", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
-                Label("Twist two fingers to spin", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
-                Label("Double tap to fit the model", systemImage: "hand.tap")
+                Label("Drag to turn the model", systemImage: Symbol.gestureTurn)
+                Label("Pinch to zoom, two fingers to move", systemImage: Symbol.gestureMove)
+                Label("Twist two fingers to spin", systemImage: Symbol.gestureSpin)
+                Label("Double-tap to fit the model", systemImage: Symbol.gestureFit)
             }
+            #endif
             Section {
                 OpenSampleButton()
             } header: {

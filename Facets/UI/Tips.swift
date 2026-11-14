@@ -76,16 +76,16 @@ extension FacetsTip {
 /// size chip's popover.
 struct FacetsTipStyle: TipViewStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Spacing.md) {
             if let image = configuration.image {
                 image
                     .font(.title3)
                     .foregroundStyle(.tint)
-                    .frame(width: 28)
-                    .padding(.top, 2)
+                    .frame(width: Size.tipGlyphWidth)
+                    .padding(.top, Spacing.hair)
                     .accessibilityHidden(true)
             }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
                 configuration.title?
                     .font(.headline)
                 configuration.message?
@@ -98,23 +98,15 @@ struct FacetsTipStyle: TipViewStyle {
                             .font(.footnote.weight(.semibold))
                     }
                     .buttonStyle(.borderless)
-                    .padding(.top, 4)
+                    .padding(.top, Spacing.xs)
                 }
             }
             Spacer(minLength: 0)
-            Button {
+            CardCloseButton(style: .tip, label: Text("Close Tip")) {
                 configuration.tip.invalidate(reason: .tipClosed)
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 30, height: 30)
-                    .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close Tip")
         }
-        .padding(16)
+        .padding(CardPadding.tip)
     }
 }
 
@@ -138,9 +130,7 @@ struct FloatingTip: View {
             TipView(tip)
                 .tipViewStyle(FacetsTipStyle())
                 .tipBackground(.clear)
-                .glassEffect(.regular, in: .rect(cornerRadius: 24))
-                .frame(maxWidth: 440)
-                .padding(.horizontal)
+                .glassCard()
                 // One card out, the next in, rather than their text cross-fading.
                 .id(tip.id)
                 .transition(.opacity)
@@ -160,7 +150,7 @@ struct AddModelsTip: FacetsTip {
         Text("Import STL, 3MF and OBJ files or make a folder. In Files, Mail or any app, Share › Facets saves one here too.")
         #endif
     }
-    var image: Image? { Image(systemName: "plus") }
+    var image: Image? { Image(systemName: Symbol.add) }
 }
 
 struct BrowseTip: FacetsTip {
@@ -173,7 +163,8 @@ struct BrowseTip: FacetsTip {
         Text("Add a folder from Files to look through its models where they are, and save the ones you want.")
         #endif
     }
-    var image: Image? { Image(systemName: "folder") }
+    // The Add Location… control's glyph, on both platforms (iOS has it in Browse).
+    var image: Image? { Image(systemName: Symbol.addLocation) }
 }
 
 struct ViewOptionsTip: FacetsTip {
@@ -186,7 +177,7 @@ struct ViewOptionsTip: FacetsTip {
         Text("Change how the library is shown and sorted. Touch and hold a model to rename, move or share it.")
         #endif
     }
-    var image: Image? { Image(systemName: "ellipsis") }
+    var image: Image? { Image(systemName: Symbol.viewOptions) }
 }
 
 // MARK: Viewer
@@ -201,7 +192,7 @@ struct SizeTip: FacetsTip {
         Text("The model's real size. Tap it to choose your printer and see whether the model fits its bed.")
         #endif
     }
-    var image: Image? { Image(systemName: "ruler") }
+    var image: Image? { Image(systemName: Symbol.modelSize) }
 }
 
 struct FitTip: FacetsTip {
@@ -214,33 +205,33 @@ struct FitTip: FacetsTip {
         Text("Brings the whole model back into view. Double-tapping the model does the same.")
         #endif
     }
-    var image: Image? { Image(systemName: "viewfinder") }
+    var image: Image? { Image(systemName: Symbol.fit) }
 }
 
 struct PresetViewsTip: FacetsTip {
     let name = "preset-views"
     var title: Text { Text("Preset Views") }
     var message: Text? { Text("Jump straight to the front, back, sides, top or bottom.") }
-    var image: Image? { Image(systemName: "move.3d") }
+    var image: Image? { Image(systemName: Symbol.presetViews) }
 }
 
 struct ToolsTip: FacetsTip {
     let name = "tools"
     var title: Text { Text("Tools") }
     var message: Text? { Text("Measure between two points, lay a face flat on the plate, or cut a cross-section to see inside.") }
-    var image: Image? { Image(systemName: "wrench.and.screwdriver") }
+    var image: Image? { Image(systemName: Symbol.tools) }
 }
 
 struct DisplayTip: FacetsTip {
     let name = "display"
     var title: Text { Text("Display") }
     var message: Text? { Text("Wireframe, the build plate grid, and the printers you've used lately.") }
-    var image: Image? { Image(systemName: "slider.horizontal.3") }
+    var image: Image? { Image(systemName: Symbol.display) }
 }
 
 struct InfoTip: FacetsTip {
     let name = "info"
     var title: Text { Text("Info") }
     var message: Text? { Text("Volume, a print estimate, the file's units, and the objects in a project, which you can hide.") }
-    var image: Image? { Image(systemName: "info.circle") }
+    var image: Image? { Image(systemName: Symbol.info) }
 }

@@ -112,6 +112,12 @@ private struct Reader {
     /// Placed meshes left to make. Components can repeat components, so a tiny
     /// file could otherwise ask for millions of copies.
     var leafBudget = 100_000
+    /// Triangles placed in all, so one big mesh placed many times can't run away either.
+    var triangleBudget = 50_000_000
+    /// Model files inflated so far; the per-entry cap alone allows many large ones.
+    var inflated = 0
+    /// Real slicer configs are well under this; a huge one costs gigabytes to parse.
+    static let configLimit = 8_000_000
 
     init(archive: ZipArchive) {
         self.archive = archive
@@ -124,6 +130,8 @@ private struct Reader {
         let filamentColors = filamentColours()
 
         var parts: [ModelPart] = []
+        // Painted geometry split by filament, once however often it's placed.
+        var splits: [ObjectIdentifier: [Int: MeshGeometry]] = [:]
         var objects: [ModelObject] = []
         for (index, item) in root.build.enumerated() {
             let itemPath = item.path.map(ZipArchive.normalize) ?? rootPath
@@ -147,7 +155,7 @@ private struct Reader {
                 } else if let pid = leaf.pid ?? object.pid {
                     let pindex = leaf.pid != nil ? (leaf.pindex ?? 0) : (object.pindex ?? 0)
                     let file = files[leafPath]
-                    if let group = file?.colors[pid] ?? root.colors[pid], pindex < group.count {
+                    if let group = file?.colors[pid] ?? root.colors[pid], group.indices.contains(pindex) {
                         color = group[pindex]
                     }
                 } else if filamentColors.count == 1 {
@@ -160,7 +168,8 @@ private struct Reader {
                 }
                 // Painted in several filaments: one part per filament, so each draws
                 // in its own colour. Unpainted triangles keep the object's.
-                if !leaf.paint.isEmpty, let painted = TrianglePaint.split(geometry, paint: leaf.paint) {
+                if !leaf.paint.isEmpty, let painted = splits[ObjectIdentifier(geometry)] ?? TrianglePaint.split(geometry, paint: leaf.paint) {
+                    splits[ObjectIdentifier(geometry)] = painted
                     for state in painted.keys.sorted() {
                         guard let piece = painted[state], piece.triangleCount > 0 else { continue }
                         let pieceColor = state == 0 ? color : Self.filamentColor(state, in: filamentColors)
@@ -178,7 +187,7 @@ private struct Reader {
 
         // Some writers put objects in resources but leave the build empty.
         if parts.isEmpty, root.build.isEmpty {
-            for (index, object) in root.objects.values.sorted(by: { $0.id < $1.id }).enumerated() {
+            for (index, object) in root.objects.values.sorted(by: { $0.id < $1.id }).prefix(10_000).enumerated() {
                 guard let geometry = object.geometry, geometry.triangleCount > 0 else { continue }
                 let name = object.name ?? "Object \(index + 1)"
                 parts.append(ModelPart(id: parts.count, name: name, geometry: geometry, objectID: index))
@@ -211,13 +220,14 @@ private struct Reader {
     private mutating func flatten(_ object: ObjectDef, path: String, transform: simd_float4x4, depth: Int, into leaves: inout [(ObjectDef, simd_float4x4, String)], visiting: Set<String> = []) {
         // An object that contains itself (directly or further down) is a loop.
         let key = "\(path)#\(object.id)"
-        guard depth < 16, leafBudget > 0, !visiting.contains(key) else { return }
-        if object.geometry != nil {
+        guard depth < 16, leafBudget > 0, triangleBudget > 0, !visiting.contains(key) else { return }
+        if let geometry = object.geometry {
             leaves.append((object, transform, path))
             leafBudget -= 1
+            triangleBudget -= geometry.triangleCount
         }
         for component in object.components {
-            guard leafBudget > 0 else { return }
+            guard leafBudget > 0, triangleBudget > 0 else { return }
             let componentPath = component.path.map(ZipArchive.normalize) ?? path
             guard let file = files[componentPath] ?? (try? modelFile(componentPath)),
                   let child = file.objects[component.objectID] else { continue }
@@ -239,6 +249,8 @@ private struct Reader {
         let key = ZipArchive.normalize(path)
         if let cached = files[key] { return cached }
         let data = try archive.data(for: key)
+        inflated += data.count
+        guard inflated <= 2 * ZipArchive.maximumEntrySize else { throw ModelError.tooLarge }
         let file = try data.withUnsafeBytes { try Self.parseModel($0) }
         files[key] = file
         return file
@@ -281,8 +293,10 @@ private struct Reader {
                         current = nil
                     }
                 } else if scanner.isElement("mesh") {
-                    positions.removeAll(keepingCapacity: true)
-                    indices.removeAll(keepingCapacity: true)
+                    // Not keepingCapacity: the last mesh still shares these buffers, so
+                    // every later mesh would get a copy as large as the largest so far.
+                    positions.removeAll()
+                    indices.removeAll()
                     paint.removeAll()
                 } else if scanner.isElement("component") {
                     if let id = scanner.int("objectid") {
@@ -326,10 +340,11 @@ private struct Reader {
                             t += 3
                         }
                     }
-                    current?.geometry = MeshGeometry(positions: positions, indices: valid)
-                    // Dropping bad triangles renumbers the rest; painting would land
-                    // on the wrong ones, so it's left off.
-                    current?.paint = valid.count == indices.count ? paint : [:]
+                    let geometry = MeshGeometry(positions: positions, indices: valid)
+                    current?.geometry = geometry
+                    // Dropping bad triangles (here, or damaged coordinates in MeshGeometry)
+                    // renumbers the rest; painting would land on the wrong ones, so it's left off.
+                    current?.paint = valid.count == indices.count && geometry.triangleCount == valid.count / 3 ? paint : [:]
                 } else if scanner.isName(name, "object") {
                     if let object = current { file.objects[object.id] = object }
                     current = nil
@@ -376,7 +391,7 @@ private struct Reader {
     // MARK: Slicer metadata
 
     private func slicerSettings() -> ([Int: SlicerObject], [SlicerPlate]) {
-        guard let data = try? archive.data(for: "Metadata/model_settings.config") else { return ([:], []) }
+        guard let data = try? archive.data(for: "Metadata/model_settings.config", limit: Self.configLimit) else { return ([:], []) }
         return data.withUnsafeBytes { raw in
             var scanner = XMLScanner(raw)
             var objects: [Int: SlicerObject] = [:]
@@ -455,13 +470,13 @@ private struct Reader {
             let size = hi - lo
             return size.x > 0 && size.y > 0 ? size : nil
         }
-        if let data = try? archive.data(for: "Metadata/project_settings.config"),
+        if let data = try? archive.data(for: "Metadata/project_settings.config", limit: Self.configLimit),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let area = json["printable_area"] as? [String], let size = box(area) {
             let height = (json["printable_height"] as? String).flatMap(Float.init) ?? (json["printable_height"] as? NSNumber)?.floatValue
             return SlicerBed(width: size.x, depth: size.y, height: height, printer: json["printer_model"] as? String, plateCount: plateCount)
         }
-        if let data = try? archive.data(for: "Metadata/Slic3r_PE.config"),
+        if let data = try? archive.data(for: "Metadata/Slic3r_PE.config", limit: Self.configLimit),
            let text = String(data: data, encoding: .utf8),
            let line = text.split(separator: "\n").first(where: { $0.contains("bed_shape =") }),
            let value = line.split(separator: "=").last,
@@ -474,7 +489,7 @@ private struct Reader {
     /// Time and filament per plate from the slicer's last slice, saved by Bambu Studio
     /// and Orca in `Metadata/slice_info.config`. A project saved unsliced has none.
     private func sliceEstimates() -> [SliceEstimate] {
-        guard let data = try? archive.data(for: "Metadata/slice_info.config") else { return [] }
+        guard let data = try? archive.data(for: "Metadata/slice_info.config", limit: Self.configLimit) else { return [] }
         return data.withUnsafeBytes { raw in
             var scanner = XMLScanner(raw)
             var estimates: [SliceEstimate] = []
@@ -524,12 +539,12 @@ private struct Reader {
     /// Filament colours, indexed by extruder: Bambu Studio / Orca project settings,
     /// or PrusaSlicer's config (`; extruder_colour = #…;#…`, else filament_colour).
     private func filamentColours() -> [SIMD4<Float>] {
-        if let data = try? archive.data(for: "Metadata/project_settings.config"),
+        if let data = try? archive.data(for: "Metadata/project_settings.config", limit: Self.configLimit),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let colours = json["filament_colour"] as? [String] {
             return colours.map { parseColor($0) ?? SIMD4(0.8, 0.8, 0.8, 1) }
         }
-        guard let data = try? archive.data(for: "Metadata/Slic3r_PE.config"), let text = String(data: data, encoding: .utf8) else { return [] }
+        guard let data = try? archive.data(for: "Metadata/Slic3r_PE.config", limit: Self.configLimit), let text = String(data: data, encoding: .utf8) else { return [] }
         func values(_ key: String) -> [String]? {
             guard let line = text.split(separator: "\n").first(where: { $0.hasPrefix("; \(key) = ") }) else { return nil }
             let list = line.dropFirst(key.count + 5).split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }

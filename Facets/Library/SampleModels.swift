@@ -21,23 +21,23 @@ enum SampleModels {
 /// window of its own on the Mac. Works where `openModel` isn't set (Settings).
 struct OpenSampleButton: View {
     var title = String(localized: "Open the Sample")
-    #if os(macOS)
-    @Environment(\.openWindow) private var openWindow
-    #else
-    @Environment(Router.self) private var router
-    #endif
 
     var body: some View {
         if let url = SampleModels.benchy {
-            Button(title, systemImage: "sailboat") {
-                let file = ModelFileRef(url: url, isExternal: true)
-                #if os(macOS)
-                openWindow(value: file)
-                #else
-                router.zoomSource = nil
-                router.presented = file
-                #endif
-            }
+            SampleButton(title: title, file: ModelFileRef(url: url, isExternal: true))
+                // No card to zoom from: it opens as a file from elsewhere does.
+                .environment(\.zoomNamespace, nil)
+                .presentsModels()
         }
+    }
+}
+
+private struct SampleButton: View {
+    let title: String
+    let file: ModelFileRef
+    @Environment(\.openModel) private var openModel
+
+    var body: some View {
+        Button(title, systemImage: Symbol.sampleModel) { openModel(file) }
     }
 }

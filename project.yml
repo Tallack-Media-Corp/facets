@@ -19,8 +19,8 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     SWIFT_EMIT_LOC_STRINGS: YES
     TARGETED_DEVICE_FAMILY: "1,2"
-    MARKETING_VERSION: "1.2"
-    CURRENT_PROJECT_VERSION: "16"
+    MARKETING_VERSION: "1.2.1"
+    CURRENT_PROJECT_VERSION: "19"
 
 packages:
   MeshKit:
@@ -183,6 +183,8 @@ targets:
     platform: iOS
     sources:
       - path: FacetsThumbnail
+      # Only the limits it shares with the preview; the rest of Shared is UI.
+      - path: Shared/QuickLookLimits.swift
     dependencies:
       - package: MeshKit
       - sdk: QuickLookThumbnailing.framework
@@ -356,6 +358,7 @@ targets:
       - path: FacetsThumbnail
         excludes:
           - Info.plist
+      - path: Shared/QuickLookLimits.swift
     dependencies:
       - package: MeshKit
       - sdk: QuickLookThumbnailing.framework
@@ -383,6 +386,32 @@ targets:
               - public.standard-tesselated-geometry-format
               - com.bambulab.3mf
               - public.geometry-definition-format
+  # The library's file handling, on a temporary folder: only the files it needs, not
+  # the app, so a test run never touches the real library.
+  FacetsTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: FacetsTests
+      - path: Facets/Library/FileLibrary.swift
+      - path: Facets/Library/LibraryLocation.swift
+      - path: Facets/Library/ICloudFile.swift
+      - path: Facets/Library/CoordinatedRead.swift
+      - path: Facets/Library/ThumbnailStore.swift
+      - path: Facets/UI/Platform.swift
+      - path: Facets/UI/Format.swift
+      # Printer verdicts carry their symbol.
+      - path: Facets/UI/Symbols.swift
+      - path: Facets/Settings/ViewerSettings.swift
+      - path: Facets/Settings/PrinterBeds.swift
+      - path: Facets/App/LibraryFingerprint.swift
+      - path: Shared
+    dependencies:
+      - package: MeshKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FACETS_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
 
 schemes:
   FacetsMac:
@@ -391,6 +420,9 @@ schemes:
         FacetsMac: all
     run:
       config: Debug
+    test:
+      targets:
+        - FacetsTests
     archive:
       config: Release
   Facets:

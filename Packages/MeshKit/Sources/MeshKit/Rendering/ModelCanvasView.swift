@@ -91,20 +91,17 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     private var animation: (from: OrbitCamera, to: OrbitCamera, start: CFTimeInterval, duration: CFTimeInterval)?
     /// A short out-and-back zoom: Fit's answer when the model is already framed, so
     /// the button never seems to do nothing.
-    private var pulse: (base: OrbitCamera, start: CFTimeInterval)?
+    private(set) var pulse: (base: OrbitCamera, start: CFTimeInterval)?
 
     public init() {
         let context = RenderContext.shared
         super.init(frame: .zero, device: context?.device)
         if let context { renderer = SceneRenderer(context: context) }
         colorPixelFormat = RenderContext.colorFormat
-        depthStencilPixelFormat = RenderContext.depthFormat
-        sampleCount = RenderContext.sampleCount
-        #if os(iOS)
-        // Depth is never read back: keep the multisampled depth in tile memory
-        // instead of a full-size texture (tens of MB on a large screen).
-        depthStencilStorageMode = .memoryless
-        #endif
+        if context?.memorylessTargets != true {
+            depthStencilPixelFormat = RenderContext.depthFormat
+            sampleCount = RenderContext.sampleCount
+        }
         clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         isPaused = true
         enableSetNeedsDisplay = true
@@ -214,6 +211,8 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
 
     private func move(to next: OrbitCamera, animated: Bool) {
         velocity = .zero
+        // A pulse still running would put its own starting camera back over this one.
+        pulse = nil
         if animated, !Self.reduceMotion, window != nil {
             animation = (camera, next, CACurrentMediaTime(), 0.4)
             startDisplayLink()
@@ -339,10 +338,36 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         requestDraw()
     }
 
+    /// Multisampled colour and depth in tile memory, resolved straight into the
+    /// drawable. MTKView can only make full-size textures for them (about 90 MB at 4×
+    /// on a large iPad), too much for the Quick Look extension; never read back, so
+    /// they needn't exist outside the pass. Nil where memoryless isn't supported:
+    /// MTKView's own multisampling then.
+    private var tileTargets: (color: MTLTexture, depth: MTLTexture)?
+
+    private func renderPass(into drawable: MTLTexture) -> MTLRenderPassDescriptor? {
+        guard let context = renderer?.context, context.memorylessTargets else { return currentRenderPassDescriptor }
+        if tileTargets?.color.width != drawable.width || tileTargets?.color.height != drawable.height {
+            tileTargets = context.makeTargets(width: drawable.width, height: drawable.height, storage: .memoryless)
+        }
+        guard let tileTargets else { return nil }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = tileTargets.color
+        pass.colorAttachments[0].resolveTexture = drawable
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .multisampleResolve
+        pass.colorAttachments[0].clearColor = clearColor
+        pass.depthAttachment.texture = tileTargets.depth
+        pass.depthAttachment.loadAction = .clear
+        pass.depthAttachment.storeAction = .dontCare
+        pass.depthAttachment.clearDepth = clearDepth
+        return pass
+    }
+
     public func draw(in view: MTKView) {
         guard let renderer,
-              let pass = currentRenderPassDescriptor,
               let drawable = currentDrawable,
+              let pass = renderPass(into: drawable.texture),
               let commands = renderer.context.queue.makeCommandBuffer(),
               let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
         let size = drawableSize
