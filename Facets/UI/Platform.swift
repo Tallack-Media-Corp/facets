@@ -144,6 +144,20 @@ extension View {
         #endif
     }
 
+    /// The content of a sheet that's a list or form. On the Mac a sheet takes its
+    /// content's ideal size (a List reports almost none, a Form all of it), so it gets
+    /// a frame that scrolls, and the grouped style Settings uses. iPhone and iPad keep
+    /// their detents.
+    func sheetSize() -> some View {
+        #if os(macOS)
+        formStyle(.grouped)
+            .frame(minWidth: Size.macSheetWidth.min, idealWidth: Size.macSheetWidth.ideal, maxWidth: Size.macSheetWidth.max,
+                   minHeight: Size.macSheetHeight.min, idealHeight: Size.macSheetHeight.ideal, maxHeight: Size.macSheetHeight.max)
+        #else
+        self
+        #endif
+    }
+
     /// The number pad for measurements on iPhone and iPad.
     func decimalKeyboard() -> some View {
         #if os(iOS)

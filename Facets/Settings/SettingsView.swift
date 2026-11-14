@@ -24,6 +24,10 @@ struct SettingsView: View {
         #endif
     }
     @State private var cacheSize: Int64?
+    #if DEBUG
+    /// FACETS_PAGE=recentlyDeleted|printerBed|about opens that page of Settings.
+    @State private var debugPage = ProcessInfo.processInfo.environment["FACETS_PAGE"]
+    #endif
 
     var body: some View {
         @Bindable var settings = settings
@@ -143,6 +147,16 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .task { cacheSize = await ThumbnailStore.shared.diskUsage() }
+            #if DEBUG
+            .navigationDestination(item: $debugPage) { page in
+                switch page {
+                case "recentlyDeleted": RecentlyDeletedView()
+                case "printerBed": PrinterBedPicker()
+                case "about": AboutView()
+                default: EmptyView()
+                }
+            }
+            #endif
         }
     }
 }

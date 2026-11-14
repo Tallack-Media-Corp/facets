@@ -62,7 +62,7 @@ struct CardCloseButton: View {
             }
             .buttonStyle(.plain)
             // Laid out at its drawn size, so the card's text doesn't move.
-            .padding(-(Size.minTapTarget - Size.smallCloseButton) / 2)
+            .padding(-(Size.minTapTarget - Size.smallCloseButton) / 2) // rule-ok: half the tap target round the drawn button
             .accessibilityLabel(label)
         }
     }

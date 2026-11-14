@@ -238,7 +238,7 @@ struct FacetsShortcuts: AppShortcutsProvider {
                 "Open a model in \(.applicationName)",
             ],
             shortTitle: "Open Model",
-            systemImageName: "cube"
+            systemImageName: "cube" // rule-ok: App Shortcuts metadata needs a literal (Symbol.model)
         )
         AppShortcut(
             intent: GetModelDimensionsIntent(),
@@ -247,7 +247,7 @@ struct FacetsShortcuts: AppShortcutsProvider {
                 "Get model dimensions in \(.applicationName)",
             ],
             shortTitle: "Model Dimensions",
-            systemImageName: "ruler"
+            systemImageName: "ruler" // rule-ok: App Shortcuts metadata needs a literal (Symbol.modelSize)
         )
     }
 }

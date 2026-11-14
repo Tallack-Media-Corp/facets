@@ -200,7 +200,7 @@ final class ViewerSettings {
 
     /// The starting appearance for a viewer or thumbnail.
     var appearance: RenderAppearance {
-        var appearance = RenderAppearance(baseColor: Color(hex: colorHex)?.linearRGBA ?? RenderAppearance.defaultColor)
+        var appearance = RenderAppearance(baseColor: RenderAppearance.linearColor(hex: colorHex) ?? RenderAppearance.defaultColor)
         appearance.usesFileColors = usesFileColors
         appearance.showsGrid = showsGrid
         return appearance
@@ -224,11 +224,5 @@ extension Color {
         let resolved = resolve(in: EnvironmentValues())
         func byte(_ c: Float) -> Int { Int((min(max(c, 0), 1) * 255).rounded()) }
         return String(format: "#%02X%02X%02X", byte(resolved.red), byte(resolved.green), byte(resolved.blue))
-    }
-
-    /// Linear-light RGBA, which is what the renderer works in.
-    var linearRGBA: SIMD4<Float> {
-        let resolved = resolve(in: EnvironmentValues())
-        return SIMD4(resolved.linearRed, resolved.linearGreen, resolved.linearBlue, 1)
     }
 }

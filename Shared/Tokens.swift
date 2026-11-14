@@ -52,6 +52,10 @@ enum Radius {
 enum Size {
     /// The smallest thing a finger or pointer should have to hit.
     static let minTapTarget: CGFloat = 44
+    /// A Mac sheet holding a list or form (`sheetSize()`): a Mac sheet takes its
+    /// content's ideal size, which for a list is almost nothing or everything.
+    static let macSheetWidth: (min: CGFloat, ideal: CGFloat, max: CGFloat) = (420, 480, 640)
+    static let macSheetHeight: (min: CGFloat, ideal: CGFloat, max: CGFloat) = (360, 540, 720)
     /// A list row's picture at the default text size; it grows with the text up to the max.
     static let rowThumbnail: CGFloat = 52
     static let rowThumbnailMax: CGFloat = 88

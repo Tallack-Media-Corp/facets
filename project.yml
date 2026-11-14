@@ -183,6 +183,8 @@ targets:
     platform: iOS
     sources:
       - path: FacetsThumbnail
+      # Only the limits it shares with the preview; the rest of Shared is UI.
+      - path: Shared/QuickLookLimits.swift
     dependencies:
       - package: MeshKit
       - sdk: QuickLookThumbnailing.framework
@@ -356,6 +358,7 @@ targets:
       - path: FacetsThumbnail
         excludes:
           - Info.plist
+      - path: Shared/QuickLookLimits.swift
     dependencies:
       - package: MeshKit
       - sdk: QuickLookThumbnailing.framework

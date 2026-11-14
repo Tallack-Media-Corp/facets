@@ -15,6 +15,25 @@ struct FacetsApp: App {
 
     init() {
         FacetsTips.configure()
+        #if os(macOS) && DEBUG
+        // FACETS_APPEARANCE=light|dark: this app's own appearance, for the visual sweep
+        // (the system's is left alone).
+        switch ProcessInfo.processInfo.environment["FACETS_APPEARANCE"] {
+        case "dark": NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        case "light": NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        default: break
+        }
+        #endif
+    }
+
+    /// The visual sweep (FACETS_BACKGROUND=1, debug builds) only looks: on the Mac the
+    /// library is the real one, so no purging or pruning at launch.
+    private static var isSweep: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["FACETS_BACKGROUND"] == "1"
+        #else
+        false
+        #endif
     }
 
     var body: some Scene {
@@ -24,8 +43,8 @@ struct FacetsApp: App {
                 .environment(recents)
                 .environment(locations)
                 .environment(settings)
-                .task { await library.purgeExpired() }
-                .task(priority: .background) { await ThumbnailStore.shared.pruneStale() }
+                .task { if !Self.isSweep { await library.purgeExpired() } }
+                .task(priority: .background) { if !Self.isSweep { await ThumbnailStore.shared.pruneStale() } }
                 .task { await library.connectToICloud() }
         }
         #if os(macOS)
@@ -94,6 +113,10 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
 private struct BringToFront: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
+        #if DEBUG
+        // FACETS_BACKGROUND=1 (the visual sweep): never take focus from the person at the Mac.
+        if ProcessInfo.processInfo.environment["FACETS_BACKGROUND"] == "1" { return view }
+        #endif
         Task { @MainActor in
             for delay in [0.05, 0.6, 1.5] {
                 try? await Task.sleep(for: .seconds(delay))
@@ -245,6 +268,7 @@ private struct SceneRoot: View {
     @State private var toasts = ToastCenter()
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     #endif
     @Environment(FileLibrary.self) private var library
     @Environment(ViewerSettings.self) private var settings
@@ -305,8 +329,13 @@ private struct SceneRoot: View {
     #if DEBUG
     /// Launch options for screenshots and quick checks:
     /// `FACETS_OPEN=<path below Documents>` opens a library file (`sample`, the sample),
-    /// `FACETS_TAB=library|browse|recents|settings|search` picks the screen,
-    /// `FACETS_BED=<preset id>|none` the printer.
+    /// `FACETS_TAB=library|browse|recents|settings|search` picks the screen (on the
+    /// Mac, `settings` opens the Settings window), `FACETS_BED=<preset id>|none` the
+    /// printer, and on a simulator `FACETS_SAMPLE=library` copies the sample into an
+    /// empty library and `FACETS_DELETED=demo` puts it in an empty Recently Deleted. Other screens: FACETS_PAGE (SettingsView), FACETS_SHEET
+    /// (FolderView, ViewerScreen), FACETS_TOOL, FACETS_INFO and FACETS_UNITS
+    /// (ViewerScreen), FACETS_TIPS (FacetsTips), FACETS_BACKGROUND (BringToFront, and no
+    /// launch tidying), FACETS_APPEARANCE (FacetsApp, Mac).
     private func openFromLaunchEnvironment() {
         let env = ProcessInfo.processInfo.environment
         if let bed = env["FACETS_BED"] {
@@ -320,10 +349,29 @@ private struct SceneRoot: View {
             UserDefaults.standard.set(LibraryTab.Section.library.rawValue, forKey: LibraryTab.sectionKey)
             router.tab = .library
         case "recents": router.tab = .recents
+        #if os(macOS)
+        case "settings": openSettings()
+        #else
         case "settings": router.tab = .settings
+        #endif
         case "search": router.tab = .search
         default: break
         }
+        #if targetEnvironment(simulator)
+        // These write to the library, so simulators only (never the Mac's real one).
+        if let sample = SampleModels.benchy {
+            let wantsModel = env["FACETS_SAMPLE"] == "library", wantsDeleted = env["FACETS_DELETED"] == "demo"
+            Task {
+                if wantsModel, FileLibrary.allModels(in: library.root).isEmpty {
+                    _ = try? await library.importFiles([sample], into: library.root)
+                }
+                if wantsDeleted, await library.recentlyDeleted().isEmpty,
+                   let copy = try? await library.importFiles([sample], into: library.root).first {
+                    _ = try? library.delete([LibraryItem(url: copy, isFolder: false, size: nil, modified: nil)])
+                }
+            }
+        }
+        #endif
         if env["FACETS_OPEN"] == "sample", let url = SampleModels.benchy {
             router.presented = ModelFileRef(url: url, isExternal: true)
         } else if let path = env["FACETS_OPEN"], !path.isEmpty {

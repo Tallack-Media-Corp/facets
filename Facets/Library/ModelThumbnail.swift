@@ -33,7 +33,7 @@ struct ModelThumbnail: View {
                     Image(platformImage: image)
                         .resizable()
                         .scaledToFit()
-                        .padding(geometry.size.width * (showsBackdrop ? 0.08 : 0.02))
+                        .padding(geometry.size.width * (showsBackdrop ? 0.08 : 0.02)) // rule-ok: a share of the tile, part of the thumbnail's own drawing
                 } else if !isDownloaded {
                     Image(systemName: Symbol.notDownloaded)
                         .font(.system(size: max(14, geometry.size.width * (showsBackdrop ? 0.18 : 0.4)), weight: .light))
@@ -53,7 +53,7 @@ struct ModelThumbnail: View {
                     Image(systemName: Symbol.inCloud)
                         .font(.system(size: max(9, geometry.size.width * (showsBackdrop ? 0.09 : 0.22)), weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .padding(geometry.size.width * 0.05)
+                        .padding(geometry.size.width * 0.05) // rule-ok: a share of the tile, part of the thumbnail's own drawing
                 }
             }
             .task(id: "\(key)|\(isDownloaded)") {

@@ -163,7 +163,8 @@ struct BrowseTip: FacetsTip {
         Text("Add a folder from Files to look through its models where they are, and save the ones you want.")
         #endif
     }
-    var image: Image? { Image(systemName: Symbol.folder) }
+    // The Add Location… control's glyph, on both platforms (iOS has it in Browse).
+    var image: Image? { Image(systemName: Symbol.addLocation) }
 }
 
 struct ViewOptionsTip: FacetsTip {

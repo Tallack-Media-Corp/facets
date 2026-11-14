@@ -45,6 +45,9 @@ struct FolderView: View {
     /// Waiting on "Delete … and everything in it?": only asked when there's a folder.
     @State private var deleting: [LibraryItem] = []
     @State private var moving: LibraryItem?
+    #if DEBUG
+    @State private var debugMoveShown = false
+    #endif
     @State private var failure: (title: String, message: String)?
     @State private var watcher: FolderWatcher?
     /// Bumped per reload, so a slow read finishing late can't replace a newer one.
@@ -145,6 +148,7 @@ struct FolderView: View {
                 MoveSheet(item: item) { destination in
                     perform(String(localized: "Couldn't Move")) { try library.move([item], to: destination) }
                 }
+                .sheetSize()
             }
             .errorAlert($failure)
     }
@@ -446,6 +450,14 @@ struct FolderView: View {
         items = listed
         copies = found
         loaded = true
+        #if DEBUG
+        // FACETS_SHEET=move opens the Move sheet for the library's first model, once.
+        if !debugMoveShown, folder == library.root, !isBrowsing, ProcessInfo.processInfo.environment["FACETS_SHEET"] == "move",
+           let model = listed.first(where: { !$0.isFolder }) {
+            debugMoveShown = true
+            moving = model
+        }
+        #endif
         guard listed.contains(where: \.isFolder) else { return }
         Task {
             let counted = await Task.detached(priority: .utility) {
@@ -612,7 +624,7 @@ struct FolderTile: View {
                         .resizable()
                         .scaledToFit()
                         .foregroundStyle(.tint.opacity(0.85))
-                        .padding(geometry.size.width * 0.2)
+                        .padding(geometry.size.width * 0.2) // rule-ok: a share of the tile, part of the folder tile's own drawing
                         .frame(width: geometry.size.width, height: geometry.size.height)
                 }
             }

@@ -127,6 +127,19 @@ let rels = """
         #expect(throws: ModelError.emptyFile) { try ModelLoader.load(Data(), name: "E") }
     }
 
+    /// The Quick Look extensions tell a 3MF from its bytes, with the loader's own test.
+    @Test func isZipReadsTheFilesFirstBytes() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let zip = folder.appendingPathComponent("renamed.stl"), stl = folder.appendingPathComponent("cube.3mf")
+        try Data([0x50, 0x4B, 0x03, 0x04, 0, 0]).write(to: zip)
+        try binarySTL(cubeTriangles).write(to: stl)
+        #expect(ModelLoader.isZip(at: zip))
+        #expect(!ModelLoader.isZip(at: stl))
+        #expect(!ModelLoader.isZip(at: folder.appendingPathComponent("missing")))
+    }
+
     @Test func textWithoutTrianglesFails() {
         #expect(throws: ModelError.noGeometry) { try ModelLoader.load(Data("solid nothing\nendsolid\n".utf8), name: "E") }
     }

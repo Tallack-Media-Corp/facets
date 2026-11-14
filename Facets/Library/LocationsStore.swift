@@ -68,7 +68,7 @@ final class LocationsStore {
         if let url = open[location.id] { return url }
         var stale = false
         guard let url = try? Bookmark.resolve(location.bookmark, isStale: &stale) else { return nil }
-        guard url.startAccessingSecurityScopedResource() else { return nil }
+        guard url.startAccessingSecurityScopedResource() else { return nil } // rule-ok: held while the location is open; remove(_:) stops it
         if stale, let fresh = try? Bookmark.make(url), let index = locations.firstIndex(where: { $0.id == location.id }) {
             locations[index].bookmark = fresh
             save()

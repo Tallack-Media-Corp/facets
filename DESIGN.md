@@ -255,28 +255,40 @@ The viewer and every thumbnail are the same object at two scales: a Stage or Til
 
 One job, one piece. Screens build from these and never re-type what they hold: every size, radius, spacing, padding and timing is a token in `Shared/Tokens.swift` (`Spacing`, `Radius`, `Size`, `Stroke`, `ChipPadding`, `CardPadding`, `Motion`), every glyph a constant in `Facets/UI/Symbols.swift`. Values tuned between the spacing steps keep names of their own (`Spacing.rowText` 3, `snug` 6, `roomy` 10). Platform differences live inside the piece, never in a screen.
 
+Two tests keep this honest (see [docs/consistency.md](docs/consistency.md)): `SourceRulesTests` fails on the hand-built forms in the Never column, and `DesignMapTests` fails if this table names a piece the code doesn't have, or a file in `Facets/UI` or `Shared` isn't in it.
+
 | Job | Use | Never |
 |---|---|---|
-| A size, radius, spacing, padding, line width | `Spacing`, `Radius`, `Size`, `Stroke`, `ChipPadding`, `CardPadding` (Tokens) | A number typed into a screen |
-| An animation or how long something stays | `Motion` tokens; `Motion.animation(_:reduceMotion:)`, `Motion.transition(_:reduceMotion:)` | `.snappy`, `.easeIn(duration:)` or `.seconds(…)` in a screen; motion that ignores Reduce Motion |
-| A glyph | `Symbol.<concept>` (Symbols) | A symbol name in a string; one concept with two glyphs |
-| A list row with a picture (library list, search, Recents, Recently Deleted) | `ThumbnailRow` | An HStack of thumbnail and text; a row's own line limits or VoiceOver grouping |
+| A size, radius, spacing, padding, line width | `Spacing`, `Radius`, `Size`, `Stroke`, `ChipPadding`, `CardPadding` (`Tokens.swift`) | A number typed into a screen |
+| An animation or how long something stays | `Motion` tokens; `Motion.animation(_:reduceMotion:)`, `Motion.transition(_:reduceMotion:)` (`Tokens.swift`) | `.snappy`, `.easeIn(duration:)` or `.seconds(…)` in a screen; motion that ignores Reduce Motion |
+| A glyph | `Symbol.<concept>` (`Symbols.swift`) | A symbol name in a string; one concept with two glyphs |
+| A colour of the stage, a tile or the tint | `Palette` (`Palette.swift`) | A hex typed into a screen; a second orange |
+| A list row with a picture (library list, search, Recents, Recently Deleted) | `ThumbnailRow` (`RowThumbnail.swift`) | An HStack of thumbnail and text; a row's own line limits or VoiceOver grouping |
 | The picture in that row | `RowThumbnail` (inside `ThumbnailRow`) | A radius passed to `ModelThumbnail` for a row |
-| A floating card (tool panel, tip, unit card, loading panel) | `.glassCard(...)` | `glassEffect` in a rounded rect by hand |
-| A chip over the content (readout, plate picker, gesture hint, toast) | `.glassChip(ChipPadding.…)`, or `.glassChip(interactive:)` on a control whose label carries the padding | A capsule of glass by hand |
+| A floating card (tool panel, tip, unit card, loading panel) | `.glassCard(...)` (`GlassCard.swift`) | `glassEffect` in a rounded rect by hand |
+| A chip over the content (readout, plate picker, gesture hint, toast) | `.glassChip(ChipPadding.…)`, or `.glassChip(interactive:)` on a control whose label carries the padding (`GlassChip.swift`) | A capsule of glass by hand |
 | A card's close button | `CardCloseButton` (`.panel`, `.tip`) | A close button under 44pt to tap |
 | A sheet's Done | `.doneButton(shown:action:)` | A Done toolbar item by hand |
-| A colour as a dot | `ColorSwatch(color:size:)` | A stroked circle by hand |
-| A confirmation | `ToastCenter.show` / `warn` with `.toastHost()` (`aboveBottomToolbar:` in the iOS viewer) | A clearance worked out in a screen |
-| A failed action | `.errorAlert(...)` with a title naming the action | The system's error sentence |
+| A sheet or popover whose content is a list or form | `.sheetSize()` (`Platform.swift`), last on the content | A sheet left to size itself on the Mac (no rows, or running off the window) |
+| A tip | `FacetsTip`, `FloatingTip`, `FacetsTipStyle` (`Tips.swift`), its glyph the control's own `Symbol` | TipKit's default style; a tip glyph that isn't its control's |
+| Something centred that must clear a half-open fold | `.clearOfFold()` (`Fold.swift`) | Working out the fold in a screen |
+| A colour as a dot | `ColorSwatch(color:size:)` (`ColorSwatch.swift`) | A stroked circle by hand |
+| A confirmation | `ToastCenter.show` / `warn` with `.toastHost()` (`aboveBottomToolbar:` in the iOS viewer) (`Toasts.swift`) | A clearance worked out in a screen |
+| A failed action | `.errorAlert(...)` with a title naming the action (`Alerts.swift`) | The system's error sentence; `Button("OK")` by hand |
 | A rename | `.renameAlert(...)` | An alert with a text field by hand |
-| A row or card action (Delete, Rename, Remove, Restore) | `RowAction` | A button with its own title, symbol or role |
-| Whole-list actions (Restore All, Delete All) | `.listActions(shown:leading:trailing:)` | A toolbar on iOS and a bar on the Mac, each by hand |
-| An error said in plain words | `FriendlyError` | `error.localizedDescription` on screen |
-| A file only in iCloud | `ICloudFile` | Parsing `.icloud` names in place |
-| Reading a model that may be in iCloud | `CoordinatedRead.model(at:)` | `ModelLoader.load` without a coordinator |
+| An alert or dialog shown while an optional is set | `.isPresent` | `Binding(get: { x != nil } …)` by hand |
+| A row or card action (Delete, Rename, Remove, Restore) | `RowAction` (`RowActions.swift`) | A button with its own title, symbol or role |
+| Whole-list actions (Restore All, Delete All) | `.listActions(shown:leading:trailing:)` (`Platform.swift`) | A toolbar on iOS and a bar on the Mac, each by hand |
+| A platform difference (images, bookmarks, VoiceOver, bar placements) | `PlatformImage`, `Bookmark`, `Spoken`, `.bottomControls` (`Platform.swift`) | `#if os` for looks in a screen |
+| The zoom from a card into the viewer | `.zoomSource(id:in:)`, `.zoomDestination(id:in:)` (`ModelTypes.swift`) | A matched transition by hand |
+| A MeshKit name on screen (preset views, plates, units) | `localizedTitle` (`MeshKitNames.swift`) | MeshKit's English `title` |
+| An error said in plain words | `FriendlyError` (`FriendlyError.swift`) | `error.localizedDescription` on screen |
+| A file only in iCloud | `ICloudFile` (`ICloudFile.swift`) | Parsing `.icloud` names in place |
+| Reading a model that may be in iCloud | `CoordinatedRead.model(at:)` (`CoordinatedRead.swift`) | `ModelLoader.load` without a coordinator |
 | A short use of a picked file or bookmark | `url.withSecurityScope { }` | Unbalanced `start`/`stopAccessingSecurityScopedResource` |
-| A model's tidy name | `Format.title(fromFileName:)`, `Format.title(of:)` | Trimming extensions and underscores in a screen |
+| A model's tidy name | `Format.title(fromFileName:)`, `Format.title(of:)` (`Format.swift`) | Trimming extensions and underscores in a screen |
+| A setting the Quick Look extensions read (Pure Black) | `SharedSettings` (`SharedSettings.swift`) | The app group read by hand |
+| How large a model Quick Look draws, and telling a 3MF | `QuickLookLimits` (`QuickLookLimits.swift`), `ModelLoader.isZip(at:)` | Limits or a ZIP check of an extension's own |
 
 ## Do's and Don'ts
 

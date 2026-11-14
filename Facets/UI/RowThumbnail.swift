@@ -3,7 +3,8 @@ import SwiftUI
 /// A list row with a picture: the library's list and search results, Recents and
 /// Recently Deleted. The picture, a title, a caption, optionally where the item is
 /// (a search hit's folder) and something at the end (Restore). One behaviour for all:
-/// the title takes one line, three at accessibility text sizes; VoiceOver reads the
+/// the title takes one line and the caption two (both three at accessibility text
+/// sizes, so a caption beside Restore wraps instead of truncating); VoiceOver reads the
 /// words as one item without the picture; the whole row takes the tap.
 struct ThumbnailRow<Thumbnail: View, Caption: View, Accessory: View>: View {
     let title: String
@@ -18,7 +19,8 @@ struct ThumbnailRow<Thumbnail: View, Caption: View, Accessory: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var side: CGFloat { min(scaledSide, Size.rowThumbnailMax) }
-    private var lineLimit: Int { dynamicTypeSize.isAccessibilitySize ? 3 : 1 }
+    private var titleLines: Int { dynamicTypeSize.isAccessibilitySize ? 3 : 1 }
+    private var captionLines: Int { dynamicTypeSize.isAccessibilitySize ? 3 : 2 }
     private var hasAccessory: Bool { Accessory.self != EmptyView.self }
 
     var body: some View {
@@ -31,11 +33,11 @@ struct ThumbnailRow<Thumbnail: View, Caption: View, Accessory: View>: View {
                     VStack(alignment: .leading, spacing: Spacing.rowText) {
                         Text(title)
                             .font(.headline)
-                            .lineLimit(lineLimit)
+                            .lineLimit(titleLines)
                         caption
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(lineLimit)
+                            .lineLimit(captionLines)
                     }
                     Spacer(minLength: hasAccessory ? Spacing.sm : 0)
                 }

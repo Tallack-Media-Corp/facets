@@ -25,7 +25,8 @@ public struct RenderAppearance: Sendable, Equatable {
         self.baseColor = baseColor
     }
 
-    /// Filament Orange (#F2782E), in linear light.
+    /// Filament Orange (#F2782E), in linear light. The app's `Palette.filamentOrange`
+    /// is the same colour; a test in FacetsTests fails if they part.
     public static let defaultColor = parseColor("#F2782E") ?? SIMD4(0.89, 0.19, 0.03, 1)
 
     /// An sRGB hex colour ("#RRGGBB") as linear RGBA, for `baseColor`.

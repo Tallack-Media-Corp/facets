@@ -239,6 +239,7 @@ struct ViewerScreen: View {
                     .doneButton { choosingPrinter = false }
             }
             .presentationDetents([.medium, .large])
+            .sheetSize()
         }
         .onChange(of: settings.bedID) { _, id in
             // Choosing a printer means wanting to see its bed.
@@ -880,7 +881,7 @@ struct ViewerScreen: View {
         syncSettings()
         let url = file.url
         if file.isExternal, !isAccessing {
-            isAccessing = url.startAccessingSecurityScopedResource()
+            isAccessing = url.startAccessingSecurityScopedResource() // rule-ok: held while the viewer shows the file; stopped when it closes
         }
         let values = try? url.resourceValues(forKeys: [.fileSizeKey, .ubiquitousItemDownloadingStatusKey])
         fileSize = values?.fileSize.map(Int64.init)
@@ -905,6 +906,10 @@ struct ViewerScreen: View {
             if ProcessInfo.processInfo.environment["FACETS_INFO"] == "1" { showingInfo = true }
             // FACETS_TOOL=measure|layFlat|section opens that tool's panel.
             if let name = ProcessInfo.processInfo.environment["FACETS_TOOL"], let tool = ViewerTool(rawValue: name) { open(tool) }
+            // FACETS_UNITS=1 puts up the unit card (nothing is saved until a choice);
+            // FACETS_SHEET=printers opens the printer list.
+            if ProcessInfo.processInfo.environment["FACETS_UNITS"] == "1" { unitSuggestions = [.inches, .metres] }
+            if ProcessInfo.processInfo.environment["FACETS_SHEET"] == "printers" { choosingPrinter = true }
             #endif
         } catch {
             phase = .failed(FriendlyError(opening: error))
@@ -1131,7 +1136,7 @@ private struct InfoPresentation<Info: View>: ViewModifier {
                     .background(stageTop)
                     .inspectorColumnWidth(min: Size.inspectorMin, ideal: Size.inspectorIdeal, max: Size.inspectorMax)
             }
-            .sheet(isPresented: gated(!asInspector)) { info(true) }
+            .sheet(isPresented: gated(!asInspector)) { info(true).sheetSize() }
     }
 
     private func gated(_ active: Bool) -> Binding<Bool> {

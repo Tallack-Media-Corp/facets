@@ -25,7 +25,7 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
         view.addSubview(plateBar)
         NSLayoutConstraint.activate([
             plateBar.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            plateBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+            plateBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -Spacing.lg),
         ])
         plateBar.onChange = { [weak self] id in self?.canvas.renderAppearance.plateID = id }
         updateColors()
@@ -60,9 +60,9 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
 
 /// "‹ Plate 2 of 4 ›" under a multi-plate project: it says there's more than one, and
 /// where Quick Look lets the preview be touched, the arrows step through them.
-private final class PlateBar: UIVisualEffectView {
+private final class PlateBar: UIVisualEffectView, PlateStepping {
     var onChange: ((Int) -> Void)?
-    private var steps = PlateSteps()
+    var steps = PlateSteps()
     private let label = UILabel()
     private let backButton = UIButton(type: .system)
     private let forwardButton = UIButton(type: .system)
@@ -73,13 +73,13 @@ private final class PlateBar: UIVisualEffectView {
         isHidden = true
         label.font = UIFont.preferredFont(forTextStyle: .subheadline).withTraits(.traitBold)
         label.adjustsFontForContentSizeCategory = true
-        for (button, symbol, name, by) in [(backButton, "chevron.left", PlateSteps.previousName, -1), (forwardButton, "chevron.right", PlateSteps.nextName, 1)] {
+        for (button, symbol, name, by) in [(backButton, PlateSteps.previousSymbol, PlateSteps.previousName, -1), (forwardButton, PlateSteps.nextSymbol, PlateSteps.nextName, 1)] {
             button.setImage(UIImage(systemName: symbol), for: .normal)
             button.accessibilityLabel = name
             button.addAction(UIAction { [weak self] _ in self?.step(by) }, for: .primaryActionTriggered)
             NSLayoutConstraint.activate([
-                button.widthAnchor.constraint(equalToConstant: 44),
-                button.heightAnchor.constraint(equalToConstant: 44),
+                button.widthAnchor.constraint(equalToConstant: Size.minTapTarget),
+                button.heightAnchor.constraint(equalToConstant: Size.minTapTarget),
             ])
         }
         let stack = UIStackView(arrangedSubviews: [backButton, label, forwardButton])
@@ -96,20 +96,10 @@ private final class PlateBar: UIVisualEffectView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    func show(_ plates: [Plate]) {
-        steps = PlateSteps(plates: plates)
+    func render() {
         isHidden = !steps.isNeeded
-        update()
-    }
-
-    private func step(_ by: Int) {
-        guard let id = steps.step(by) else { return }
-        update()
-        onChange?(id)
-    }
-
-    private func update() {
         label.text = steps.title
+        label.accessibilityLabel = steps.accessibilityTitle
         backButton.isEnabled = steps.canGoBack
         forwardButton.isEnabled = steps.canGoForward
     }
@@ -142,7 +132,7 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
         stage.addSubview(plateBar)
         NSLayoutConstraint.activate([
             plateBar.centerXAnchor.constraint(equalTo: stage.centerXAnchor),
-            plateBar.bottomAnchor.constraint(equalTo: stage.bottomAnchor, constant: -16),
+            plateBar.bottomAnchor.constraint(equalTo: stage.bottomAnchor, constant: -Spacing.lg),
         ])
         plateBar.onChange = { [weak self] id in self?.canvas.renderAppearance.plateID = id }
         view = stage
@@ -160,53 +150,59 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
     }
 }
 
-/// "‹ Plate 2 of 4 ›" under a multi-plate project, as on iOS.
-private final class PlateBar: NSGlassEffectView {
+/// "‹ Plate 2 of 4 ›" under a multi-plate project, as on iOS: a glass capsule, the
+/// label in the subheadline style, arrows with the same 44pt targets.
+private final class PlateBar: NSGlassEffectView, PlateStepping {
     var onChange: ((Int) -> Void)?
-    private var steps = PlateSteps()
+    var steps = PlateSteps()
     private let label = NSTextField(labelWithString: "")
-    private lazy var backButton = button("chevron.left", PlateSteps.previousName, #selector(goBack))
-    private lazy var forwardButton = button("chevron.right", PlateSteps.nextName, #selector(goForward))
+    private lazy var backButton = button(PlateSteps.previousSymbol, PlateSteps.previousName, #selector(goBack))
+    private lazy var forwardButton = button(PlateSteps.nextSymbol, PlateSteps.nextName, #selector(goForward))
 
     init() {
         super.init(frame: .zero)
         isHidden = true
-        label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        label.font = NSFont.preferredFont(forTextStyle: .subheadline).withTraits(.bold)
         let stack = NSStackView(views: [backButton, label, forwardButton])
-        stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
+        stack.spacing = 0
         contentView = stack
-        cornerRadius = 16
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    /// A capsule at whatever height the text gives it.
+    override func layout() {
+        super.layout()
+        cornerRadius = bounds.height / 2
+    }
 
     private func button(_ symbol: String, _ name: String, _ action: Selector) -> NSButton {
         let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: name) ?? NSImage(), target: self, action: action)
         button.isBordered = false
         button.setAccessibilityLabel(name)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: Size.minTapTarget),
+            button.heightAnchor.constraint(equalToConstant: Size.minTapTarget),
+        ])
         return button
-    }
-
-    func show(_ plates: [Plate]) {
-        steps = PlateSteps(plates: plates)
-        isHidden = !steps.isNeeded
-        update()
     }
 
     @objc private func goBack() { step(-1) }
     @objc private func goForward() { step(1) }
 
-    private func step(_ by: Int) {
-        guard let id = steps.step(by) else { return }
-        update()
-        onChange?(id)
-    }
-
-    private func update() {
+    func render() {
+        isHidden = !steps.isNeeded
         label.stringValue = steps.title
+        label.setAccessibilityLabel(steps.accessibilityTitle)
         backButton.isEnabled = steps.canGoBack
         forwardButton.isEnabled = steps.canGoForward
+    }
+}
+
+private extension NSFont {
+    func withTraits(_ traits: NSFontDescriptor.SymbolicTraits) -> NSFont {
+        NSFont(descriptor: fontDescriptor.withSymbolicTraits(traits), size: 0) ?? self
     }
 }
 
@@ -237,12 +233,19 @@ struct PlateSteps {
 
     static let previousName = String(localized: "Previous Plate")
     static let nextName = String(localized: "Next Plate")
+    static let previousSymbol = "chevron.left"
+    static let nextSymbol = "chevron.right"
 
     var isNeeded: Bool { plates.count > 1 }
     var canGoBack: Bool { index > 0 }
     var canGoForward: Bool { index < plates.count - 1 }
+    /// A page indicator, so by position; the plate's own name is spoken too.
     var title: String {
         String(localized: "Plate \(index + 1) of \(plates.count)", comment: "Quick Look: which plate of a multi-plate project is shown")
+    }
+    var accessibilityTitle: String {
+        guard plates.indices.contains(index), let name = plates[index].name, !name.isEmpty else { return title }
+        return String(localized: "Plate \(index + 1) of \(plates.count), \(name)", comment: "Quick Look, VoiceOver: which plate is shown, then its name")
     }
 
     /// Moves by one plate; the new plate's id, or nil at either end.
@@ -254,22 +257,30 @@ struct PlateSteps {
     }
 }
 
-/// The preview extension has a small memory budget, and a mesh lives twice (in memory
-/// and in its Metal buffer). Past these, it says so instead of being stopped
-/// mid-load. A 3MF's entries are also capped as they inflate. The Mac's budget is
-/// larger (the same as its thumbnails').
-private func checkPreviewSize(_ url: URL) throws {
-    #if os(iOS)
-    let (limitSTL, limitOBJ, inflateLimit) = (40_000_000, 15_000_000, 80_000_000)
-    #else
-    let (limitSTL, limitOBJ, inflateLimit) = (150_000_000, 60_000_000, 600_000_000)
-    #endif
-    ZipArchive.maximumEntrySize = inflateLimit
-    let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-    switch url.pathExtension.lowercased() {
-    case "stl" where size > limitSTL, "obj" where size > limitOBJ:
-        throw ModelError.tooLarge
-    default:
-        break
+/// What both platforms' plate bars share: showing a project's plates and stepping
+/// through them. Each bar only draws `steps` in `render()`.
+@MainActor
+protocol PlateStepping: AnyObject {
+    var steps: PlateSteps { get set }
+    var onChange: ((Int) -> Void)? { get }
+    func render()
+}
+
+extension PlateStepping {
+    func show(_ plates: [Plate]) {
+        steps = PlateSteps(plates: plates)
+        render()
     }
+
+    func step(_ by: Int) {
+        guard let id = steps.step(by) else { return }
+        render()
+        onChange?(id)
+    }
+}
+
+/// Past the preview's limits (`QuickLookLimits`), it says the model is too large
+/// instead of being stopped mid-load.
+private func checkPreviewSize(_ url: URL) throws {
+    guard QuickLookLimits.check(url, for: .preview).fits else { throw ModelError.tooLarge }
 }
