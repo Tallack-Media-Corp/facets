@@ -127,6 +127,35 @@
           }
         }
       }
+    },
+    "Too large to show in 3D here. Open it in Facets to see it.": {
+      "comment": "Quick Look: shown instead of a model too large to draw, under the picture the file carries if it has one",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu groß für die 3D-Ansicht hier. Öffne die Datei in Facets, um sie zu sehen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es demasiado grande para verlo en 3D aquí. Ábrelo en Facets para verlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop volumineux pour l'afficher en 3D ici. Ouvrez-le dans Facets pour le voir."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大きすぎるため、ここでは3Dで表示できません。Facetsで開いてご覧ください。"
+          }
+        }
+      }
     }
   }
 }

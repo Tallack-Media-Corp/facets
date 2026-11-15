@@ -82,6 +82,9 @@ enum Size {
     static let swatchSmall: CGFloat = 18
     /// Settings' swatch grid columns (at least `minTapTarget`).
     static let swatchColumnMax: CGFloat = 52
+    /// The most the Quick Look preview shows a 3MF's own picture at, when the model is
+    /// too large to draw.
+    static let quickLookPicture: CGFloat = 360
     /// An app icon choice's picture.
     static let iconPreview: CGFloat = 64
     /// A tip's glyph column.

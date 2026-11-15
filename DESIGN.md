@@ -288,7 +288,9 @@ Two tests keep this honest (see [docs/consistency.md](docs/consistency.md)): `So
 | A short use of a picked file or bookmark | `url.withSecurityScope { }` | Unbalanced `start`/`stopAccessingSecurityScopedResource` |
 | A model's tidy name | `Format.title(fromFileName:)`, `Format.title(of:)` (`Format.swift`) | Trimming extensions and underscores in a screen |
 | A setting the Quick Look extensions read (Pure Black) | `SharedSettings` (`SharedSettings.swift`) | The app group read by hand |
-| How large a model Quick Look draws, and telling a 3MF | `QuickLookLimits` (`QuickLookLimits.swift`), `ModelLoader.isZip(at:)` | Limits or a ZIP check of an extension's own |
+| How large a model Quick Look draws (size limits, and the memory a load will need against what's left), and telling a 3MF | `QuickLookLimits` (`QuickLookLimits.swift`), `QuickLookLimits.estimatedPeak(format:fileSize:modelEntries:)`, `ModelLoader.isZip(at:)` | Limits, a memory check or a ZIP check of an extension's own |
+| What the Quick Look preview shows for a model too large to draw | `PreviewContent` (`PreviewViewController.swift`): the file's picture over a caption | Throwing to the system, which shows only its file card |
+| The picture a 3MF carries (the thumbnail's and the preview's fallback) | `ThreeMFReader.thumbnailImage(at:)` | `UIImage(data:)` or `NSImage(data:)` on the package's picture in an extension |
 
 ## Do's and Don'ts
 

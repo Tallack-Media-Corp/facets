@@ -22,12 +22,8 @@ final class ThumbnailProvider: QLThumbnailProvider {
         if fits, let model = try? ModelLoader.load(url) {
             image = ModelSnapshotter()?.image(of: model, pixelSize: pixels)
         }
-        if image == nil, format == .threeMF, let data = ThreeMFReader.thumbnailData(at: url) {
-            #if os(iOS)
-            image = UIImage(data: data)?.cgImage
-            #else
-            image = NSImage(data: data)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
-            #endif
+        if image == nil, format == .threeMF {
+            image = ThreeMFReader.thumbnailImage(at: url)
         }
         guard let image else {
             handler(nil, ModelError.noGeometry)

@@ -131,6 +131,12 @@ enum RepoSources {
         #expect(found.isEmpty, "use Motion and Motion.animation(_:reduceMotion:) (Shared/Tokens.swift): \(found)")
     }
 
+    /// The picture a 3MF carries is found and decoded in one place for both Quick Look extensions.
+    @Test func packagePicturesComeFromMeshKit() {
+        let found = Self.violations { ($0.file.hasPrefix("FacetsPreview/") || $0.file.hasPrefix("FacetsThumbnail/")) && Self.matches(#"\b(UIImage|NSImage)\(data:"#, $0.text) }
+        #expect(found.isEmpty, "use ThreeMFReader.thumbnailImage(at:) (MeshKit): \(found)")
+    }
+
     /// A toast's clearance is worked out by the host, never passed in by a screen.
     @Test func toastHostWorksOutItsClearance() {
         let found = Self.violations { $0.text.contains(".toastHost(clearance") }
@@ -173,6 +179,7 @@ enum RepoSources {
         #expect(Self.paddingArguments(#".padding(.top, 8).padding(f(x))"#) == [".top, 8", "f(x)"])
         #expect(Self.matches(#"Binding\s*\(\s*get:\s*\{[^}]*[!=]=\s*nil"#, "Binding(get: { item != nil }, set: { _ in })"))
         #expect(Self.matches(#"(withAnimation|\.animation)\(\s*\.[a-z]"#, "withAnimation(.snappy) {"))
+        #expect(Self.matches(#"\b(UIImage|NSImage)\(data:"#, "image = NSImage(data: data)?.cgImage"))
         let sheets = Self.presentedContent(in: "a\n.sheet(item: $x) { y in\n  Z { w }\n}\n.sheet(isPresented: $b) { V().sheetSize() }")
         #expect(sheets.map(\.line) == [2, 5])
         #expect(!sheets[0].text.contains("sheetSize()") && sheets[1].text.contains("sheetSize()"))

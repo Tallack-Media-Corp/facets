@@ -44,6 +44,8 @@ around a piece, and every screen is looked at before a build goes out.
 | A tip showing a different glyph from its control | Batch 3 review | Tips use the control's `Symbol` constant |
 | Two plate bars in Quick Look drifting (corner, font, button size) | Batch 3 review | One `PlateSteps`/`PlateStepping`, each platform only draws it |
 | Quick Look limits and format checks kept twice | Batch 3 review | `QuickLookLimits`, `ModelLoader.isZip(at:)`; `SharedValuesTests` |
+| Quick Look showing only the system's file card for a large 3MF on a 4 GB iPad (out of memory mid-load) | Build 19, iPad mini | `QuickLookLimits.estimatedPeak` against the memory left, `PreviewContent`'s fallback; `SharedValuesTests.quickLookEstimateCoversMeasuredPeaks` |
+| A 3MF's picture decoded once per extension | Build 19 fix | `ThreeMFReader.thumbnailImage(at:)`; `SourceRulesTests.packagePicturesComeFromMeshKit` |
 | Two definitions of Filament Orange, two hex-to-linear paths | Batch 3 review | `RenderAppearance.linearColor(hex:)`; `SharedValuesTests.defaultOrangeIsFilamentOrange` |
 | Typed-in sizes, curves and glyph names | Batch 2 audit | `SourceRulesTests` (`sizesAreTokens`, `animationsAreTokens`, `symbolsComeFromSymbols`) |
 | The design map naming pieces that no longer exist | Batch 3 | `DesignMapTests` |

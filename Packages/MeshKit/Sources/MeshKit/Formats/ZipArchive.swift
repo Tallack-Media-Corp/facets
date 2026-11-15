@@ -35,6 +35,10 @@ public struct ZipArchive: Sendable {
 
     public func contains(_ path: String) -> Bool { entry(for: path) != nil }
 
+    /// What an entry inflates to, from the directory alone, so a reader can size up a
+    /// package before inflating anything.
+    public func uncompressedSize(of path: String) -> Int? { entry(for: path)?.uncompressedSize }
+
     private func entry(for path: String) -> Entry? {
         let key = Self.normalize(path)
         if let entry = entries[key] { return entry }
@@ -92,13 +96,17 @@ public struct ZipArchive: Sendable {
         guard size / 1032 <= max(source.count, 1) else {
             throw ModelError.corrupt("a package entry is damaged")
         }
-        var output = Data(count: size)
-        let written = output.withUnsafeMutableBytes { out -> Int in
-            guard let dst = out.bindMemory(to: UInt8.self).baseAddress,
-                  let src = source.bindMemory(to: UInt8.self).baseAddress else { return 0 }
-            // COMPRESSION_ZLIB is raw DEFLATE (RFC 1951), which is what ZIP stores.
-            return compression_decode_buffer(dst, size, src, source.count, nil, COMPRESSION_ZLIB)
-        }
+        // Pages of its own, handed back to the system when the Data goes: malloc keeps
+        // freed blocks this large in the footprint, so each model entry would add to the peak.
+        var address: vm_address_t = 0
+        guard vm_allocate(mach_task_self_, &address, vm_size_t(size), VM_FLAGS_ANYWHERE) == KERN_SUCCESS,
+              let dst = UnsafeMutablePointer<UInt8>(bitPattern: UInt(address)) else { throw ModelError.tooLarge }
+        // COMPRESSION_ZLIB is raw DEFLATE (RFC 1951), which is what ZIP stores.
+        let written = source.bindMemory(to: UInt8.self).baseAddress.map {
+            compression_decode_buffer(dst, size, $0, source.count, nil, COMPRESSION_ZLIB)
+        } ?? 0
+        // Wrapped only once filled: Data copies a small buffer and frees it straight away.
+        let output = Data(bytesNoCopy: dst, count: size, deallocator: .virtualMemory)
         guard written == size else {
             throw ModelError.corrupt("a package entry didn't decompress")
         }

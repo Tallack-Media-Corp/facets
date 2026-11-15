@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import simd
 
 /// Reads 3MF packages: the core spec's meshes, components and build items, the
@@ -23,15 +24,19 @@ public enum ThreeMFReader {
                 if let data = try? archive.data(for: rel.target) { return data }
             }
         }
-        for path in ["Metadata/plate_1.png", "Metadata/thumbnail.png", "Metadata/top_1.png"] {
+        // top_1 is a plan view, so it comes after the slicers' angled covers.
+        for path in ["Metadata/plate_1.png", "Metadata/thumbnail.png", "Auxiliaries/.thumbnails/thumbnail_middle.png", "Metadata/top_1.png"] {
             if let data = try? archive.data(for: path) { return data }
         }
         return nil
     }
 
-    public static func thumbnailData(at url: URL) -> Data? {
-        guard let archive = try? ZipArchive(url: url) else { return nil }
-        return thumbnailData(in: archive)
+    /// That picture, decoded: what a thumbnail or preview shows when the model itself
+    /// is too large to draw. ImageIO, so it's the same on iOS and the Mac.
+    public static func thumbnailImage(at url: URL) -> CGImage? {
+        guard let archive = try? ZipArchive(url: url), let data = thumbnailData(in: archive),
+              let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
     struct Relationship {

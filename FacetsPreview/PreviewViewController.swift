@@ -9,6 +9,7 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
     private let canvas = ModelCanvasView()
     private let backdrop = CAGradientLayer()
     private let plateBar = PlateBar()
+    private let tooLarge = TooLargeView()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -28,6 +29,15 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
             plateBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -Spacing.lg),
         ])
         plateBar.onChange = { [weak self] id in self?.canvas.renderAppearance.plateID = id }
+        tooLarge.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(tooLarge)
+        let margins = view.safeAreaLayoutGuide
+        NSLayoutConstraint.activate([
+            tooLarge.centerXAnchor.constraint(equalTo: margins.centerXAnchor),
+            tooLarge.centerYAnchor.constraint(equalTo: margins.centerYAnchor),
+            tooLarge.leadingAnchor.constraint(greaterThanOrEqualTo: margins.leadingAnchor, constant: Spacing.lg),
+            tooLarge.topAnchor.constraint(greaterThanOrEqualTo: margins.topAnchor, constant: Spacing.lg),
+        ])
         updateColors()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: PreviewViewController, _) in
             controller.updateColors()
@@ -48,13 +58,15 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
     }
 
     func preparePreviewOfFile(at url: URL) async throws {
-        try checkPreviewSize(url)
-        let model = try await Task.detached(priority: .userInitiated) {
-            try ModelLoader.load(url)
-        }.value
-        canvas.renderAppearance.plateID = model.plates.first?.id
-        canvas.setModel(model)
-        plateBar.show(model.plates)
+        switch try await PreviewContent.load(url) {
+        case .model(let model):
+            canvas.renderAppearance.plateID = model.plates.first?.id
+            canvas.setModel(model)
+            plateBar.show(model.plates)
+        case .tooLarge(let picture):
+            canvas.isHidden = true
+            tooLarge.show(picture)
+        }
     }
 }
 
@@ -105,6 +117,42 @@ private final class PlateBar: UIVisualEffectView, PlateStepping {
     }
 }
 
+/// A model too large to draw: the picture the file carries, if any, over a caption.
+private final class TooLargeView: UIStackView {
+    private let picture = UIImageView()
+    private let caption = UILabel()
+
+    init() {
+        super.init(frame: .zero)
+        axis = .vertical
+        alignment = .center
+        spacing = Spacing.lg
+        isHidden = true
+        picture.contentMode = .scaleAspectFit
+        caption.text = PreviewContent.tooLargeCaption
+        caption.font = .preferredFont(forTextStyle: .body)
+        caption.adjustsFontForContentSizeCategory = true
+        caption.textColor = .secondaryLabel
+        caption.textAlignment = .center
+        caption.numberOfLines = 0
+        addArrangedSubview(picture)
+        addArrangedSubview(caption)
+        NSLayoutConstraint.activate([
+            picture.widthAnchor.constraint(lessThanOrEqualToConstant: Size.quickLookPicture),
+            picture.heightAnchor.constraint(lessThanOrEqualToConstant: Size.quickLookPicture),
+            caption.widthAnchor.constraint(lessThanOrEqualToConstant: Size.emptyStateTextMaxWidth),
+        ])
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    func show(_ image: CGImage?) {
+        picture.image = image.map { UIImage(cgImage: $0) }
+        picture.isHidden = image == nil
+        isHidden = false
+    }
+}
+
 private extension UIFont {
     func withTraits(_ traits: UIFontDescriptor.SymbolicTraits) -> UIFont {
         fontDescriptor.withSymbolicTraits(traits).map { UIFont(descriptor: $0, size: 0) } ?? self
@@ -119,6 +167,7 @@ import Quartz
 final class PreviewViewController: NSViewController, QLPreviewingController {
     private let canvas = ModelCanvasView()
     private let plateBar = PlateBar()
+    private let tooLarge = TooLargeView()
 
     override func loadView() {
         let stage = StageView()
@@ -135,18 +184,28 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
             plateBar.bottomAnchor.constraint(equalTo: stage.bottomAnchor, constant: -Spacing.lg),
         ])
         plateBar.onChange = { [weak self] id in self?.canvas.renderAppearance.plateID = id }
+        tooLarge.translatesAutoresizingMaskIntoConstraints = false
+        stage.addSubview(tooLarge)
+        NSLayoutConstraint.activate([
+            tooLarge.centerXAnchor.constraint(equalTo: stage.centerXAnchor),
+            tooLarge.centerYAnchor.constraint(equalTo: stage.centerYAnchor),
+            tooLarge.leadingAnchor.constraint(greaterThanOrEqualTo: stage.leadingAnchor, constant: Spacing.lg),
+            tooLarge.topAnchor.constraint(greaterThanOrEqualTo: stage.topAnchor, constant: Spacing.lg),
+        ])
         view = stage
         preferredContentSize = NSSize(width: 800, height: 600)
     }
 
     func preparePreviewOfFile(at url: URL) async throws {
-        try checkPreviewSize(url)
-        let model = try await Task.detached(priority: .userInitiated) {
-            try ModelLoader.load(url)
-        }.value
-        canvas.renderAppearance.plateID = model.plates.first?.id
-        canvas.setModel(model)
-        plateBar.show(model.plates)
+        switch try await PreviewContent.load(url) {
+        case .model(let model):
+            canvas.renderAppearance.plateID = model.plates.first?.id
+            canvas.setModel(model)
+            plateBar.show(model.plates)
+        case .tooLarge(let picture):
+            canvas.isHidden = true
+            tooLarge.show(picture)
+        }
     }
 }
 
@@ -197,6 +256,39 @@ private final class PlateBar: NSGlassEffectView, PlateStepping {
         label.setAccessibilityLabel(steps.accessibilityTitle)
         backButton.isEnabled = steps.canGoBack
         forwardButton.isEnabled = steps.canGoForward
+    }
+}
+
+/// A model too large to draw, as on iOS: the file's picture, if any, over a caption.
+private final class TooLargeView: NSStackView {
+    private let picture = NSImageView()
+    private let caption = NSTextField(wrappingLabelWithString: PreviewContent.tooLargeCaption)
+
+    init() {
+        super.init(frame: .zero)
+        orientation = .vertical
+        alignment = .centerX
+        spacing = Spacing.lg
+        isHidden = true
+        picture.imageScaling = .scaleProportionallyDown
+        caption.font = .preferredFont(forTextStyle: .body)
+        caption.textColor = .secondaryLabelColor
+        caption.alignment = .center
+        caption.preferredMaxLayoutWidth = Size.emptyStateTextMaxWidth
+        addArrangedSubview(picture)
+        addArrangedSubview(caption)
+        NSLayoutConstraint.activate([
+            picture.widthAnchor.constraint(lessThanOrEqualToConstant: Size.quickLookPicture),
+            picture.heightAnchor.constraint(lessThanOrEqualToConstant: Size.quickLookPicture),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    func show(_ image: CGImage?) {
+        picture.image = image.map { NSImage(cgImage: $0, size: .zero) }
+        picture.isHidden = image == nil
+        isHidden = false
     }
 }
 
@@ -279,8 +371,27 @@ extension PlateStepping {
     }
 }
 
-/// Past the preview's limits (`QuickLookLimits`), it says the model is too large
-/// instead of being stopped mid-load.
-private func checkPreviewSize(_ url: URL) throws {
-    guard QuickLookLimits.check(url, for: .preview).fits else { throw ModelError.tooLarge }
+/// What the preview shows: the model, or, past the preview's limits or the memory it
+/// has left (`QuickLookLimits`), the picture a 3MF carries over a caption, instead of
+/// being stopped mid-load and leaving the system's file card.
+enum PreviewContent {
+    case model(Model3D)
+    case tooLarge(picture: CGImage?)
+
+    static let tooLargeCaption = String(localized: "Too large to show in 3D here. Open it in Facets to see it.", comment: "Quick Look: shown instead of a model too large to draw, under the picture the file carries if it has one")
+
+    @MainActor
+    static func load(_ url: URL) async throws -> PreviewContent {
+        let (format, fits) = QuickLookLimits.check(url, for: .preview)
+        var tooLarge = !fits
+        #if DEBUG
+        tooLarge = tooLarge || SharedSettings.forceTooLarge
+        #endif
+        if !tooLarge {
+            do {
+                return .model(try await Task.detached(priority: .userInitiated) { try ModelLoader.load(url) }.value)
+            } catch ModelError.tooLarge {}
+        }
+        return .tooLarge(picture: format == .threeMF ? ThreeMFReader.thumbnailImage(at: url) : nil)
+    }
 }
