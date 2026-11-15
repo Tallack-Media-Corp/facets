@@ -167,15 +167,28 @@ extension View {
         #endif
     }
 
-    /// Hides the tab bar under a pushed screen on iPhone and iPad; the Mac has none.
+    /// Hides the tab bar under a pushed screen where it sits at the bottom (iPhone, and
+    /// iPad at compact widths), so the screen's own bottom bar has the room. On a wide
+    /// iPad it's at the top and in no one's way: hiding it there only made the page
+    /// jump up a moment after it appeared. The Mac has none.
     func hidesTabBar() -> some View {
         #if os(iOS)
-        toolbar(.hidden, for: .tabBar)
+        modifier(BottomTabBarHider())
         #else
         self
         #endif
     }
 }
+
+#if os(iOS)
+private struct BottomTabBarHider: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    func body(content: Content) -> some View {
+        content.toolbar(sizeClass == .compact ? .hidden : .automatic, for: .tabBar)
+    }
+}
+#endif
 
 #if os(macOS)
 /// iOS-only modifiers as no-ops on the Mac, so shared views read the same.
