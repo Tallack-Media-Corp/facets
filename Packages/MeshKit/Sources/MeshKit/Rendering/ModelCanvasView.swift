@@ -23,7 +23,9 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
             guard renderAppearance != oldValue else { return }
             renderer?.appearance = renderAppearance
             if renderAppearance.plateID != oldValue.plateID {
-                frameModel(animated: true)
+                // Another plate is elsewhere on the bed: cut to it. A glide from the
+                // last plate flies across the bed and lands from a corner.
+                frameModel(animated: false)
             }
             requestDraw()
         }
