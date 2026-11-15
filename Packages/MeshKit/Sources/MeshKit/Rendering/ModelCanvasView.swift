@@ -112,6 +112,8 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         #if canImport(UIKit)
         isOpaque = false
         backgroundColor = .clear
+        // Unscaled: while rotation animates the bounds, the frame already drawn at the new size would otherwise be stretched to fit.
+        contentMode = .center
         isMultipleTouchEnabled = true
         isAccessibilityElement = true
         // No direct interaction: it would hand VoiceOver's swipes to the model and
