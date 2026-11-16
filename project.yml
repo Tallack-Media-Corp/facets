@@ -394,6 +394,7 @@ targets:
     sources:
       - path: FacetsTests
       - path: Facets/Library/FileLibrary.swift
+      - path: Facets/Library/FolderWatcher.swift
       - path: Facets/Library/LibraryLocation.swift
       - path: Facets/Library/ICloudFile.swift
       - path: Facets/Library/CoordinatedRead.swift

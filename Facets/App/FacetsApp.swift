@@ -27,8 +27,9 @@ struct FacetsApp: App {
     }
 
     /// The visual sweep (FACETS_BACKGROUND=1, debug builds) only looks: on the Mac the
-    /// library is the real one, so no purging or pruning at launch.
-    private static var isSweep: Bool {
+    /// library is the real one, so no purging or pruning at launch, and no Spotlight
+    /// reindex (it writes the system's index under the shared bundle id).
+    nonisolated static var isSweep: Bool {
         #if DEBUG
         ProcessInfo.processInfo.environment["FACETS_BACKGROUND"] == "1"
         #else
@@ -145,9 +146,15 @@ final class MacOpener {
     private var windowSeen = false
 
     func open(_ urls: [URL]) {
-        waiting.append(contentsOf: urls.filter(\.isFileURL))
+        // One Spotlight pick can reach both the app delegate and a window: once is enough.
+        let now = Date.now
+        recent = recent.filter { now.timeIntervalSince($0.value) < 1 }
+        let fresh = urls.filter { $0.isFileURL && recent[$0.standardizedFileURL] == nil }
+        for url in fresh { recent[url.standardizedFileURL] = now }
+        waiting.append(contentsOf: fresh)
         drain()
     }
+    private var recent: [URL: Date] = [:]
 
     /// Called by each window as it appears; any one will do (the action is app-wide).
     func register(_ action: OpenWindowAction) {
@@ -300,14 +307,17 @@ private struct SceneRoot: View {
             // An open window takes the file rather than the app making a new one
             // (on the Mac, the model then gets a window of its own).
             .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
-            #if os(iOS)
-            // A library model picked from a Spotlight search. (On the Mac, MacAppDelegate.)
+            // A library model picked from a Spotlight search. On the Mac the app delegate
+            // usually gets it first; this handler stays because without it the Mac
+            // stopped showing Facets results in Spotlight at all (c9b7802 removed it).
             .onContinueUserActivity(CSSearchableItemActionType) { activity in
-                if let url = SpotlightIndexer.url(for: activity) {
-                    router.presented = ModelFileRef(url: url, isExternal: false)
-                }
+                guard let url = SpotlightIndexer.url(for: activity) else { return }
+                #if os(macOS)
+                MacOpener.shared.open([url])
+                #else
+                router.presented = ModelFileRef(url: url, isExternal: false)
+                #endif
             }
-            #endif
             // A model a Shortcut asked to open: the window in front takes it.
             .onChange(of: pending.file) { claimPendingOpen() }
             .onChange(of: scenePhase) { _, phase in

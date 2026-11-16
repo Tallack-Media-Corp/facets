@@ -168,4 +168,57 @@ import Testing
         try Data().write(to: root.appending(path: ".a.stl.icloud"))
         #expect(FileLibrary.uniqueURL(for: "a.stl", in: root).lastPathComponent == "a 2.stl")
     }
+
+    // MARK: Drops
+
+    /// A drop of the library's own files moves them, never imports a copy; one where
+    /// they already lie does nothing; a folder never goes onto or into itself.
+    @Test func dropsOfLibraryFilesMoveOnlyWhereTheyCan() throws {
+        let test = try library.createFolder(in: root, named: "Test")
+        let inner = try library.createFolder(in: test, named: "Inner")
+        let kako = try file("Kako.stl").url
+        // Outside the library: imported as a copy, so never in the moves.
+        let outsideFolder = FileManager.default.temporaryDirectory.appending(path: "FacetsTests-out-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: outsideFolder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outsideFolder) }
+        let outside = outsideFolder.appending(path: "Other.stl")
+        try Data().write(to: outside)
+
+        // Onto a folder card: moves in.
+        #expect(FileLibrary.dropMoves([kako], into: test, root: root) == [kako])
+        // Onto the page of the folder it's in: nothing.
+        #expect(FileLibrary.dropMoves([kako], into: root, root: root).isEmpty)
+        // A folder onto itself or into its own subfolder: nothing (no alert either).
+        #expect(FileLibrary.dropMoves([test], into: test, root: root).isEmpty)
+        #expect(FileLibrary.dropMoves([test], into: inner, root: root).isEmpty)
+        // Another folder's page: moves there.
+        #expect(FileLibrary.dropMoves([kako, inner], into: root.appending(path: "Test/Inner"), root: root) == [kako])
+        #expect(FileLibrary.dropMoves([outside], into: test, root: root).isEmpty)
+        // The temporary folder is under /var, a symlink to /private/var; either spelling is the library.
+        let resolved = URL(fileURLWithPath: kako.resolvingSymlinksInPath().path)
+        #expect(FileLibrary.dropMoves([resolved], into: root, root: root).isEmpty)
+        #expect(FileLibrary.dropMoves([resolved], into: test, root: root) == [resolved])
+    }
+
+    /// A move into a folder shows in its recount, and a file arriving inside a
+    /// subfolder from outside the app reaches that subfolder's watcher (the open
+    /// folder's own watcher never hears of it).
+    @Test func subfolderCountsFollowFilesArrivingInside() async throws {
+        let test = try library.createFolder(in: root, named: "Test")
+        try library.move([try file("Kako.stl")], to: test)
+        let counted = FileLibrary.withChildCounts(FileLibrary.scan(root, sort: .name, root: root))
+        #expect(counted.map(\.childCount) == [1])
+
+        let heard = Heard()
+        let watchers = FolderWatcher.subfolders(of: counted) { heard.value = true }
+        #expect(watchers.count == 1)
+        try Data().write(to: test.appending(path: "Synced.stl"))
+        for _ in 0..<50 where !heard.value { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(heard.value)
+        #expect(FileLibrary.withChildCounts(FileLibrary.scan(root, sort: .name, root: root)).map(\.childCount) == [2])
+    }
+}
+
+@MainActor private final class Heard {
+    var value = false
 }

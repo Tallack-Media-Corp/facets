@@ -1,6 +1,7 @@
 import SwiftUI
 import TipKit
 import UniformTypeIdentifiers
+import os
 #if os(macOS)
 import QuickLook
 #endif
@@ -53,6 +54,10 @@ struct FolderView: View {
     /// Bumped per reload, so a slow read finishing late can't replace a newer one.
     @State private var loadGeneration = 0
     @State private var dropTargeted = false
+    /// The folder card or row a drag is over; the page's outline stays off meanwhile.
+    @State private var dropFolder: URL?
+    /// Watches the subfolders shown, so their counts follow files arriving in them.
+    @State private var subfolderWatchers: [FolderWatcher] = []
     /// Browsed models copied to the library this visit, on top of `copies`.
     @State private var saved: Set<URL> = []
     /// Browsed models the library already has a copy of, found with the listing.
@@ -95,17 +100,10 @@ struct FolderView: View {
                 }
             }
             // Browsed folders are look-and-save: no drop target there.
-            .onDrop(of: isBrowsing ? [] : UTType.models, isTargeted: $dropTargeted) { providers in
-                !isBrowsing && acceptDrop(providers)
+            .onDrop(of: isBrowsing ? [] : Self.dropTypes, isTargeted: $dropTargeted) { providers in
+                !isBrowsing && acceptDrop(providers, into: folder)
             }
-            .overlay {
-                if dropTargeted {
-                    RoundedRectangle(cornerRadius: Radius.dropTarget)
-                        .strokeBorder(.tint, style: StrokeStyle(lineWidth: Stroke.outline, dash: Stroke.dropTargetDash))
-                        .padding(Spacing.md)
-                        .allowsHitTesting(false)
-                }
-            }
+            .dropHighlight(dropTargeted && dropFolder == nil)
             // The new-user tour, a card at a time above the tab bar.
             .overlay(alignment: .bottom) {
                 FloatingTip(tip: libraryTip)
@@ -146,7 +144,7 @@ struct FolderView: View {
             }
             .sheet(item: $moving) { item in
                 MoveSheet(item: item) { destination in
-                    perform(String(localized: "Couldn't Move")) { try library.move([item], to: destination) }
+                    moveItems([item], to: destination)
                 }
                 .sheetSize()
             }
@@ -204,9 +202,9 @@ struct FolderView: View {
                         #if os(macOS)
                         macCard(item)
                         #else
-                        open(item) {
-                            LibraryCard(item: item)
-                        }
+                        takesDrops(item, open(item) {
+                            LibraryCard(item: item, isDropTarget: dropFolder == item.url)
+                        })
                         .buttonStyle(.plain)
                         .zoomSource(id: item.url, in: zoom)
                         .contextMenu { actions(for: item) } preview: {
@@ -229,6 +227,9 @@ struct FolderView: View {
                     // apart, inside 16 pt margins.
                     max(1, Int((geometry.size.width - 2 * Spacing.lg + Spacing.lg) / (Size.gridCardMin + Spacing.lg)))
                 } action: { columnCount = $0 }
+                // Cards drag as one container: a selected card brings the whole selection.
+                .dragContainer(for: URL.self, itemID: \.self) { (urls: [URL]) in urls }
+                .dragContainerSelection(Array(selection))
                 // A click on the background, between or below the cards, clears the
                 // selection. It sits behind the cards, filling the visible area, so
                 // a click on a card never reaches it.
@@ -257,9 +258,10 @@ struct FolderView: View {
                     LibrarySectionPicker().sectionPickerRow()
                 }
                 ForEach(items) { item in
-                    open(item) {
+                    takesDrops(item, open(item) {
                         LibraryRow(item: item)
-                    }
+                            .dropHighlight(dropFolder == item.url, cornerRadius: Radius.rowThumb, inset: 0)
+                    })
                     .zoomSource(id: item.url, in: zoom)
                     .contextMenu { actions(for: item) }
                     .swipeActions(edge: .trailing) {
@@ -450,6 +452,7 @@ struct FolderView: View {
         items = listed
         copies = found
         loaded = true
+        subfolderWatchers = FolderWatcher.subfolders(of: listed) { [library] in library.noteExternalChange() }
         #if DEBUG
         // FACETS_SHEET=move opens the Move sheet for the library's first model, once.
         if !debugMoveShown, folder == library.root, !isBrowsing, ProcessInfo.processInfo.environment["FACETS_SHEET"] == "move",
@@ -488,45 +491,109 @@ struct FolderView: View {
         }
     }
 
-    /// Files dragged in from Files or another app (iPad). Each provider hands over a
-    /// temporary copy that only lives for its callback, so it's copied out straight
+    /// What a page, folder card or row takes: models, and file URLs, which a card
+    /// dragged inside the library carries (a folder's has no model type).
+    private static let dropTypes = UTType.models + [.fileURL]
+
+    /// Moves library items: the Move sheet and a drag onto a folder alike.
+    private func moveItems(_ items: [LibraryItem], to destination: URL) {
+        perform(String(localized: "Couldn't Move")) { try library.move(items, to: destination) }
+    }
+
+    /// A folder's card or row takes drops into that folder, as the page takes them
+    /// into the one on screen. Not in Browse, which is look-and-save.
+    @ViewBuilder
+    private func takesDrops(_ item: LibraryItem, _ view: some View) -> some View {
+        if item.isFolder, !isBrowsing {
+            view.onDrop(of: Self.dropTypes, isTargeted: Binding(get: { dropFolder == item.url }, set: { targeted in
+                if targeted { dropFolder = item.url } else if dropFolder == item.url { dropFolder = nil }
+            })) { providers in
+                acceptDrop(providers, into: item.url)
+            }
+        } else {
+            view
+        }
+    }
+
+    /// A drop on the page or on a folder. Files already in the library move there
+    /// (nothing happens to ones already in it); files from elsewhere (Files, the
+    /// Finder, another app) are imported as copies.
+    private func acceptDrop(_ providers: [NSItemProvider], into destination: URL) -> Bool {
+        let accepted = providers.filter { provider in Self.dropTypes.contains { provider.hasItemConformingToTypeIdentifier($0.identifier) } }
+        guard !accepted.isEmpty else { return false }
+        let root = library.root
+        Task {
+            var inside: [URL] = []
+            var outside: [NSItemProvider] = []
+            for provider in accepted {
+                let original = await Self.originalURL(of: provider)
+                let isInside = original.map { LibraryLocation.contains($0, in: root) } ?? false
+                Self.log.info("Drop of \(provider.registeredTypeIdentifiers, privacy: .public): \(original?.lastPathComponent ?? "no file URL", privacy: .public), \(isInside ? "in the library" : "from outside", privacy: .public)")
+                if let original, isInside { inside.append(original) } else { outside.append(provider) }
+            }
+            let moves = FileLibrary.dropMoves(inside, into: destination, root: root)
+            if !moves.isEmpty {
+                moveItems(moves.map { LibraryItem(url: $0, isFolder: (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true, size: nil, modified: nil, childCount: nil) }, to: destination)
+            }
+            if !outside.isEmpty { await importDrop(outside, into: destination) }
+        }
+        return true
+    }
+
+    private static let log = Logger(subsystem: "Facets", category: "library")
+
+    /// Where a dropped file is now, when the drag says: its file URL (a card dragged
+    /// on the Mac), or the file itself when the system can open it in place (Files on
+    /// iPad, the Finder). Nil when only a copy is on offer.
+    private static func originalURL(of provider: NSItemProvider) async -> URL? {
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            let url: URL? = await withCheckedContinuation { continuation in
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in continuation.resume(returning: url) }
+            }
+            if let url, url.isFileURL { return url }
+        }
+        guard let type = UTType.models.first(where: { provider.hasItemConformingToTypeIdentifier($0.identifier) }) else { return nil }
+        return await withCheckedContinuation { continuation in
+            _ = provider.loadInPlaceFileRepresentation(forTypeIdentifier: type.identifier) { url, isInPlace, _ in
+                continuation.resume(returning: isInPlace ? url : nil)
+            }
+        }
+    }
+
+    /// Files dragged in from Files, the Finder or another app. Each provider hands over
+    /// a temporary copy that only lives for its callback, so it's copied out straight
     /// away; then everything is imported together and the result reported.
-    private func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
+    private func importDrop(_ providers: [NSItemProvider], into destination: URL) async {
         let supported = providers.compactMap { provider -> (NSItemProvider, UTType)? in
             UTType.models.first { provider.hasItemConformingToTypeIdentifier($0.identifier) }.map { (provider, $0) }
         }
-        guard !supported.isEmpty else { return false }
-        let destination = folder
         let total = providers.count
-        Task {
-            var staged: [URL] = []
-            for (provider, type) in supported {
-                if let url = await Self.stage(provider, type: type) { staged.append(url) }
-            }
-            var added = 0
-            var importError: Error?
-            if !staged.isEmpty {
-                do {
-                    added = try await library.importFiles(staged, into: destination).count
-                } catch {
-                    importError = error
-                }
-            }
-            for url in staged { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-            let missed = total - added
-            switch (added, missed) {
-            case (0, _) where importError != nil:
-                // The files were fine; copying them failed (no space, iCloud).
-                toasts.warn(total == 1 ? String(localized: "Couldn't add that file. \(FriendlyError(file: importError!).message)") : String(localized: "Couldn't add those files. \(FriendlyError(file: importError!).message)"))
-            case (0, _):
-                toasts.warn(total == 1 ? String(localized: "Couldn't add that file. Only STL, 3MF and OBJ files can go in the library.") : String(localized: "Couldn't add those files. Only STL, 3MF and OBJ files can go in the library."))
-            case (_, 0):
-                toasts.show(String(localized: "Added \(added) models"))
-            default:
-                toasts.warn(String(localized: "Added \(added) of \(total). The others aren't STL, 3MF or OBJ files."))
+        var staged: [URL] = []
+        for (provider, type) in supported {
+            if let url = await Self.stage(provider, type: type) { staged.append(url) }
+        }
+        var added = 0
+        var importError: Error?
+        if !staged.isEmpty {
+            do {
+                added = try await library.importFiles(staged, into: destination).count
+            } catch {
+                importError = error
             }
         }
-        return true
+        for url in staged { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let missed = total - added
+        switch (added, missed) {
+        case (0, _) where importError != nil:
+            // The files were fine; copying them failed (no space, iCloud).
+            toasts.warn(total == 1 ? String(localized: "Couldn't add that file. \(FriendlyError(file: importError!).message)") : String(localized: "Couldn't add those files. \(FriendlyError(file: importError!).message)"))
+        case (0, _):
+            toasts.warn(total == 1 ? String(localized: "Couldn't add that file. Only STL, 3MF and OBJ files can go in the library.") : String(localized: "Couldn't add those files. Only STL, 3MF and OBJ files can go in the library."))
+        case (_, 0):
+            toasts.show(String(localized: "Added \(added) models"))
+        default:
+            toasts.warn(String(localized: "Added \(added) of \(total). The others aren't STL, 3MF or OBJ files."))
+        }
     }
 
     /// Copies a dropped file somewhere it outlives the provider's callback.
@@ -556,6 +623,8 @@ struct LibraryCard: View {
     /// Selected on the Mac: an outline round the picture and the name highlighted,
     /// as the Finder shows it.
     var isSelected = false
+    /// A folder something is being dragged onto.
+    var isDropTarget = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -574,6 +643,7 @@ struct LibraryCard: View {
                         .padding(-Stroke.outline)
                 }
             }
+            .dropHighlight(isDropTarget, cornerRadius: Radius.selectionOutline, inset: -Stroke.outline)
 
             VStack(alignment: .leading, spacing: Spacing.hair) {
                 Text(item.displayName)
@@ -717,10 +787,11 @@ extension FolderView {
     /// A grid card: click to select, double-click to open, drag out to the Finder or
     /// a slicer.
     fileprivate func macCard(_ item: LibraryItem) -> some View {
-        LibraryCard(item: item, isSelected: selection.contains(item.url))
+        takesDrops(item, LibraryCard(item: item, isSelected: selection.contains(item.url), isDropTarget: dropFolder == item.url))
             .gesture(TapGesture(count: 2).onEnded { activate([item]) })
             .simultaneousGesture(TapGesture().onEnded { click(item) })
-            .draggable(item.url)
+            // With the grid's dragContainer: a selected card brings the whole selection.
+            .draggable(containerItemID: item.url)
             .contextMenu { selectionMenu(for: selection.contains(item.url) ? selectedItems : [item]) }
             // No longer a Button on the Mac, so say it can be opened.
             .accessibilityAddTraits(.isButton)
@@ -734,11 +805,14 @@ extension FolderView {
                 LibrarySectionPicker().sectionPickerRow()
             }
             ForEach(items) { item in
-                LibraryRow(item: item)
+                takesDrops(item, LibraryRow(item: item)
+                    .dropHighlight(dropFolder == item.url, cornerRadius: Radius.rowThumb, inset: 0))
                     .tag(item.url)
-                    .draggable(item.url)
+                    .draggable(containerItemID: item.url)
             }
         }
+        .dragContainer(for: URL.self, itemID: \.self) { (urls: [URL]) in urls }
+        .dragContainerSelection(Array(selection))
         .contextMenu(forSelectionType: URL.self) { urls in
             selectionMenu(for: items.filter { urls.contains($0.url) })
         } primaryAction: { urls in

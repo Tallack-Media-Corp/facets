@@ -144,8 +144,9 @@ final class FileLibrary {
         }
     }
 
-    nonisolated private static func childCount(of folder: URL) -> Int {
-        let urls = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
+    /// Nil when the folder can't be listed: "Folder" rather than a wrong "0 items".
+    nonisolated private static func childCount(of folder: URL) -> Int? {
+        guard let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey]) else { return nil }
         return urls.filter { url in
             let name = url.lastPathComponent
             if name.hasPrefix(".") {
@@ -476,6 +477,20 @@ final class FileLibrary {
             try Self.coordinatedMove(item.url, to: uniqueURL(for: visibleName(item.url.lastPathComponent, in: folder), in: folder))
         }
         revision += 1
+    }
+
+    /// Of the files dropped on `folder`, the library's own that move there: not ones
+    /// already in it (a drop where they lie does nothing), not a folder onto itself or
+    /// into its own subfolder. Files from outside the library aren't listed; they're
+    /// imported as copies. Symlinks resolved, as `LibraryLocation.contains` does.
+    nonisolated static func dropMoves(_ urls: [URL], into folder: URL, root: URL) -> [URL] {
+        func path(_ url: URL) -> String { url.standardizedFileURL.resolvingSymlinksInPath().path }
+        let target = path(folder)
+        return urls.filter { url in
+            guard LibraryLocation.contains(url, in: root) else { return false }
+            let source = path(url)
+            return path(url.deletingLastPathComponent()) != target && target != source && !target.hasPrefix(source + "/")
+        }
     }
 
     /// Copies files picked from elsewhere into a library folder. Returns the copies.

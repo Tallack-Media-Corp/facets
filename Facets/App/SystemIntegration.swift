@@ -58,6 +58,8 @@ enum SpotlightIndexer {
     /// changed since this launch indexed. Once per launch regardless: the system can
     /// wipe the index without telling us.
     static func reindex() {
+        // The visual sweep only looks.
+        guard !FacetsApp.isSweep else { return }
         Task.detached(priority: .utility) {
             let models = LibraryIndex.models().map { url in
                 (url: url, modified: try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)

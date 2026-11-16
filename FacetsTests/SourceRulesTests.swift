@@ -143,6 +143,12 @@ enum RepoSources {
         #expect(found.isEmpty, "use .toastHost() or .toastHost(aboveBottomToolbar:) (Toasts.swift): \(found)")
     }
 
+    /// Where a drop lands is drawn once, for the page and for folder cards and rows alike.
+    @Test func dropOutlinesComeFromDropHighlight() {
+        let found = Self.violations(except: ["ModelTypes.swift", "Tokens.swift"]) { $0.text.contains("dropTargetDash") }
+        #expect(found.isEmpty, "use .dropHighlight(_:cornerRadius:inset:) (ModelTypes.swift): \(found)")
+    }
+
     /// The text from a `.sheet(` or `.popover(` to the end of its content closure.
     static func presentedContent(in text: String) -> [(line: Int, text: Substring)] {
         var found: [(line: Int, text: Substring)] = []

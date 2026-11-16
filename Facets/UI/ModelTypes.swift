@@ -41,3 +41,18 @@ extension View {
         #endif
     }
 }
+
+extension View {
+    /// Where a drop will land while something is dragged over it: the dashed tint
+    /// outline, round the whole page (the defaults) or a folder's card or row.
+    func dropHighlight(_ isTargeted: Bool, cornerRadius: CGFloat = Radius.dropTarget, inset: CGFloat = Spacing.md) -> some View {
+        overlay {
+            if isTargeted {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(.tint, style: StrokeStyle(lineWidth: Stroke.outline, dash: Stroke.dropTargetDash))
+                    .padding(inset)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}
