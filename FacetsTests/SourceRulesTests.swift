@@ -149,6 +149,12 @@ enum RepoSources {
         #expect(found.isEmpty, "use .dropHighlight(_:cornerRadius:inset:) (ModelTypes.swift): \(found)")
     }
 
+    /// A library drag is set up once, so the Mac's selection drag and iOS's file drag can't drift.
+    @Test func dragSourcesComeFromLibraryDraggable() {
+        let found = Self.violations(except: ["ModelTypes.swift"]) { Self.matches(#"\.(draggable|onDrag|dragContainer)\("#, $0.text) }
+        #expect(found.isEmpty, "use .libraryDraggable(_:) and .libraryDragContainer(selection:) (ModelTypes.swift): \(found)")
+    }
+
     /// The text from a `.sheet(` or `.popover(` to the end of its content closure.
     static func presentedContent(in text: String) -> [(line: Int, text: Substring)] {
         var found: [(line: Int, text: Substring)] = []

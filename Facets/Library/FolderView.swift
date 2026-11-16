@@ -207,6 +207,7 @@ struct FolderView: View {
                         })
                         .buttonStyle(.plain)
                         .zoomSource(id: item.url, in: zoom)
+                        .libraryDraggable(item.url)
                         .contextMenu { actions(for: item) } preview: {
                             if !item.isFolder {
                                 ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0, isDownloaded: item.isDownloaded)
@@ -227,9 +228,7 @@ struct FolderView: View {
                     // apart, inside 16 pt margins.
                     max(1, Int((geometry.size.width - 2 * Spacing.lg + Spacing.lg) / (Size.gridCardMin + Spacing.lg)))
                 } action: { columnCount = $0 }
-                // Cards drag as one container: a selected card brings the whole selection.
-                .dragContainer(for: URL.self, itemID: \.self) { (urls: [URL]) in urls }
-                .dragContainerSelection(Array(selection))
+                .libraryDragContainer(selection: selection)
                 // A click on the background, between or below the cards, clears the
                 // selection. It sits behind the cards, filling the visible area, so
                 // a click on a card never reaches it.
@@ -263,6 +262,7 @@ struct FolderView: View {
                             .dropHighlight(dropFolder == item.url, cornerRadius: Radius.rowThumb, inset: 0)
                     })
                     .zoomSource(id: item.url, in: zoom)
+                    .libraryDraggable(item.url)
                     .contextMenu { actions(for: item) }
                     .swipeActions(edge: .trailing) {
                         if isBrowsing {
@@ -790,8 +790,7 @@ extension FolderView {
         takesDrops(item, LibraryCard(item: item, isSelected: selection.contains(item.url), isDropTarget: dropFolder == item.url))
             .gesture(TapGesture(count: 2).onEnded { activate([item]) })
             .simultaneousGesture(TapGesture().onEnded { click(item) })
-            // With the grid's dragContainer: a selected card brings the whole selection.
-            .draggable(containerItemID: item.url)
+            .libraryDraggable(item.url)
             .contextMenu { selectionMenu(for: selection.contains(item.url) ? selectedItems : [item]) }
             // No longer a Button on the Mac, so say it can be opened.
             .accessibilityAddTraits(.isButton)
@@ -808,11 +807,10 @@ extension FolderView {
                 takesDrops(item, LibraryRow(item: item)
                     .dropHighlight(dropFolder == item.url, cornerRadius: Radius.rowThumb, inset: 0))
                     .tag(item.url)
-                    .draggable(containerItemID: item.url)
+                    .libraryDraggable(item.url)
             }
         }
-        .dragContainer(for: URL.self, itemID: \.self) { (urls: [URL]) in urls }
-        .dragContainerSelection(Array(selection))
+        .libraryDragContainer(selection: selection)
         .contextMenu(forSelectionType: URL.self) { urls in
             selectionMenu(for: items.filter { urls.contains($0.url) })
         } primaryAction: { urls in
