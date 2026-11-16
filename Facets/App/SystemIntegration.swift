@@ -74,7 +74,9 @@ enum SpotlightIndexer {
                 attributes.title = Format.title(of: url)
                 let format = url.pathExtension.uppercased()
                 attributes.contentDescription = LibraryIndex.folderName(of: url).map { String(localized: "\(format) model in \($0)", comment: "Spotlight: a model's format and folder, as in 'STL model in Brackets'") } ?? String(localized: "\(format) model", comment: "Spotlight: a model's format, as in 'STL model'")
-                attributes.contentURL = url
+                // No contentURL: on the Mac, Spotlight folds an item into the file it points
+                // at and shows only the file, so Facets results vanished from the main list.
+                // A pick is found by its identifier (url(for:)), not by this.
                 attributes.contentModificationDate = modified
                 return CSSearchableItem(uniqueIdentifier: LibraryIndex.id(for: url), domainIdentifier: domain, attributeSet: attributes)
             }

@@ -262,7 +262,8 @@ struct FolderView: View {
                             .dropHighlight(dropFolder == item.url, cornerRadius: Radius.rowThumb, inset: 0)
                     })
                     .zoomSource(id: item.url, in: zoom)
-                    .libraryDraggable(item.url)
+                    // No drag here yet: on iOS a drag begun on a List row lands on no row
+                    // (seen on iOS 27), so a row would lift and go nowhere. Move… instead.
                     .contextMenu { actions(for: item) }
                     .swipeActions(edge: .trailing) {
                         if isBrowsing {
