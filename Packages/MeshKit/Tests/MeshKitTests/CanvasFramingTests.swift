@@ -21,5 +21,25 @@ import simd
         #expect(canvas.pulse == nil)
         #expect(simd_distance(canvas.camera.target, SIMD3(500.5, 300.5, 0.5)) < 1)
     }
+
+    /// Reported 17 Nov on iPhone: turned from portrait to landscape, the model stayed
+    /// zoomed for the tall view and looked much smaller. A new shape keeps the zoom
+    /// relative to a fit: fit before, fit after.
+    @Test func newShapeKeepsTheFit() throws {
+        let model = try ModelLoader.load(binarySTL(cubeTriangles), name: "Cube")
+        func fitted(width: CGFloat, height: CGFloat) -> ModelCanvasView {
+            let canvas = ModelCanvasView()
+            canvas.frame = NSRect(x: 0, y: 0, width: width, height: height)
+            canvas.setModel(model)
+            return canvas
+        }
+        let canvas = fitted(width: 400, height: 800)
+        let portrait = canvas.camera.distance
+        canvas.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        canvas.layout()
+        let landscape = fitted(width: 800, height: 400).camera.distance
+        #expect(landscape < portrait * 0.75)
+        #expect(abs(canvas.camera.distance - landscape) < landscape * 0.01)
+    }
 }
 #endif

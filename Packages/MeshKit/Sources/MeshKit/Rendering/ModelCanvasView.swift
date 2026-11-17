@@ -75,17 +75,28 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     /// How much of the view's height a sheet covers from the bottom (0 to 1). The
     /// model glides up to stay centred in what's left.
     public var bottomObscured: CGFloat = 0 {
-        didSet {
-            guard bottomObscured != oldValue else { return }
-            if Self.reduceMotion || window == nil {
-                verticalShift = Float(bottomObscured)
-                requestDraw()
-            } else {
-                startDisplayLink()
-            }
+        didSet { if bottomObscured != oldValue { obscuredChanged() } }
+    }
+    /// The same from the trailing edge: a panel laid over the canvas rather than
+    /// beside it (the iPad's inspector in portrait).
+    public var trailingObscured: CGFloat = 0 {
+        didSet { if trailingObscured != oldValue { obscuredChanged() } }
+    }
+    private var obscuredTarget: SIMD2<Float> { SIMD2(Float(trailingObscured), Float(bottomObscured)) }
+    /// Where the picture is now on its way to `obscuredTarget`.
+    private var shift = SIMD2<Float>.zero
+
+    private func obscuredChanged() {
+        if Self.reduceMotion || window == nil {
+            shift = obscuredTarget
+            requestDraw()
+        } else {
+            startDisplayLink()
         }
     }
-    private var verticalShift: Float = 0
+
+    /// The size the camera was last framed for, so a new size can keep the same zoom.
+    private var framedSize = CGSize.zero
 
     private var needsFit = true
     private var displayLink: CADisplayLink?
@@ -169,6 +180,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         var next = camera
         next.fitTightly(renderer.visibleParts, aspect: aspect, fill: 0.72, recenter: false, including: bedCorners)
         needsFit = false
+        framedSize = bounds.size
         let settled = animation == nil && pulse == nil
         let tolerance = max(camera.distance, 1e-3) * 0.01
         if settled, abs(next.distance - camera.distance) < tolerance, simd_distance(next.target, camera.target) < tolerance {
@@ -333,9 +345,34 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     #endif
 
     private func fitIfNeeded() {
-        if needsFit, bounds.width > 0, renderer?.model != nil {
+        guard bounds.width > 0, bounds.height > 0, renderer?.model != nil else { return }
+        if needsFit {
             frameModel(animated: false)
+        } else if bounds.size != framedSize {
+            keepZoom(from: framedSize)
         }
+    }
+
+    /// The view changed shape (rotated, or a panel opened beside it): keep the model
+    /// as zoomed as it was relative to a fit, at the new shape. Without this a model
+    /// fit in portrait stays fit to the height in landscape, and looks much smaller.
+    private func keepZoom(from old: CGSize) {
+        guard let renderer, old.width > 0, old.height > 0 else { return }
+        framedSize = bounds.size
+        let base = pulse?.base ?? animation?.to ?? camera
+        var before = base, after = base
+        let parts = renderer.visibleParts, corners = bedCorners
+        before.fitTightly(parts, aspect: Float(old.width / old.height), fill: 0.72, recenter: false, including: corners)
+        after.fitTightly(parts, aspect: aspect, fill: 0.72, recenter: false, including: corners)
+        guard before.distance > 0, after.distance > 0 else { return }
+        var next = base
+        next.distance = base.distance * after.distance / before.distance
+        #if canImport(AppKit) && !canImport(UIKit)
+        let animated = !inLiveResize
+        #else
+        let animated = true
+        #endif
+        move(to: next, animated: animated)
     }
 
     public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
@@ -375,7 +412,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
               let commands = renderer.context.queue.makeCommandBuffer(),
               let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
         let size = drawableSize
-        renderer.encode(into: encoder, camera: camera, aspect: Float(size.width / max(size.height, 1)), pixelsPerPoint: Float(pointScale), verticalShift: verticalShift)
+        renderer.encode(into: encoder, camera: camera, aspect: Float(size.width / max(size.height, 1)), pixelsPerPoint: Float(pointScale), obscured: shift)
         encoder.endEncoding()
         commands.present(drawable)
         commands.commit()
@@ -386,7 +423,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
 
     private var viewProjection: simd_float4x4? {
         guard let renderer, bounds.width > 0, bounds.height > 0 else { return nil }
-        return renderer.viewProjection(camera: camera, aspect: aspect, verticalShift: verticalShift)
+        return renderer.viewProjection(camera: camera, aspect: aspect, obscured: shift)
     }
 
     /// Where a world point lands on screen, in points from the top left; nil behind
@@ -570,11 +607,11 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     }
 
     @objc private func step(_ link: CADisplayLink) {
-        let targetShift = Float(bottomObscured)
-        if abs(verticalShift - targetShift) > 0.001 {
-            verticalShift += (targetShift - verticalShift) * 0.2
+        let targetShift = obscuredTarget
+        if simd_length(shift - targetShift) > 0.001 {
+            shift += (targetShift - shift) * 0.2
         } else {
-            verticalShift = targetShift
+            shift = targetShift
         }
         if let pulse {
             // Out about 6% and back in 0.5 s, easing at both ends.
@@ -601,7 +638,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
             velocity = .zero
         }
         requestDraw()
-        if animation == nil, pulse == nil, velocity == .zero, verticalShift == targetShift { stopDisplayLink() }
+        if animation == nil, pulse == nil, velocity == .zero, shift == targetShift { stopDisplayLink() }
     }
 
     #if canImport(UIKit)
@@ -850,15 +887,17 @@ public struct ModelCanvas {
     let controller: ModelCanvasController?
     let onInteraction: (() -> Void)?
     let bottomObscured: CGFloat
+    let trailingObscured: CGFloat
     let tool: ModelCanvasView.Tool
     let markers: [SIMD3<Float>]
     let onSurfaceTap: ((SurfaceHit, SIMD3<Float>) -> Void)?
 
-    public init(model: Model3D?, appearance: RenderAppearance, controller: ModelCanvasController? = nil, bottomObscured: CGFloat = 0, tool: ModelCanvasView.Tool = .none, markers: [SIMD3<Float>] = [], onSurfaceTap: ((SurfaceHit, SIMD3<Float>) -> Void)? = nil, onInteraction: (() -> Void)? = nil) {
+    public init(model: Model3D?, appearance: RenderAppearance, controller: ModelCanvasController? = nil, bottomObscured: CGFloat = 0, trailingObscured: CGFloat = 0, tool: ModelCanvasView.Tool = .none, markers: [SIMD3<Float>] = [], onSurfaceTap: ((SurfaceHit, SIMD3<Float>) -> Void)? = nil, onInteraction: (() -> Void)? = nil) {
         self.model = model
         self.appearance = appearance
         self.controller = controller
         self.bottomObscured = bottomObscured
+        self.trailingObscured = trailingObscured
         self.tool = tool
         self.markers = markers
         self.onSurfaceTap = onSurfaceTap
@@ -901,6 +940,7 @@ public struct ModelCanvas {
         controller?.view = view
         view.onInteraction = onInteraction
         view.bottomObscured = bottomObscured
+        view.trailingObscured = trailingObscured
         view.tool = tool
         view.markers = markers
         view.onSurfaceTap = onSurfaceTap

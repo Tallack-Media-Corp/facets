@@ -146,13 +146,13 @@ public final class SceneRenderer {
     }
 
     /// `pixelsPerPoint` keeps the grid lines the same thickness on every screen.
-    /// `verticalShift` (the fraction of the view a sheet covers from the bottom) fits
-    /// the picture into the part left uncovered.
-    public func encode(into encoder: MTLRenderCommandEncoder, camera: OrbitCamera, aspect: Float, pixelsPerPoint: Float = 1, verticalShift: Float = 0) {
+    /// `obscured` (the fractions of the view covered from the trailing edge, x, and
+    /// the bottom, y) fits the picture into the part left uncovered.
+    public func encode(into encoder: MTLRenderCommandEncoder, camera: OrbitCamera, aspect: Float, pixelsPerPoint: Float = 1, obscured: SIMD2<Float> = .zero) {
         guard model != nil else { return }
         var frame = FrameUniforms(
             view: camera.viewMatrix,
-            projection: projection(camera: camera, aspect: aspect, verticalShift: verticalShift),
+            projection: projection(camera: camera, aspect: aspect, obscured: obscured),
             gridColor: appearance.gridColor,
             clip: SIMD4(appearance.sectionHeight ?? 0, appearance.sectionHeight == nil ? 0 : 1, 0, 0)
         )
@@ -206,25 +206,27 @@ public final class SceneRenderer {
     }
 
     /// The projection `encode` uses, shift included.
-    func projection(camera: OrbitCamera, aspect: Float, verticalShift: Float) -> simd_float4x4 {
-        Self.shift(verticalShift) * camera.projectionMatrix(aspect: aspect, sceneRadius: sceneRadius + simd_distance(camera.target, focusBounds.center))
+    func projection(camera: OrbitCamera, aspect: Float, obscured: SIMD2<Float>) -> simd_float4x4 {
+        Self.shift(obscured) * camera.projectionMatrix(aspect: aspect, sceneRadius: sceneRadius + simd_distance(camera.target, focusBounds.center))
     }
 
     /// World to clip space exactly as drawn, for turning a tap into a ray and a
     /// world point back into a spot on screen.
-    public func viewProjection(camera: OrbitCamera, aspect: Float, verticalShift: Float = 0) -> simd_float4x4 {
-        projection(camera: camera, aspect: aspect, verticalShift: verticalShift) * camera.viewMatrix
+    public func viewProjection(camera: OrbitCamera, aspect: Float, obscured: SIMD2<Float> = .zero) -> simd_float4x4 {
+        projection(camera: camera, aspect: aspect, obscured: obscured) * camera.viewMatrix
     }
 
-    /// Fits the picture into the top `1 - amount` of the view: scaled down by the
-    /// covered fraction and moved up, sitting slightly low so the chips at the top
-    /// stay clear.
-    private static func shift(_ amount: Float) -> simd_float4x4 {
+    /// Fits the picture into the part of the view left uncovered: scaled down by the
+    /// larger covered fraction and moved into the rest. From the bottom it sits
+    /// slightly low, so the chips at the top stay clear; from the trailing edge it's
+    /// centred in what's left.
+    private static func shift(_ amount: SIMD2<Float>) -> simd_float4x4 {
         var m = matrix_identity_float4x4
-        let scale = 1 - amount
+        let scale = 1 - max(amount.x, amount.y)
         m.columns.0.x = scale
         m.columns.1.y = scale
-        m.columns.3.y = amount * 0.85
+        m.columns.3.x = -amount.x
+        m.columns.3.y = amount.y * 0.85
         return m
     }
 

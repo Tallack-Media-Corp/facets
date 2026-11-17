@@ -30,6 +30,10 @@ struct ViewerScreen: View {
     @State private var controller = ModelCanvasController()
     @State private var showingInfo = false
     @State private var infoDetent = PresentationDetent.medium
+    /// The canvas's right edge and width, and the inspector's left edge, on screen:
+    /// in iPad portrait the inspector lies over the canvas instead of beside it.
+    @State private var canvasSpan = (maxX: CGFloat(0), width: CGFloat(1))
+    @State private var inspectorMinX: CGFloat?
     /// Which gesture hint is next: 0 the basics, 1 the recovery gesture, 2 none.
     /// A stage is passed once the model has been moved while its hint was shown.
     @AppStorage("viewer.hintStage") private var hintStage = 0
@@ -138,6 +142,7 @@ struct ViewerScreen: View {
                     appearance: staged(appearance, for: model),
                     controller: controller,
                     bottomObscured: obscured,
+                    trailingObscured: obscuredByInspector,
                     tool: tool?.canvasTool ?? .none,
                     markers: tool == .measure ? measurePoints : [],
                     onSurfaceTap: { hit, point in surfaceTapped(hit, point, in: model) }
@@ -146,6 +151,7 @@ struct ViewerScreen: View {
                 }
                     // Under the bars, but beside an open inspector rather than behind it.
                     .ignoresSafeArea(edges: showingInfo && infoAsInspector ? .vertical : .all)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { canvasSpan = ($0.maxX, max($0.width, 1)) }
                     .accessibilityLabel(canvasLabel(for: model))
                     .accessibilityHint("Swipe up or down to turn the model or change the view.")
             }
@@ -202,15 +208,8 @@ struct ViewerScreen: View {
         content
         // A sheet on iPhone, where the model glides up above it; an inspector beside
         // the model on iPad and Mac, so hiding an object shows what changed.
-        .modifier(InfoPresentation(asInspector: infoAsInspector, isPresented: $showingInfo, stageTop: Color(Palette.stage(pureBlack: settings.pureBlack).top)) { infoSheet(showsDone: $0) })
-        .onChange(of: showingInfo) {
-            // The canvas narrows or widens with the inspector; reframe once it has.
-            guard infoAsInspector else { return }
-            Task {
-                try? await Task.sleep(for: .milliseconds(350))
-                controller.frameModel()
-            }
-        }
+        // The canvas keeps the model's zoom when the inspector narrows it.
+        .modifier(InfoPresentation(asInspector: infoAsInspector, isPresented: $showingInfo, stageTop: Color(Palette.stage(pureBlack: settings.pureBlack).top), minX: $inspectorMinX) { infoSheet(showsDone: $0) })
         .background { escapeKey }
         .focusedSceneValue(\.viewerActions, isLoaded ? viewerActions : nil)
         .animation(Motion.animation(Motion.panel, reduceMotion: reduceMotion), value: tool)
@@ -814,6 +813,13 @@ struct ViewerScreen: View {
         .accessibilityHidden(true)
     }
 
+    /// How much of the canvas the inspector covers from the right, when it lies over
+    /// the canvas rather than beside it; the model moves into what's left.
+    private var obscuredByInspector: CGFloat {
+        guard showingInfo, infoAsInspector, let inspectorMinX else { return 0 }
+        return min(max(canvasSpan.maxX - inspectorMinX, 0) / canvasSpan.width, 0.6)
+    }
+
     /// On iPhone the info sheet's medium detent covers the lower half; keep the model
     /// in view above it so hiding an object shows what changed.
     private var obscuredBySheet: CGFloat {
@@ -1126,6 +1132,8 @@ private struct InfoPresentation<Info: View>: ViewModifier {
     /// The panel takes the stage's own top colour, so beside the model it reads as one
     /// surface instead of a grey of its own against the stage's.
     let stageTop: Color
+    /// The inspector's left edge on screen while it shows.
+    @Binding var minX: CGFloat?
     @ViewBuilder let info: (_ showsDone: Bool) -> Info
 
     func body(content: Content) -> some View {
@@ -1135,6 +1143,8 @@ private struct InfoPresentation<Info: View>: ViewModifier {
                     .scrollContentBackground(.hidden)
                     .background(stageTop)
                     .inspectorColumnWidth(min: Size.inspectorMin, ideal: Size.inspectorIdeal, max: Size.inspectorMax)
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minX } action: { minX = $0 }
+                    .onDisappear { minX = nil }
             }
             .sheet(isPresented: gated(!asInspector)) { info(true).sheetSize() }
     }
