@@ -23,6 +23,8 @@ WAIT=${SWEEP_WAIT:-5}
 ONLY=${SWEEP_ONLY:-.}
 platforms=("$@"); (( $#platforms )) || platforms=(iphone ipad mac)
 appearances=(light dark)
+# A wedged simulator once left one screenshot hanging for an hour (17 Nov); each simctl call gets a limit.
+limit() { perl -e 'alarm shift; exec @ARGV' 60 "$@"; }
 
 # Room first: a build and a few hundred screenshots.
 free_gb=$(df -g / | awk 'NR==2 {print $4}')
@@ -171,10 +173,10 @@ sweep_sim() { # platform simulator-name columns
     fi
     local appearance n entry screen settings setting vars
     for appearance in $appearances; do
-        xcrun simctl ui "$udid" appearance "$appearance"
+        limit xcrun simctl ui "$udid" appearance "$appearance"
         fresh "$platform" "$appearance"
         # The first launch after a change can miss its settings: warm up.
-        xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" >/dev/null; sleep 3
+        limit xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" >/dev/null; sleep 3
         n=0
         for entry in $ios_screens; do
             screen=${entry%%|*} settings=${entry#*|}
@@ -182,12 +184,12 @@ sweep_sim() { # platform simulator-name columns
             [[ "$screen" =~ $ONLY ]] || continue
             vars=()
             for setting in ${=settings}; do vars+=("SIMCTL_CHILD_$setting"); done
-            env $vars xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" >/dev/null
+            limit env $vars xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" >/dev/null
             sleep "$WAIT"
-            xcrun simctl io "$udid" screenshot "$OUT/$platform/$appearance/$(printf %02d $n)-$screen.png" >/dev/null 2>&1
+            limit xcrun simctl io "$udid" screenshot "$OUT/$platform/$appearance/$(printf %02d $n)-$screen.png" >/dev/null 2>&1
             echo "$platform $appearance $screen"
         done
-        xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
+        limit xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
         sheet "$platform" "$appearance" "$columns"
     done
     # Only one simulator up at a time, and none left behind.
