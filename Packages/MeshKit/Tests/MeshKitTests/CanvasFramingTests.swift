@@ -41,5 +41,30 @@ import simd
         #expect(landscape < portrait * 0.75)
         #expect(abs(canvas.camera.distance - landscape) < landscape * 0.01)
     }
+
+    /// Reported 17 Nov on Mac: a smooth-scrolling mouse wheel panned instead of zooming,
+    /// because its events carry precise deltas like a trackpad's.
+    @Test func wheelZoomsAndTrackpadPans() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.borderless], backing: .buffered, defer: false)
+        let canvas = ModelCanvasView()
+        canvas.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        window.contentView = canvas
+        canvas.setModel(try ModelLoader.load(binarySTL(cubeTriangles), name: "Cube"))
+        func scroll(_ units: CGScrollEventUnit, phase: Int64 = 0) throws -> NSEvent {
+            let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: units, wheelCount: 1, wheel1: 30, wheel2: 0, wheel3: 0))
+            cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
+            return try #require(NSEvent(cgEvent: cg))
+        }
+        for units in [CGScrollEventUnit.line, .pixel] {
+            let before = canvas.camera
+            canvas.scrollWheel(with: try scroll(units))
+            #expect(canvas.camera.distance != before.distance, "\(units) wheel should zoom")
+            #expect(canvas.camera.target == before.target)
+        }
+        let before = canvas.camera
+        canvas.scrollWheel(with: try scroll(.pixel, phase: 2)) // kCGScrollPhaseChanged: a trackpad
+        #expect(canvas.camera.distance == before.distance)
+        #expect(canvas.camera.target != before.target)
+    }
 }
 #endif

@@ -830,12 +830,16 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     }
 
     /// A mouse wheel zooms; two fingers on a trackpad pan, as in Maps.
+    /// Trackpad (and Magic Mouse) scrolls always carry a gesture or momentum phase; a wheel's
+    /// never do, even a smooth-scrolling one that sends precise deltas (reported 17 Nov on Mac).
     public override func scrollWheel(with event: NSEvent) {
         if event.phase == .began { interrupt() }
-        if event.hasPreciseScrollingDeltas {
-            panCamera(by: CGPoint(x: -event.scrollingDeltaX, y: -event.scrollingDeltaY))
+        if event.phase.isEmpty && event.momentumPhase.isEmpty {
+            // Precise deltas are in points, about ten to a line.
+            let lines = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 10 : event.scrollingDeltaY
+            zoomCamera(by: Float(pow(1.1, lines)))
         } else {
-            zoomCamera(by: Float(pow(1.1, event.scrollingDeltaY)))
+            panCamera(by: CGPoint(x: -event.scrollingDeltaX, y: -event.scrollingDeltaY))
         }
     }
 
