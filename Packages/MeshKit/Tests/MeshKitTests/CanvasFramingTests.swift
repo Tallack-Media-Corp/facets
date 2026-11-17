@@ -42,9 +42,9 @@ import simd
         #expect(abs(canvas.camera.distance - landscape) < landscape * 0.01)
     }
 
-    /// Reported 17 Nov on Mac: a smooth-scrolling mouse wheel panned instead of zooming,
-    /// because its events carry precise deltas like a trackpad's.
-    @Test func wheelZoomsAndTrackpadPans() throws {
+    /// Reported 17 Nov on Mac: a smooth-scrolling wheel, then the Magic Mouse, panned
+    /// instead of zooming, because their events carry precise deltas like a trackpad's.
+    @Test func wheelAndMagicMouseZoomTrackpadPans() throws {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.borderless], backing: .buffered, defer: false)
         let canvas = ModelCanvasView()
         canvas.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
@@ -55,16 +55,18 @@ import simd
             cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
             return try #require(NSEvent(cgEvent: cg))
         }
-        for units in [CGScrollEventUnit.line, .pixel] {
+        func zooms(_ event: NSEvent, touches: Int = 0) -> Bool {
+            canvas.trackpadTouches = touches
             let before = canvas.camera
-            canvas.scrollWheel(with: try scroll(units))
-            #expect(canvas.camera.distance != before.distance, "\(units) wheel should zoom")
-            #expect(canvas.camera.target == before.target)
+            canvas.scrollWheel(with: event)
+            #expect(canvas.camera.distance != before.distance || canvas.camera.target != before.target)
+            return canvas.camera.distance != before.distance
         }
-        let before = canvas.camera
-        canvas.scrollWheel(with: try scroll(.pixel, phase: 2)) // kCGScrollPhaseChanged: a trackpad
-        #expect(canvas.camera.distance == before.distance)
-        #expect(canvas.camera.target != before.target)
+        #expect(try zooms(scroll(.line)), "notched wheel")
+        #expect(try zooms(scroll(.pixel)), "smooth wheel")
+        #expect(try zooms(scroll(.pixel, phase: 1)), "Magic Mouse: a gesture with no trackpad touches") // kCGScrollPhaseBegan
+        #expect(try !zooms(scroll(.pixel, phase: 1), touches: 2), "trackpad")
+        #expect(try !zooms(scroll(.pixel, phase: 2), touches: 2), "trackpad, gesture under way")
     }
 }
 #endif

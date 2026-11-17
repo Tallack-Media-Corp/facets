@@ -135,6 +135,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         #else
         wantsLayer = true
         layer?.isOpaque = false
+        allowedTouchTypes = [.indirect] // trackpad touches tell its scrolls from a Magic Mouse's
         setAccessibilityElement(true)
         setAccessibilityRole(.image)
         setAccessibilityLabel("3D model")
@@ -829,17 +830,36 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         panCamera(by: CGPoint(x: event.deltaX, y: event.deltaY))
     }
 
-    /// A mouse wheel zooms; two fingers on a trackpad pan, as in Maps.
-    /// Trackpad (and Magic Mouse) scrolls always carry a gesture or momentum phase; a wheel's
-    /// never do, even a smooth-scrolling one that sends precise deltas (reported 17 Nov on Mac).
+    /// Fingers on the trackpad now. A Magic Mouse sends apps no touches, which is
+    /// the only thing that tells its scrolls from a trackpad's.
+    var trackpadTouches = 0
+    /// Whether the scroll gesture under way (and its momentum) pans.
+    private var scrollPans = false
+
+    public override func touchesBegan(with event: NSEvent) { countTouches(event) }
+    public override func touchesMoved(with event: NSEvent) { countTouches(event) }
+    public override func touchesEnded(with event: NSEvent) { countTouches(event) }
+    public override func touchesCancelled(with event: NSEvent) { countTouches(event) }
+    private func countTouches(_ event: NSEvent) {
+        trackpadTouches = event.touches(matching: .touching, in: self).count
+    }
+
+    /// A mouse wheel or Magic Mouse zooms; two fingers on a trackpad pan, as in Maps.
+    /// Reported 17 Nov on Mac: smooth wheels and the Magic Mouse send precise deltas
+    /// like a trackpad, so deltas can't decide it.
     public override func scrollWheel(with event: NSEvent) {
-        if event.phase == .began { interrupt() }
-        if event.phase.isEmpty && event.momentumPhase.isEmpty {
+        if event.phase == .began || event.phase == .mayBegin {
+            interrupt()
+            scrollPans = trackpadTouches > 0
+        } else if event.phase.isEmpty && event.momentumPhase.isEmpty {
+            scrollPans = false // a wheel: no gesture at all
+        }
+        if scrollPans {
+            panCamera(by: CGPoint(x: -event.scrollingDeltaX, y: -event.scrollingDeltaY))
+        } else {
             // Precise deltas are in points, about ten to a line.
             let lines = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 10 : event.scrollingDeltaY
             zoomCamera(by: Float(pow(1.1, lines)))
-        } else {
-            panCamera(by: CGPoint(x: -event.scrollingDeltaX, y: -event.scrollingDeltaY))
         }
     }
 
