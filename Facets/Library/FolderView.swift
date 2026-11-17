@@ -56,6 +56,8 @@ struct FolderView: View {
     @State private var dropTargeted = false
     /// The folder card or row a drag is over; the page's outline stays off meanwhile.
     @State private var dropFolder: URL?
+    /// A drag is over the "Move to …" chip that leads up a level.
+    @State private var parentTargeted = false
     /// Watches the subfolders shown, so their counts follow files arriving in them.
     @State private var subfolderWatchers: [FolderWatcher] = []
     /// Browsed models copied to the library this visit, on top of `copies`.
@@ -103,7 +105,9 @@ struct FolderView: View {
             .onDrop(of: isBrowsing ? [] : Self.dropTypes, isTargeted: $dropTargeted) { providers in
                 !isBrowsing && acceptDrop(providers, into: folder)
             }
-            .dropHighlight(dropTargeted && dropFolder == nil)
+            .dropHighlight(dropTargeted && dropFolder == nil && !parentTargeted)
+            .overlay(alignment: .top) { parentDropTarget }
+            .animation(Motion.animation(Motion.standard, reduceMotion: reduceMotion), value: dropTargeted || dropFolder != nil || parentTargeted)
             // The new-user tour, a card at a time above the tab bar.
             .overlay(alignment: .bottom) {
                 FloatingTip(tip: libraryTip)
@@ -499,6 +503,36 @@ struct FolderView: View {
     /// Moves library items: the Move sheet and a drag onto a folder alike.
     private func moveItems(_ items: [LibraryItem], to destination: URL) {
         perform(String(localized: "Couldn't Move")) { try library.move(items, to: destination) }
+    }
+
+    /// The folder this one is in, when it's inside the library: a drag over the page
+    /// can go up to it.
+    private var enclosingFolder: URL? {
+        guard !isBrowsing else { return nil }
+        let root = library.root.standardizedFileURL.path
+        guard folder.standardizedFileURL.path != root, LibraryLocation.contains(folder, in: library.root) else { return nil }
+        return folder.deletingLastPathComponent()
+    }
+
+    /// While something is dragged over a subfolder, a chip at the top takes it up a
+    /// level: the way out that a folder card gives the way in.
+    @ViewBuilder
+    private var parentDropTarget: some View {
+        if let parent = enclosingFolder, dropTargeted || dropFolder != nil || parentTargeted {
+            let name = parent.standardizedFileURL.path == library.root.standardizedFileURL.path ? String(localized: "Library") : parent.lastPathComponent
+            Label(String(localized: "Move to \(name)"), systemImage: Symbol.enclosingFolder)
+                .font(.subheadline.weight(.semibold))
+                .padding(ChipPadding.plate)
+                .frame(minHeight: Size.minTapTarget)
+                .glassChip()
+                .dropHighlight(parentTargeted, cornerRadius: Size.minTapTarget / 2, inset: 0)
+                .onDrop(of: Self.dropTypes, isTargeted: $parentTargeted) { providers in
+                    acceptDrop(providers, into: parent)
+                }
+                .padding(.top, Spacing.sm)
+                .transition(Motion.transition(.opacity.combined(with: .move(edge: .top)), reduceMotion: reduceMotion))
+                .accessibilityHidden(true)
+        }
     }
 
     /// A folder's card or row takes drops into that folder, as the page takes them

@@ -43,6 +43,8 @@ enum Symbol {
     static let rename = "pencil"
     static let duplicate = "plus.square.on.square"
     static let move = "folder"
+    /// The drop target that moves a dragged item up out of the folder on screen.
+    static let enclosingFolder = "arrow.up.folder"
     static let delete = "trash"
     /// The toast after a delete.
     static let deleted = "trash.fill"
