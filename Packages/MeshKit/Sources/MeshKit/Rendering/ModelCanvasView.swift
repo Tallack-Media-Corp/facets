@@ -101,7 +101,9 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     private var needsFit = true
     private var displayLink: CADisplayLink?
     private var velocity = SIMD2<Float>.zero
-    private var animation: (from: OrbitCamera, to: OrbitCamera, start: CFTimeInterval, duration: CFTimeInterval)?
+    /// `start` is 0 until the first frame: a glide begun during a busy layout (a panel
+    /// opening) would otherwise lose its first frames and jump.
+    private(set) var animation: (from: OrbitCamera, to: OrbitCamera, start: CFTimeInterval, duration: CFTimeInterval)?
     /// A short out-and-back zoom: Fit's answer when the model is already framed, so
     /// the button never seems to do nothing.
     private(set) var pulse: (base: OrbitCamera, start: CFTimeInterval)?
@@ -231,7 +233,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         // A pulse still running would put its own starting camera back over this one.
         pulse = nil
         if animated, !Self.reduceMotion, window != nil {
-            animation = (camera, next, CACurrentMediaTime(), 0.4)
+            animation = (camera, next, 0, 0.4)
             startDisplayLink()
         } else {
             animation = nil
@@ -373,6 +375,9 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         #else
         let animated = true
         #endif
+        // The first frame at the new shape would draw the old zoom at the new height
+        // (turned to landscape, a much smaller model); glide from the same size on screen.
+        if animated { camera.distance *= Float(bounds.height / old.height) }
         move(to: next, animated: animated)
     }
 
@@ -623,7 +628,11 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
                 camera = pulse.base
                 self.pulse = nil
             }
-        } else if let animation {
+        } else if var animation {
+            if animation.start == 0 {
+                animation.start = link.timestamp
+                self.animation = animation
+            }
             let t = min((link.timestamp - animation.start) / animation.duration, 1)
             let eased = Float(1 - pow(1 - t, 3))
             camera = animation.from.interpolated(to: animation.to, eased)

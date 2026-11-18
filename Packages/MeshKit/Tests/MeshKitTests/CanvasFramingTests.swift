@@ -42,6 +42,24 @@ import simd
         #expect(abs(canvas.camera.distance - landscape) < landscape * 0.01)
     }
 
+    /// Reported 17 Nov on iPad: turning it or opening Info, the model shrank for a
+    /// moment before gliding to its new size. The glide starts from the size on screen.
+    @Test func newShapeGlidesFromTheSameSizeOnScreen() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 800), styleMask: [.borderless], backing: .buffered, defer: false)
+        let canvas = ModelCanvasView()
+        canvas.frame = NSRect(x: 0, y: 0, width: 400, height: 800)
+        window.contentView = canvas
+        canvas.setModel(try ModelLoader.load(binarySTL(cubeTriangles), name: "Cube"))
+        let portrait = canvas.camera.distance
+        canvas.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        canvas.layout()
+        // Half the height at half the distance: the same size in points.
+        #expect(abs(canvas.camera.distance - portrait / 2) < portrait * 0.01)
+        let glide = try #require(canvas.animation)
+        #expect(glide.from.distance == canvas.camera.distance)
+        #expect(glide.start == 0) // the clock starts at the first frame
+    }
+
     /// Reported 17 Nov on Mac: a smooth-scrolling wheel, then the Magic Mouse, panned
     /// instead of zooming, because their events carry precise deltas like a trackpad's.
     @Test func wheelAndMagicMouseZoomTrackpadPans() throws {
