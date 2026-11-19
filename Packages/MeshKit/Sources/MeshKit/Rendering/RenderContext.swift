@@ -11,6 +11,9 @@ public final class RenderContext: @unchecked Sendable {
     public static let sampleCount = 4
 
     public let device: MTLDevice
+    /// Whether multisampled targets can live in tile memory alone (Apple GPUs from
+    /// family 2). Not on Intel Macs, and the Simulator wants MSAA and depth textures private.
+    let memorylessTargets: Bool
     let queue: MTLCommandQueue
     let meshPipeline: MTLRenderPipelineState
     /// The cross-section: same mesh, cut at a height.
@@ -28,6 +31,11 @@ public final class RenderContext: @unchecked Sendable {
         }
         self.device = device
         self.queue = queue
+        #if targetEnvironment(simulator)
+        memorylessTargets = false
+        #else
+        memorylessTargets = device.supportsFamily(.apple2)
+        #endif
         let library = try device.makeLibrary(source: ShaderSource.metal, options: nil)
 
         let mesh = MTLRenderPipelineDescriptor()
@@ -69,6 +77,20 @@ public final class RenderContext: @unchecked Sendable {
         }
         self.depthWrite = depthWrite
         self.depthReadOnly = depthReadOnly
+    }
+
+    /// Multisampled colour and depth targets to render into and resolve from.
+    func makeTargets(width: Int, height: Int, storage: MTLStorageMode) -> (color: MTLTexture, depth: MTLTexture)? {
+        func target(_ format: MTLPixelFormat) -> MTLTexture? {
+            let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: format, width: width, height: height, mipmapped: false)
+            d.textureType = .type2DMultisample
+            d.sampleCount = Self.sampleCount
+            d.usage = .renderTarget
+            d.storageMode = storage
+            return device.makeTexture(descriptor: d)
+        }
+        guard let color = target(Self.colorFormat), let depth = target(Self.depthFormat) else { return nil }
+        return (color, depth)
     }
 
     /// Whether `model` can be shown here: each mesh within the GPU's buffer limit,

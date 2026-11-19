@@ -51,7 +51,8 @@ public enum OBJReader {
         func startGroup(_ name: String?) {
             if groups[groups.count - 1].indices.isEmpty {
                 groups[groups.count - 1].name = name
-            } else {
+            } else if groups.count < 10_000 {
+                // Past that, faces join the last part: each part costs its own buffers.
                 groups.append(Group(name: name))
             }
         }

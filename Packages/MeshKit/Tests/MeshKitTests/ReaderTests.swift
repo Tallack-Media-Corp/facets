@@ -1,5 +1,6 @@
 import Compression
 import Foundation
+import ImageIO
 import Testing
 import simd
 @testable import MeshKit
@@ -53,12 +54,15 @@ func cubeMeshXML() -> String {
 
 /// A ZIP with each entry deflated (or stored), enough for the reader.
 func zip(_ entries: [(String, String)], deflate: Bool = true) -> Data {
+    zipBinary(entries.map { ($0, Data($1.utf8)) }, deflate: deflate)
+}
+
+func zipBinary(_ entries: [(String, Data)], deflate: Bool = true) -> Data {
     var out = Data()
     var central = Data()
     func le16(_ v: Int) -> Data { var x = UInt16(v).littleEndian; return Data(bytes: &x, count: 2) }
     func le32(_ v: Int) -> Data { var x = UInt32(v).littleEndian; return Data(bytes: &x, count: 4) }
-    for (name, text) in entries {
-        let raw = Data(text.utf8)
+    for (name, raw) in entries {
         var payload = raw
         var method = 0
         if deflate {
@@ -125,6 +129,19 @@ let rels = """
 
     @Test func emptyFileFails() {
         #expect(throws: ModelError.emptyFile) { try ModelLoader.load(Data(), name: "E") }
+    }
+
+    /// The Quick Look extensions tell a 3MF from its bytes, with the loader's own test.
+    @Test func isZipReadsTheFilesFirstBytes() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let zip = folder.appendingPathComponent("renamed.stl"), stl = folder.appendingPathComponent("cube.3mf")
+        try Data([0x50, 0x4B, 0x03, 0x04, 0, 0]).write(to: zip)
+        try binarySTL(cubeTriangles).write(to: stl)
+        #expect(ModelLoader.isZip(at: zip))
+        #expect(!ModelLoader.isZip(at: stl))
+        #expect(!ModelLoader.isZip(at: folder.appendingPathComponent("missing")))
     }
 
     @Test func textWithoutTrianglesFails() {
@@ -292,6 +309,30 @@ let rels = """
         """
         let archive = try ZipArchive(data: zip([("_rels/.rels", packageRels), ("Metadata/thumb.png", "PNGDATA")]))
         #expect(ThreeMFReader.thumbnailData(in: archive) == Data("PNGDATA".utf8))
+    }
+
+    /// Quick Look sizes a package up from its directory before inflating anything.
+    @Test func entrySizesComeFromTheDirectory() throws {
+        let archive = try ZipArchive(data: zip([("3D/3dmodel.model", String(repeating: "x", count: 5000))]))
+        #expect(archive.uncompressedSize(of: "/3D/3dmodel.model") == 5000)
+        #expect(archive.uncompressedSize(of: "3D/missing.model") == nil)
+    }
+
+    /// The picture a slicer saves (here Bambu's cover) decodes on its own, for the
+    /// thumbnail and preview fallbacks.
+    @Test func decodesThePicture() throws {
+        let pixels = CGContext(data: nil, width: 2, height: 3, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!.makeImage()!
+        let png = NSMutableData()
+        let destination = CGImageDestinationCreateWithData(png, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(destination, pixels, nil)
+        #expect(CGImageDestinationFinalize(destination))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".3mf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try zip([("Auxiliaries/.thumbnails/thumbnail_middle.png", "")]).write(to: url)
+        #expect(ThreeMFReader.thumbnailImage(at: url) == nil)
+        try zipBinary([("Auxiliaries/.thumbnails/thumbnail_middle.png", png as Data)]).write(to: url)
+        let image = try #require(ThreeMFReader.thumbnailImage(at: url))
+        #expect(image.width == 2 && image.height == 3)
     }
 }
 

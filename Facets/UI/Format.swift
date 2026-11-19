@@ -25,7 +25,7 @@ enum Format {
             // Always one decimal, so a readout never mixes "176" with "79.6".
             return mm.formatted(.number.precision(.fractionLength(1)))
         case .inches:
-            return (mm / 25.4).formatted(.number.precision(.fractionLength(2)))
+            return (mm / Float(units.mmPerUnit)).formatted(.number.precision(.fractionLength(2)))
         }
     }
 
@@ -50,6 +50,12 @@ enum Format {
         name.replacingOccurrences(of: "_-_", with: " – ")
             .replacingOccurrences(of: "_", with: " ")
             .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// What a title shows for a file or folder: a model's file name tidied, without
+    /// its extension; a folder's name as typed.
+    static func title(of url: URL, isFolder: Bool = false) -> String {
+        isFolder ? url.lastPathComponent : title(fromFileName: url.deletingPathExtension().lastPathComponent)
     }
 
     static func dimension(_ mm: Float, units: MeasurementUnits) -> String {

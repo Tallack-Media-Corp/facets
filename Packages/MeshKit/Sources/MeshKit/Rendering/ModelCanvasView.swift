@@ -23,7 +23,9 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
             guard renderAppearance != oldValue else { return }
             renderer?.appearance = renderAppearance
             if renderAppearance.plateID != oldValue.plateID {
-                frameModel(animated: true)
+                // Another plate is elsewhere on the bed: cut to it. A glide from the
+                // last plate flies across the bed and lands from a corner.
+                frameModel(animated: false)
             }
             requestDraw()
         }
@@ -73,38 +75,48 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     /// How much of the view's height a sheet covers from the bottom (0 to 1). The
     /// model glides up to stay centred in what's left.
     public var bottomObscured: CGFloat = 0 {
-        didSet {
-            guard bottomObscured != oldValue else { return }
-            if Self.reduceMotion || window == nil {
-                verticalShift = Float(bottomObscured)
-                requestDraw()
-            } else {
-                startDisplayLink()
-            }
+        didSet { if bottomObscured != oldValue { obscuredChanged() } }
+    }
+    /// The same from the trailing edge: a panel laid over the canvas rather than
+    /// beside it (the iPad's inspector in portrait).
+    public var trailingObscured: CGFloat = 0 {
+        didSet { if trailingObscured != oldValue { obscuredChanged() } }
+    }
+    private var obscuredTarget: SIMD2<Float> { SIMD2(Float(trailingObscured), Float(bottomObscured)) }
+    /// Where the picture is now on its way to `obscuredTarget`.
+    private var shift = SIMD2<Float>.zero
+
+    private func obscuredChanged() {
+        if Self.reduceMotion || window == nil {
+            shift = obscuredTarget
+            requestDraw()
+        } else {
+            startDisplayLink()
         }
     }
-    private var verticalShift: Float = 0
+
+    /// The size the camera was last framed for, so a new size can keep the same zoom.
+    private var framedSize = CGSize.zero
 
     private var needsFit = true
     private var displayLink: CADisplayLink?
     private var velocity = SIMD2<Float>.zero
-    private var animation: (from: OrbitCamera, to: OrbitCamera, start: CFTimeInterval, duration: CFTimeInterval)?
+    /// `start` is 0 until the first frame: a glide begun during a busy layout (a panel
+    /// opening) would otherwise lose its first frames and jump.
+    private(set) var animation: (from: OrbitCamera, to: OrbitCamera, start: CFTimeInterval, duration: CFTimeInterval)?
     /// A short out-and-back zoom: Fit's answer when the model is already framed, so
     /// the button never seems to do nothing.
-    private var pulse: (base: OrbitCamera, start: CFTimeInterval)?
+    private(set) var pulse: (base: OrbitCamera, start: CFTimeInterval)?
 
     public init() {
         let context = RenderContext.shared
         super.init(frame: .zero, device: context?.device)
         if let context { renderer = SceneRenderer(context: context) }
         colorPixelFormat = RenderContext.colorFormat
-        depthStencilPixelFormat = RenderContext.depthFormat
-        sampleCount = RenderContext.sampleCount
-        #if os(iOS)
-        // Depth is never read back: keep the multisampled depth in tile memory
-        // instead of a full-size texture (tens of MB on a large screen).
-        depthStencilStorageMode = .memoryless
-        #endif
+        if context?.memorylessTargets != true {
+            depthStencilPixelFormat = RenderContext.depthFormat
+            sampleCount = RenderContext.sampleCount
+        }
         clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         isPaused = true
         enableSetNeedsDisplay = true
@@ -113,6 +125,8 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         #if canImport(UIKit)
         isOpaque = false
         backgroundColor = .clear
+        // Unscaled: while rotation animates the bounds, the frame already drawn at the new size would otherwise be stretched to fit.
+        contentMode = .center
         isMultipleTouchEnabled = true
         isAccessibilityElement = true
         // No direct interaction: it would hand VoiceOver's swipes to the model and
@@ -123,6 +137,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         #else
         wantsLayer = true
         layer?.isOpaque = false
+        allowedTouchTypes = [.indirect] // trackpad touches tell its scrolls from a Magic Mouse's
         setAccessibilityElement(true)
         setAccessibilityRole(.image)
         setAccessibilityLabel("3D model")
@@ -168,6 +183,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         var next = camera
         next.fitTightly(renderer.visibleParts, aspect: aspect, fill: 0.72, recenter: false, including: bedCorners)
         needsFit = false
+        framedSize = bounds.size
         let settled = animation == nil && pulse == nil
         let tolerance = max(camera.distance, 1e-3) * 0.01
         if settled, abs(next.distance - camera.distance) < tolerance, simd_distance(next.target, camera.target) < tolerance {
@@ -214,8 +230,10 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
 
     private func move(to next: OrbitCamera, animated: Bool) {
         velocity = .zero
+        // A pulse still running would put its own starting camera back over this one.
+        pulse = nil
         if animated, !Self.reduceMotion, window != nil {
-            animation = (camera, next, CACurrentMediaTime(), 0.4)
+            animation = (camera, next, 0, 0.4)
             startDisplayLink()
         } else {
             animation = nil
@@ -330,23 +348,77 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     #endif
 
     private func fitIfNeeded() {
-        if needsFit, bounds.width > 0, renderer?.model != nil {
+        guard bounds.width > 0, bounds.height > 0, renderer?.model != nil else { return }
+        if needsFit {
             frameModel(animated: false)
+        } else if bounds.size != framedSize {
+            keepZoom(from: framedSize)
         }
+    }
+
+    /// The view changed shape (rotated, or a panel opened beside it): keep the model
+    /// as zoomed as it was relative to a fit, at the new shape. Without this a model
+    /// fit in portrait stays fit to the height in landscape, and looks much smaller.
+    private func keepZoom(from old: CGSize) {
+        guard let renderer, old.width > 0, old.height > 0 else { return }
+        framedSize = bounds.size
+        let base = pulse?.base ?? animation?.to ?? camera
+        var before = base, after = base
+        let parts = renderer.visibleParts, corners = bedCorners
+        before.fitTightly(parts, aspect: Float(old.width / old.height), fill: 0.72, recenter: false, including: corners)
+        after.fitTightly(parts, aspect: aspect, fill: 0.72, recenter: false, including: corners)
+        guard before.distance > 0, after.distance > 0 else { return }
+        var next = base
+        next.distance = base.distance * after.distance / before.distance
+        #if canImport(AppKit) && !canImport(UIKit)
+        let animated = !inLiveResize
+        #else
+        let animated = true
+        #endif
+        // The first frame at the new shape would draw the old zoom at the new height
+        // (turned to landscape, a much smaller model); glide from the same size on screen.
+        if animated { camera.distance *= Float(bounds.height / old.height) }
+        move(to: next, animated: animated)
     }
 
     public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         requestDraw()
     }
 
+    /// Multisampled colour and depth in tile memory, resolved straight into the
+    /// drawable. MTKView can only make full-size textures for them (about 90 MB at 4×
+    /// on a large iPad), too much for the Quick Look extension; never read back, so
+    /// they needn't exist outside the pass. Nil where memoryless isn't supported:
+    /// MTKView's own multisampling then.
+    private var tileTargets: (color: MTLTexture, depth: MTLTexture)?
+
+    private func renderPass(into drawable: MTLTexture) -> MTLRenderPassDescriptor? {
+        guard let context = renderer?.context, context.memorylessTargets else { return currentRenderPassDescriptor }
+        if tileTargets?.color.width != drawable.width || tileTargets?.color.height != drawable.height {
+            tileTargets = context.makeTargets(width: drawable.width, height: drawable.height, storage: .memoryless)
+        }
+        guard let tileTargets else { return nil }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = tileTargets.color
+        pass.colorAttachments[0].resolveTexture = drawable
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .multisampleResolve
+        pass.colorAttachments[0].clearColor = clearColor
+        pass.depthAttachment.texture = tileTargets.depth
+        pass.depthAttachment.loadAction = .clear
+        pass.depthAttachment.storeAction = .dontCare
+        pass.depthAttachment.clearDepth = clearDepth
+        return pass
+    }
+
     public func draw(in view: MTKView) {
         guard let renderer,
-              let pass = currentRenderPassDescriptor,
               let drawable = currentDrawable,
+              let pass = renderPass(into: drawable.texture),
               let commands = renderer.context.queue.makeCommandBuffer(),
               let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
         let size = drawableSize
-        renderer.encode(into: encoder, camera: camera, aspect: Float(size.width / max(size.height, 1)), pixelsPerPoint: Float(pointScale), verticalShift: verticalShift)
+        renderer.encode(into: encoder, camera: camera, aspect: Float(size.width / max(size.height, 1)), pixelsPerPoint: Float(pointScale), obscured: shift)
         encoder.endEncoding()
         commands.present(drawable)
         commands.commit()
@@ -357,7 +429,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
 
     private var viewProjection: simd_float4x4? {
         guard let renderer, bounds.width > 0, bounds.height > 0 else { return nil }
-        return renderer.viewProjection(camera: camera, aspect: aspect, verticalShift: verticalShift)
+        return renderer.viewProjection(camera: camera, aspect: aspect, obscured: shift)
     }
 
     /// Where a world point lands on screen, in points from the top left; nil behind
@@ -541,11 +613,11 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     }
 
     @objc private func step(_ link: CADisplayLink) {
-        let targetShift = Float(bottomObscured)
-        if abs(verticalShift - targetShift) > 0.001 {
-            verticalShift += (targetShift - verticalShift) * 0.2
+        let targetShift = obscuredTarget
+        if simd_length(shift - targetShift) > 0.001 {
+            shift += (targetShift - shift) * 0.2
         } else {
-            verticalShift = targetShift
+            shift = targetShift
         }
         if let pulse {
             // Out about 6% and back in 0.5 s, easing at both ends.
@@ -556,7 +628,11 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
                 camera = pulse.base
                 self.pulse = nil
             }
-        } else if let animation {
+        } else if var animation {
+            if animation.start == 0 {
+                animation.start = link.timestamp
+                self.animation = animation
+            }
             let t = min((link.timestamp - animation.start) / animation.duration, 1)
             let eased = Float(1 - pow(1 - t, 3))
             camera = animation.from.interpolated(to: animation.to, eased)
@@ -572,7 +648,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
             velocity = .zero
         }
         requestDraw()
-        if animation == nil, pulse == nil, velocity == .zero, verticalShift == targetShift { stopDisplayLink() }
+        if animation == nil, pulse == nil, velocity == .zero, shift == targetShift { stopDisplayLink() }
     }
 
     #if canImport(UIKit)
@@ -763,13 +839,36 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         panCamera(by: CGPoint(x: event.deltaX, y: event.deltaY))
     }
 
-    /// A mouse wheel zooms; two fingers on a trackpad pan, as in Maps.
+    /// Fingers on the trackpad now. A Magic Mouse sends apps no touches, which is
+    /// the only thing that tells its scrolls from a trackpad's.
+    var trackpadTouches = 0
+    /// Whether the scroll gesture under way (and its momentum) pans.
+    private var scrollPans = false
+
+    public override func touchesBegan(with event: NSEvent) { countTouches(event) }
+    public override func touchesMoved(with event: NSEvent) { countTouches(event) }
+    public override func touchesEnded(with event: NSEvent) { countTouches(event) }
+    public override func touchesCancelled(with event: NSEvent) { countTouches(event) }
+    private func countTouches(_ event: NSEvent) {
+        trackpadTouches = event.touches(matching: .touching, in: self).count
+    }
+
+    /// A mouse wheel or Magic Mouse zooms; two fingers on a trackpad pan, as in Maps.
+    /// Reported 17 Nov on Mac: smooth wheels and the Magic Mouse send precise deltas
+    /// like a trackpad, so deltas can't decide it.
     public override func scrollWheel(with event: NSEvent) {
-        if event.phase == .began { interrupt() }
-        if event.hasPreciseScrollingDeltas {
+        if event.phase == .began || event.phase == .mayBegin {
+            interrupt()
+            scrollPans = trackpadTouches > 0
+        } else if event.phase.isEmpty && event.momentumPhase.isEmpty {
+            scrollPans = false // a wheel: no gesture at all
+        }
+        if scrollPans {
             panCamera(by: CGPoint(x: -event.scrollingDeltaX, y: -event.scrollingDeltaY))
         } else {
-            zoomCamera(by: Float(pow(1.1, event.scrollingDeltaY)))
+            // Precise deltas are in points, about ten to a line.
+            let lines = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 10 : event.scrollingDeltaY
+            zoomCamera(by: Float(pow(1.1, lines)))
         }
     }
 
@@ -821,15 +920,17 @@ public struct ModelCanvas {
     let controller: ModelCanvasController?
     let onInteraction: (() -> Void)?
     let bottomObscured: CGFloat
+    let trailingObscured: CGFloat
     let tool: ModelCanvasView.Tool
     let markers: [SIMD3<Float>]
     let onSurfaceTap: ((SurfaceHit, SIMD3<Float>) -> Void)?
 
-    public init(model: Model3D?, appearance: RenderAppearance, controller: ModelCanvasController? = nil, bottomObscured: CGFloat = 0, tool: ModelCanvasView.Tool = .none, markers: [SIMD3<Float>] = [], onSurfaceTap: ((SurfaceHit, SIMD3<Float>) -> Void)? = nil, onInteraction: (() -> Void)? = nil) {
+    public init(model: Model3D?, appearance: RenderAppearance, controller: ModelCanvasController? = nil, bottomObscured: CGFloat = 0, trailingObscured: CGFloat = 0, tool: ModelCanvasView.Tool = .none, markers: [SIMD3<Float>] = [], onSurfaceTap: ((SurfaceHit, SIMD3<Float>) -> Void)? = nil, onInteraction: (() -> Void)? = nil) {
         self.model = model
         self.appearance = appearance
         self.controller = controller
         self.bottomObscured = bottomObscured
+        self.trailingObscured = trailingObscured
         self.tool = tool
         self.markers = markers
         self.onSurfaceTap = onSurfaceTap
@@ -872,6 +973,7 @@ public struct ModelCanvas {
         controller?.view = view
         view.onInteraction = onInteraction
         view.bottomObscured = bottomObscured
+        view.trailingObscured = trailingObscured
         view.tool = tool
         view.markers = markers
         view.onSurfaceTap = onSurfaceTap

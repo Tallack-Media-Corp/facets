@@ -38,6 +38,17 @@ enum MeasurementUnits: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var symbol: String { self == .millimetres ? "mm" : "in" }
     var title: String { self == .millimetres ? String(localized: "Millimetres") : String(localized: "Inches") }
+    /// Millimetres in one of these units.
+    var mmPerUnit: Double { self == .inches ? 25.4 : 1 }
+
+    /// Where the choice is kept.
+    static let defaultsKey = "viewer.units"
+
+    /// The units set in Facets, or the locale's when none is; the app and Shortcuts both read this.
+    static func saved(in defaults: UserDefaults = .standard, locale: Locale = .current) -> MeasurementUnits {
+        MeasurementUnits(rawValue: defaults.string(forKey: defaultsKey) ?? "")
+            ?? (locale.measurementSystem == .us ? .inches : .millimetres)
+    }
 }
 
 /// A preset model colour, named the way filament is.
@@ -95,6 +106,13 @@ final class ViewerSettings {
         didSet { defaults.set(fetchesBrowsePreviews, forKey: "library.browsePreviews") }
     }
 
+    /// Mac: a model opened from the Finder while Facets is running also brings up a
+    /// library window when none is open. Read by `MacOpener` from the same key.
+    var showsLibraryOnOpen: Bool {
+        didSet { defaults.set(showsLibraryOnOpen, forKey: Self.showsLibraryOnOpenKey) }
+    }
+    static let showsLibraryOnOpenKey = "mac.libraryOnOpen"
+
     /// The filament the shape-based print estimate assumes.
     var material: FilamentMaterial {
         didSet { defaults.set(material.rawValue, forKey: "viewer.material") }
@@ -109,7 +127,7 @@ final class ViewerSettings {
     var fitBed: PrinterBed? { checksFit ? bed : nil }
 
     var units: MeasurementUnits {
-        didSet { defaults.set(units.rawValue, forKey: "viewer.units") }
+        didSet { defaults.set(units.rawValue, forKey: MeasurementUnits.defaultsKey) }
     }
 
     /// The printer bed drawn in the viewer: a preset id, "custom", or nil for none.
@@ -160,6 +178,7 @@ final class ViewerSettings {
         usesFileColors = defaults.object(forKey: "viewer.fileColors") as? Bool ?? true
         showsGrid = defaults.object(forKey: "viewer.grid") as? Bool ?? true
         fetchesBrowsePreviews = defaults.object(forKey: "library.browsePreviews") as? Bool ?? true
+        showsLibraryOnOpen = defaults.bool(forKey: Self.showsLibraryOnOpenKey)
         checksFit = defaults.object(forKey: "viewer.checksFit") as? Bool ?? true
         pureBlack = defaults.bool(forKey: "display.pureBlack")
         material = FilamentMaterial(rawValue: defaults.string(forKey: "viewer.material") ?? "") ?? .pla
@@ -169,8 +188,7 @@ final class ViewerSettings {
         customBedWidth = defaults.object(forKey: "viewer.bed.width") as? Float ?? 256
         customBedDepth = defaults.object(forKey: "viewer.bed.depth") as? Float ?? 256
         customBedHeight = defaults.object(forKey: "viewer.bed.height") as? Float ?? 256
-        units = MeasurementUnits(rawValue: defaults.string(forKey: "viewer.units") ?? "")
-            ?? (Locale.current.measurementSystem == .us ? .inches : .millimetres)
+        units = MeasurementUnits.saved(in: defaults)
         // Earlier builds kept Pure Black only here; let Quick Look see it too.
         SharedSettings.pureBlack = pureBlack
     }
@@ -182,7 +200,7 @@ final class ViewerSettings {
 
     /// The starting appearance for a viewer or thumbnail.
     var appearance: RenderAppearance {
-        var appearance = RenderAppearance(baseColor: Color(hex: colorHex)?.linearRGBA ?? RenderAppearance.defaultColor)
+        var appearance = RenderAppearance(baseColor: RenderAppearance.linearColor(hex: colorHex) ?? RenderAppearance.defaultColor)
         appearance.usesFileColors = usesFileColors
         appearance.showsGrid = showsGrid
         return appearance
@@ -206,11 +224,5 @@ extension Color {
         let resolved = resolve(in: EnvironmentValues())
         func byte(_ c: Float) -> Int { Int((min(max(c, 0), 1) * 255).rounded()) }
         return String(format: "#%02X%02X%02X", byte(resolved.red), byte(resolved.green), byte(resolved.blue))
-    }
-
-    /// Linear-light RGBA, which is what the renderer works in.
-    var linearRGBA: SIMD4<Float> {
-        let resolved = resolve(in: EnvironmentValues())
-        return SIMD4(resolved.linearRed, resolved.linearGreen, resolved.linearBlue, 1)
     }
 }

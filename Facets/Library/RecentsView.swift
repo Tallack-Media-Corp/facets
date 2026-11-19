@@ -18,16 +18,16 @@ struct RecentsView: View {
                     }
                     .buttonStyle(.plain)
                     .swipeActions {
-                        Button("Remove", systemImage: "minus.circle", role: .destructive) { recents.remove(entry) }
+                        RowAction.remove { recents.remove(entry) }
                     }
                     .contextMenu {
-                        Button("Remove from Recents", systemImage: "minus.circle", role: .destructive) { recents.remove(entry) }
+                        RowAction.remove("Remove from Recents") { recents.remove(entry) }
                     }
                 }
             }
             .overlay {
                 if recents.entries.isEmpty {
-                    ContentUnavailableView("No Recent Models", systemImage: "clock", description: Text("Models you open, here or from other apps, appear here."))
+                    ContentUnavailableView("No Recent Models", systemImage: Symbol.noRecents, description: Text("Models you open, here or from other apps, appear here."))
                 }
             }
             .navigationTitle("Recents")
@@ -46,13 +46,13 @@ struct RecentsView: View {
             } message: {
                 Text("The files themselves aren't touched.")
             }
-            .alert("File Not Found", isPresented: Binding(get: { missing != nil }, set: { if !$0 { missing = nil } })) {
+            .alert("File Not Found", isPresented: $missing.isPresent) {
                 Button("Remove from Recents", role: .destructive) {
                     if let missing { recents.remove(missing) }
                 }
                 Button("Keep", role: .cancel) {}
             } message: {
-                Text(missing.map { String(localized: "\($0.displayName) was moved, renamed or deleted, or Facets no longer has access to it.") } ?? String(localized: "This model was moved, renamed or deleted, or Facets no longer has access to it."))
+                Text("It was moved, renamed or deleted, or Facets no longer has access to it.")
             }
         }
     }
@@ -62,7 +62,7 @@ struct RecentsView: View {
             missing = entry
             return
         }
-        router.presented = ModelFileRef(url: url, isExternal: !library.contains(url))
+        router.presented = ModelFileRef(url: url, libraryRoot: library.root)
     }
 }
 
@@ -71,52 +71,37 @@ private struct RecentRow: View {
     @State private var state: RecentsStore.FileState?
     private var isAvailable: Bool { state?.isAvailable ?? true }
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .headline) private var thumbnailSize: CGFloat = 52
-
     var body: some View {
-        HStack(spacing: 12) {
-            Group {
-                if let state, let url = state.url, state.isAvailable {
-                    // Keyed on the file itself, as the library is, so the two share
-                    // one cached picture and reopening doesn't redraw it.
-                    ModelThumbnail(url: url, size: state.size, modified: state.modified, cornerRadius: 10, showsBackdrop: false, isDownloaded: state.isDownloaded)
-                } else if !isAvailable {
-                    Image(systemName: "questionmark.folder")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+        ThumbnailRow(title: entry.displayName) {
+            if let state, let url = state.url, state.isAvailable {
+                // Keyed on the file itself, as the library is, so the two share
+                // one cached picture and reopening doesn't redraw it. The row rounds
+                // the corners.
+                ModelThumbnail(url: url, size: state.size, modified: state.modified, cornerRadius: 0, showsBackdrop: false, isDownloaded: state.isDownloaded)
+            } else if !isAvailable {
+                Image(systemName: Symbol.missing)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            } else {
+                Color.clear
+            }
+        } caption: {
+            HStack(spacing: Spacing.xs) {
+                if !isAvailable {
+                    // A warning beside the words, as for a printer the model doesn't fit.
+                    Image(systemName: Symbol.warning)
+                        .foregroundStyle(.tint)
+                        .accessibilityHidden(true)
+                    Text("Moved or deleted")
                 } else {
-                    Color.clear
-                }
-            }
-            .frame(width: min(thumbnailSize, 88), height: min(thumbnailSize, 88))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.displayName)
-                    .font(.headline)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-                HStack(spacing: 4) {
-                    if !isAvailable {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.tint)
-                            .accessibilityHidden(true)
-                        Text("Moved or deleted")
-                    } else {
-                        if entry.isExternal {
-                            Image(systemName: "arrow.up.forward.app")
-                                .accessibilityLabel("Opened from another app")
-                        }
-                        Text("\(entry.fileExtension) · \(entry.lastOpened.formatted(.relative(presentation: .named)))")
+                    if entry.isExternal {
+                        Image(systemName: Symbol.fromAnotherApp)
+                            .accessibilityLabel("Opened from another app")
                     }
+                    Text("\(entry.fileExtension) · \(entry.lastOpened.formatted(.relative(presentation: .named)))")
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
             }
-            Spacer(minLength: 0)
         }
-        .contentShape(.rect)
-        .accessibilityElement(children: .combine)
         .accessibilityHint(isAvailable ? "Opens the model" : "Offers to remove it from Recents")
         .task(id: entry) {
             let entry = entry

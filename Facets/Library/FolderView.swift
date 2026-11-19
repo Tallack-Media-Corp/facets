@@ -1,6 +1,7 @@
 import SwiftUI
 import TipKit
 import UniformTypeIdentifiers
+import os
 #if os(macOS)
 import QuickLook
 #endif
@@ -35,6 +36,7 @@ struct FolderView: View {
     @AppStorage("library.layout") private var layout: LibraryLayout = .grid
     @AppStorage("library.sort") private var sort: LibrarySort = .name
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var items: [LibraryItem] = []
     @State private var loaded = false
@@ -44,13 +46,24 @@ struct FolderView: View {
     /// Waiting on "Delete … and everything in it?": only asked when there's a folder.
     @State private var deleting: [LibraryItem] = []
     @State private var moving: LibraryItem?
+    #if DEBUG
+    @State private var debugMoveShown = false
+    #endif
     @State private var failure: (title: String, message: String)?
     @State private var watcher: FolderWatcher?
     /// Bumped per reload, so a slow read finishing late can't replace a newer one.
     @State private var loadGeneration = 0
     @State private var dropTargeted = false
-    /// Browsed models copied to the library this visit, on top of `hasCopy`.
+    /// The folder card or row a drag is over; the page's outline stays off meanwhile.
+    @State private var dropFolder: URL?
+    /// A drag is over the "Move to …" chip that leads up a level.
+    @State private var parentTargeted = false
+    /// Watches the subfolders shown, so their counts follow files arriving in them.
+    @State private var subfolderWatchers: [FolderWatcher] = []
+    /// Browsed models copied to the library this visit, on top of `copies`.
     @State private var saved: Set<URL> = []
+    /// Browsed models the library already has a copy of, found with the listing.
+    @State private var copies: Set<URL> = []
 
     /// The new-user tour of the library root (see FacetsTips).
     @State private var libraryTips = TipGroup(.ordered) {
@@ -89,23 +102,18 @@ struct FolderView: View {
                 }
             }
             // Browsed folders are look-and-save: no drop target there.
-            .onDrop(of: isBrowsing ? [] : UTType.models, isTargeted: $dropTargeted) { providers in
-                !isBrowsing && acceptDrop(providers)
+            .onDrop(of: isBrowsing ? [] : Self.dropTypes, isTargeted: $dropTargeted) { providers in
+                !isBrowsing && acceptDrop(providers, into: folder)
             }
-            .overlay {
-                if dropTargeted {
-                    RoundedRectangle(cornerRadius: 24)
-                        .strokeBorder(.tint, style: StrokeStyle(lineWidth: 3, dash: [10, 6]))
-                        .padding(12)
-                        .allowsHitTesting(false)
-                }
-            }
+            .dropHighlight(dropTargeted && dropFolder == nil && !parentTargeted)
+            .overlay(alignment: .top) { parentDropTarget }
+            .animation(Motion.animation(Motion.standard, reduceMotion: reduceMotion), value: dropTargeted || dropFolder != nil || parentTargeted)
             // The new-user tour, a card at a time above the tab bar.
             .overlay(alignment: .bottom) {
                 FloatingTip(tip: libraryTip)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, Spacing.md)
                     .clearOfFold()
-                    .animation(.snappy, value: libraryTip?.id)
+                    .animation(Motion.animation(Motion.standard, reduceMotion: reduceMotion), value: libraryTip?.id)
             }
             .overlay {
                 if !loaded {
@@ -124,12 +132,8 @@ struct FolderView: View {
                     watcher = FolderWatcher(url: folder) { [library] in library.noteExternalChange() }
                 }
             }
-            .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-                TextField("Name", text: $renameText)
-                Button("Cancel", role: .cancel) {}
-                Button("Rename") {
-                    if let item = renaming { perform(String(localized: "Couldn't Rename")) { try library.rename(item, to: renameText) } }
-                }
+            .renameAlert("Rename", item: $renaming, text: $renameText) { item in
+                perform(String(localized: "Couldn't Rename")) { try library.rename(item, to: renameText) }
             }
             .confirmationDialog(
                 deleteTitle,
@@ -144,14 +148,11 @@ struct FolderView: View {
             }
             .sheet(item: $moving) { item in
                 MoveSheet(item: item) { destination in
-                    perform(String(localized: "Couldn't Move")) { try library.move([item], to: destination) }
+                    moveItems([item], to: destination)
                 }
+                .sheetSize()
             }
-            .alert(failure?.title ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(failure?.message ?? "")
-            }
+            .errorAlert($failure)
     }
 
     private var keyedContent: some View {
@@ -165,7 +166,7 @@ struct FolderView: View {
     @ViewBuilder
     private var content: some View {
         if items.isEmpty, loaded, isBrowsing {
-            ContentUnavailableView("No Models Here", systemImage: "cube.transparent", description: Text("This folder has no STL, 3MF or OBJ files. Subfolders show up here too."))
+            ContentUnavailableView("No Models Here", systemImage: Symbol.noModels, description: Text("This folder has no STL, 3MF or OBJ files. Subfolders show up here too."))
         } else if items.isEmpty, loaded {
             ScrollView {
                 if showsSectionPicker {
@@ -174,10 +175,10 @@ struct FolderView: View {
                         .padding(.top, LibrarySectionPicker.listTopMargin)
                 }
                 ContentUnavailableView {
-                    Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: "cube.transparent")
+                    Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: Symbol.noModels)
                 } description: {
                     Text(Self.emptyHint)
-                        .frame(maxWidth: 480)
+                        .frame(maxWidth: Size.emptyStateTextMaxWidth)
                 } actions: {
                     Button("Import Files") { importing = true }
                         .buttonStyle(.glassProminent)
@@ -189,7 +190,7 @@ struct FolderView: View {
                             .controlSize(.large)
                     }
                 }
-                .padding(.top, 80)
+                .padding(.top, Spacing.emptyStateTop)
             }
         } else if layout == .grid, !dynamicTypeSize.isAccessibilitySize {
             // At accessibility text sizes two columns can't hold a name; rows can.
@@ -198,22 +199,23 @@ struct FolderView: View {
                     LibrarySectionPicker()
                         .padding(.horizontal)
                         .padding(.top, LibrarySectionPicker.listTopMargin)
-                        .padding(.bottom, 8)
+                        .padding(.bottom, Spacing.sm)
                 }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 16, alignment: .top)], spacing: 20) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: Size.gridCardMin, maximum: Size.gridCardMax), spacing: Spacing.lg, alignment: .top)], spacing: Spacing.xl) {
                     ForEach(items) { item in
                         #if os(macOS)
                         macCard(item)
                         #else
-                        open(item) {
-                            LibraryCard(item: item)
-                        }
+                        takesDrops(item, open(item) {
+                            LibraryCard(item: item, isDropTarget: dropFolder == item.url)
+                        })
                         .buttonStyle(.plain)
                         .zoomSource(id: item.url, in: zoom)
+                        .libraryDraggable(item.url)
                         .contextMenu { actions(for: item) } preview: {
                             if !item.isFolder {
                                 ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0, isDownloaded: item.isDownloaded)
-                                    .frame(width: 300, height: 300)
+                                    .frame(width: Size.contextPreview, height: Size.contextPreview)
                                     // Previews render outside this view's environment.
                                     .environment(settings)
                             }
@@ -222,15 +224,15 @@ struct FolderView: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 24)
+                .padding(.bottom, Spacing.xxl)
+                .padding(.top, showsSectionPicker ? 0 : LibraryCard.outlineRoom)
                 #if os(macOS)
-                // Room above the first row for a selected card's outline, which sits
-                // 3 pt outside the picture: flush, it ran under the toolbar's edge.
-                .padding(.top, showsSectionPicker ? 0 : 12)
                 .onGeometryChange(for: Int.self) { geometry in
-                    // As the adaptive grid fits them: 150 pt minimum, 16 pt apart.
-                    max(1, Int((geometry.size.width - 32 + 16) / (150 + 16)))
+                    // As the adaptive grid fits them: the cards' minimum width, 16 pt
+                    // apart, inside 16 pt margins.
+                    max(1, Int((geometry.size.width - 2 * Spacing.lg + Spacing.lg) / (Size.gridCardMin + Spacing.lg)))
                 } action: { columnCount = $0 }
+                .libraryDragContainer(selection: selection)
                 // A click on the background, between or below the cards, clears the
                 // selection. It sits behind the cards, filling the visible area, so
                 // a click on a card never reaches it.
@@ -259,20 +261,23 @@ struct FolderView: View {
                     LibrarySectionPicker().sectionPickerRow()
                 }
                 ForEach(items) { item in
-                    open(item) {
+                    takesDrops(item, open(item) {
                         LibraryRow(item: item)
-                    }
+                            .dropHighlight(dropFolder == item.url, cornerRadius: Radius.rowThumb, inset: 0)
+                    })
                     .zoomSource(id: item.url, in: zoom)
+                    // No drag here yet: on iOS a drag begun on a List row lands on no row
+                    // (seen on iOS 27), so a row would lift and go nowhere. Move… instead.
                     .contextMenu { actions(for: item) }
                     .swipeActions(edge: .trailing) {
                         if isBrowsing {
                             if !item.isFolder, !isSaved(item) {
-                                Button("Save to Library", systemImage: "plus") { save(item) }
+                                Button("Save to Library", systemImage: Symbol.saveToLibrary) { save(item) }
                                     .tint(.accentColor)
                             }
                         } else {
-                            Button("Delete", systemImage: "trash", role: .destructive) { requestDelete(item) }
-                            Button("Rename", systemImage: "pencil") { beginRename(item) }
+                            RowAction.delete { requestDelete(item) }
+                            RowAction.rename { beginRename(item) }
                         }
                     }
                 }
@@ -286,8 +291,8 @@ struct FolderView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Picker("Layout", selection: $layout) {
-                    Label("Icons", systemImage: "square.grid.2x2").tag(LibraryLayout.grid)
-                    Label("List", systemImage: "list.bullet").tag(LibraryLayout.list)
+                    Label("Icons", systemImage: Symbol.iconsLayout).tag(LibraryLayout.grid)
+                    Label("List", systemImage: Symbol.listLayout).tag(LibraryLayout.list)
                 }
                 // Nothing to sort in an empty folder.
                 if !items.isEmpty {
@@ -296,25 +301,25 @@ struct FolderView: View {
                     }
                 }
             } label: {
-                Label("View Options", systemImage: "ellipsis")
+                Label("View Options", systemImage: Symbol.viewOptions)
             }
             .toolbarMenuIndicator()
         }
         if !isBrowsing {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button("Import Files…", systemImage: "square.and.arrow.down") {
+                Button("Import Files…", systemImage: Symbol.importFiles) {
                     importing = true
                     AddModelsTip().invalidate(reason: .actionPerformed)
                 }
-                Button("New Folder", systemImage: "folder.badge.plus") {
+                Button("New Folder", systemImage: Symbol.newFolder) {
                     perform(String(localized: "Couldn't Create Folder")) {
                         let url = try library.createFolder(in: folder)
                         beginRename(LibraryItem(url: url, isFolder: true, size: nil, modified: nil, childCount: 0))
                     }
                 }
             } label: {
-                Label("Add", systemImage: "plus")
+                Label("Add", systemImage: Symbol.add)
             }
             .toolbarMenuIndicator()
         }
@@ -325,16 +330,16 @@ struct FolderView: View {
     private func actions(for item: LibraryItem) -> some View {
         if !item.isFolder {
             ShareLink(item: item.url) {
-                Label("Share", systemImage: "square.and.arrow.up")
+                Label("Share", systemImage: Symbol.share)
             }
         }
         if isBrowsing {
             if !item.isFolder {
                 if isSaved(item) {
-                    Button("Saved to Library", systemImage: "checkmark") {}
+                    Button("Saved to Library", systemImage: Symbol.saved) {}
                         .disabled(true)
                 } else {
-                    Button("Save to Library", systemImage: "plus") { save(item) }
+                    Button("Save to Library", systemImage: Symbol.saveToLibrary) { save(item) }
                 }
             }
         } else {
@@ -344,11 +349,11 @@ struct FolderView: View {
 
     @ViewBuilder
     private func libraryActions(for item: LibraryItem) -> some View {
-        Button("Rename", systemImage: "pencil") { beginRename(item) }
-        Button("Duplicate", systemImage: "plus.square.on.square") { perform(String(localized: "Couldn't Duplicate")) { try await library.duplicate(item) } }
-        Button("Move…", systemImage: "folder") { moving = item }
+        RowAction.rename { beginRename(item) }
+        Button("Duplicate", systemImage: Symbol.duplicate) { perform(String(localized: "Couldn't Duplicate")) { try await library.duplicate(item) } }
+        Button("Move…", systemImage: Symbol.move) { moving = item }
         Divider()
-        Button("Delete", systemImage: "trash", role: .destructive) { requestDelete(item) }
+        RowAction.delete { requestDelete(item) }
     }
 
     private var deleteTitle: String {
@@ -374,14 +379,14 @@ struct FolderView: View {
     }
 
     private func isSaved(_ item: LibraryItem) -> Bool {
-        saved.contains(item.url) || library.hasCopy(of: item.url, size: item.size)
+        saved.contains(item.url) || copies.contains(item.url)
     }
 
     private func save(_ item: LibraryItem) {
         perform(String(localized: "Couldn't Save to Library")) {
-            guard let copy = try await library.importFiles([item.url], into: library.root).first else { return }
+            guard let name = try await library.saveCopy(of: item.url) else { return }
             saved.insert(item.url)
-            toasts.show(String(localized: "Saved to Library as \(Format.title(fromFileName: copy.deletingPathExtension().lastPathComponent))"))
+            toasts.show(String(localized: "Saved to Library as \(name)"))
         }
     }
 
@@ -410,14 +415,14 @@ struct FolderView: View {
                 do {
                     try library.restore(deleted)
                 } catch {
-                    toasts.show(String(localized: "Couldn't put \(name) back. It's still in Settings › Recently Deleted."), symbol: "exclamationmark.triangle.fill")
+                    toasts.warn(String(localized: "Couldn't put \(name) back. It's still in Settings › Recently Deleted."))
                 }
             }
             undoManager?.registerUndo(withTarget: library) { _ in
                 MainActor.assumeIsolated { undo() }
             }
             undoManager?.setActionName("Delete \(name)")
-            toasts.show(String(localized: "Deleted \"\(name)\"", comment: "Toast after deleting, with the item's name"), symbol: "trash.fill", actionTitle: String(localized: "Undo"), action: undo)
+            toasts.show(String(localized: "Deleted \"\(name)\"", comment: "Toast after deleting, with the item's name"), symbol: Symbol.deleted, actionTitle: String(localized: "Undo"), action: undo)
             #if os(macOS)
             selection.subtract(items.map(\.url))
             #endif
@@ -441,13 +446,26 @@ struct FolderView: View {
     private func load() async {
         loadGeneration += 1
         let generation = loadGeneration
-        let folder = folder, sort = sort, root = library.root
-        let listed = await Task.detached(priority: .userInitiated) {
-            FileLibrary.scan(folder, sort: sort, root: root)
+        let folder = folder, sort = sort, root = library.root, isBrowsing = isBrowsing
+        let (listed, found) = await Task.detached(priority: .userInitiated) {
+            let listed = FileLibrary.scan(folder, sort: sort, root: root)
+            // Browsing: which models the library already has, so their rows say so.
+            let found = isBrowsing ? Set(listed.filter { !$0.isFolder && FileLibrary.hasCopy(of: $0.url, size: $0.size, root: root) }.map(\.url)) : []
+            return (listed, found)
         }.value
         guard generation == loadGeneration else { return }
         items = listed
+        copies = found
         loaded = true
+        subfolderWatchers = FolderWatcher.subfolders(of: listed) { [library] in library.noteExternalChange() }
+        #if DEBUG
+        // FACETS_SHEET=move opens the Move sheet for the library's first model, once.
+        if !debugMoveShown, folder == library.root, !isBrowsing, ProcessInfo.processInfo.environment["FACETS_SHEET"] == "move",
+           let model = listed.first(where: { !$0.isFolder }) {
+            debugMoveShown = true
+            moving = model
+        }
+        #endif
         guard listed.contains(where: \.isFolder) else { return }
         Task {
             let counted = await Task.detached(priority: .utility) {
@@ -478,45 +496,139 @@ struct FolderView: View {
         }
     }
 
-    /// Files dragged in from Files or another app (iPad). Each provider hands over a
-    /// temporary copy that only lives for its callback, so it's copied out straight
+    /// What a page, folder card or row takes: models, and file URLs, which a card
+    /// dragged inside the library carries (a folder's has no model type).
+    private static let dropTypes = UTType.models + [.fileURL]
+
+    /// Moves library items: the Move sheet and a drag onto a folder alike.
+    private func moveItems(_ items: [LibraryItem], to destination: URL) {
+        perform(String(localized: "Couldn't Move")) { try library.move(items, to: destination) }
+    }
+
+    /// The folder this one is in, when it's inside the library: a drag over the page
+    /// can go up to it.
+    private var enclosingFolder: URL? {
+        guard !isBrowsing else { return nil }
+        let root = library.root.standardizedFileURL.path
+        guard folder.standardizedFileURL.path != root, LibraryLocation.contains(folder, in: library.root) else { return nil }
+        return folder.deletingLastPathComponent()
+    }
+
+    /// While something is dragged over a subfolder, a chip at the top takes it up a
+    /// level: the way out that a folder card gives the way in.
+    @ViewBuilder
+    private var parentDropTarget: some View {
+        if let parent = enclosingFolder, dropTargeted || dropFolder != nil || parentTargeted {
+            let name = parent.standardizedFileURL.path == library.root.standardizedFileURL.path ? String(localized: "Library") : parent.lastPathComponent
+            Label(String(localized: "Move to \(name)"), systemImage: Symbol.enclosingFolder)
+                .font(.subheadline.weight(.semibold))
+                .padding(ChipPadding.plate)
+                .frame(minHeight: Size.minTapTarget)
+                .glassChip()
+                .dropHighlight(parentTargeted, cornerRadius: Size.minTapTarget / 2, inset: 0)
+                .onDrop(of: Self.dropTypes, isTargeted: $parentTargeted) { providers in
+                    acceptDrop(providers, into: parent)
+                }
+                .padding(.top, Spacing.sm)
+                .transition(Motion.transition(.opacity.combined(with: .move(edge: .top)), reduceMotion: reduceMotion))
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// A folder's card or row takes drops into that folder, as the page takes them
+    /// into the one on screen. Not in Browse, which is look-and-save.
+    @ViewBuilder
+    private func takesDrops(_ item: LibraryItem, _ view: some View) -> some View {
+        if item.isFolder, !isBrowsing {
+            view.onDrop(of: Self.dropTypes, isTargeted: Binding(get: { dropFolder == item.url }, set: { targeted in
+                if targeted { dropFolder = item.url } else if dropFolder == item.url { dropFolder = nil }
+            })) { providers in
+                acceptDrop(providers, into: item.url)
+            }
+        } else {
+            view
+        }
+    }
+
+    /// A drop on the page or on a folder. Files already in the library move there
+    /// (nothing happens to ones already in it); files from elsewhere (Files, the
+    /// Finder, another app) are imported as copies.
+    private func acceptDrop(_ providers: [NSItemProvider], into destination: URL) -> Bool {
+        let accepted = providers.filter { provider in Self.dropTypes.contains { provider.hasItemConformingToTypeIdentifier($0.identifier) } }
+        guard !accepted.isEmpty else { return false }
+        let root = library.root
+        Task {
+            var inside: [URL] = []
+            var outside: [NSItemProvider] = []
+            for provider in accepted {
+                let original = await Self.originalURL(of: provider)
+                let isInside = original.map { LibraryLocation.contains($0, in: root) } ?? false
+                Self.log.info("Drop of \(provider.registeredTypeIdentifiers, privacy: .public): \(original?.lastPathComponent ?? "no file URL", privacy: .public), \(isInside ? "in the library" : "from outside", privacy: .public)")
+                if let original, isInside { inside.append(original) } else { outside.append(provider) }
+            }
+            let moves = FileLibrary.dropMoves(inside, into: destination, root: root)
+            if !moves.isEmpty {
+                moveItems(moves.map { LibraryItem(url: $0, isFolder: (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true, size: nil, modified: nil, childCount: nil) }, to: destination)
+            }
+            if !outside.isEmpty { await importDrop(outside, into: destination) }
+        }
+        return true
+    }
+
+    private static let log = Logger(subsystem: "Facets", category: "library")
+
+    /// Where a dropped file is now, when the drag says: its file URL (a card dragged
+    /// on the Mac), or the file itself when the system can open it in place (Files on
+    /// iPad, the Finder). Nil when only a copy is on offer.
+    private static func originalURL(of provider: NSItemProvider) async -> URL? {
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            let url: URL? = await withCheckedContinuation { continuation in
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in continuation.resume(returning: url) }
+            }
+            if let url, url.isFileURL { return url }
+        }
+        guard let type = UTType.models.first(where: { provider.hasItemConformingToTypeIdentifier($0.identifier) }) else { return nil }
+        return await withCheckedContinuation { continuation in
+            _ = provider.loadInPlaceFileRepresentation(forTypeIdentifier: type.identifier) { url, isInPlace, _ in
+                continuation.resume(returning: isInPlace ? url : nil)
+            }
+        }
+    }
+
+    /// Files dragged in from Files, the Finder or another app. Each provider hands over
+    /// a temporary copy that only lives for its callback, so it's copied out straight
     /// away; then everything is imported together and the result reported.
-    private func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
+    private func importDrop(_ providers: [NSItemProvider], into destination: URL) async {
         let supported = providers.compactMap { provider -> (NSItemProvider, UTType)? in
             UTType.models.first { provider.hasItemConformingToTypeIdentifier($0.identifier) }.map { (provider, $0) }
         }
-        guard !supported.isEmpty else { return false }
-        let destination = folder
         let total = providers.count
-        Task {
-            var staged: [URL] = []
-            for (provider, type) in supported {
-                if let url = await Self.stage(provider, type: type) { staged.append(url) }
-            }
-            var added = 0
-            var importError: Error?
-            if !staged.isEmpty {
-                do {
-                    added = try await library.importFiles(staged, into: destination).count
-                } catch {
-                    importError = error
-                }
-            }
-            for url in staged { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-            let missed = total - added
-            switch (added, missed) {
-            case (0, _) where importError != nil:
-                // The files were fine; copying them failed (no space, iCloud).
-                toasts.show(total == 1 ? String(localized: "Couldn't add that file. \(FriendlyError(file: importError!).message)") : String(localized: "Couldn't add those files. \(FriendlyError(file: importError!).message)"), symbol: "exclamationmark.triangle.fill")
-            case (0, _):
-                toasts.show(total == 1 ? String(localized: "Couldn't add that file. Only STL, 3MF and OBJ files can go in the library.") : String(localized: "Couldn't add those files. Only STL, 3MF and OBJ files can go in the library."), symbol: "exclamationmark.triangle.fill")
-            case (_, 0):
-                toasts.show(String(localized: "Added \(added) models"))
-            default:
-                toasts.show(String(localized: "Added \(added) of \(total). The others aren't STL, 3MF or OBJ files."), symbol: "exclamationmark.triangle.fill")
+        var staged: [URL] = []
+        for (provider, type) in supported {
+            if let url = await Self.stage(provider, type: type) { staged.append(url) }
+        }
+        var added = 0
+        var importError: Error?
+        if !staged.isEmpty {
+            do {
+                added = try await library.importFiles(staged, into: destination).count
+            } catch {
+                importError = error
             }
         }
-        return true
+        for url in staged { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let missed = total - added
+        switch (added, missed) {
+        case (0, _) where importError != nil:
+            // The files were fine; copying them failed (no space, iCloud).
+            toasts.warn(total == 1 ? String(localized: "Couldn't add that file. \(FriendlyError(file: importError!).message)") : String(localized: "Couldn't add those files. \(FriendlyError(file: importError!).message)"))
+        case (0, _):
+            toasts.warn(total == 1 ? String(localized: "Couldn't add that file. Only STL, 3MF and OBJ files can go in the library.") : String(localized: "Couldn't add those files. Only STL, 3MF and OBJ files can go in the library."))
+        case (_, 0):
+            toasts.show(String(localized: "Added \(added) models"))
+        default:
+            toasts.warn(String(localized: "Added \(added) of \(total). The others aren't STL, 3MF or OBJ files."))
+        }
     }
 
     /// Copies a dropped file somewhere it outlives the provider's callback.
@@ -546,9 +658,11 @@ struct LibraryCard: View {
     /// Selected on the Mac: an outline round the picture and the name highlighted,
     /// as the Finder shows it.
     var isSelected = false
+    /// A folder something is being dragged onto.
+    var isDropTarget = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             Group {
                 if item.isFolder {
                     FolderTile()
@@ -559,33 +673,45 @@ struct LibraryCard: View {
             .aspectRatio(1, contentMode: .fit)
             .overlay {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(.tint, lineWidth: 3)
-                        .padding(-3)
+                    RoundedRectangle(cornerRadius: Radius.selectionOutline)
+                        .strokeBorder(.tint, lineWidth: Stroke.outline)
+                        .padding(-Stroke.outline)
                 }
             }
+            .dropHighlight(isDropTarget, cornerRadius: Radius.selectionOutline, inset: -Stroke.outline)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Spacing.hair) {
                 Text(item.displayName)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     // Primary text on a tint wash: white on Filament Orange falls short
                     // of 4.5:1 at this size.
-                    .padding(.horizontal, isSelected ? 4 : 0)
-                    .background(isSelected ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 4))
-                    .padding(.horizontal, isSelected ? -4 : 0)
+                    .padding(.horizontal, isSelected ? Spacing.xs : 0)
+                    .background(isSelected ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: Radius.selectionWash))
+                    .padding(.horizontal, isSelected ? -Spacing.xs : 0)
                 Text(LibraryRow.subtitle(for: item))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, Spacing.hair)
         }
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
         .accessibilityHint(item.isFolder ? "Opens the folder" : "Opens the model")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// Room a grid leaves above its first row for a selected card's outline, which
+    /// sits 3 pt outside the picture: flush, it ran under the Mac toolbar's edge.
+    /// Only the Mac selects cards.
+    static var outlineRoom: CGFloat {
+        #if os(macOS)
+        Spacing.md
+        #else
+        0
+        #endif
     }
 }
 
@@ -594,16 +720,16 @@ struct FolderTile: View {
     @Environment(ViewerSettings.self) private var settings: ViewerSettings?
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 14)
+        RoundedRectangle(cornerRadius: Radius.tile)
             .fill(showsBackdrop ? AnyShapeStyle(Palette.tileGradient(pureBlack: settings?.pureBlack ?? false)) : AnyShapeStyle(.clear))
             .overlay {
                 // Inset in proportion, so the glyph fills a 52pt row tile and a grid tile alike.
                 GeometryReader { geometry in
-                    Image(systemName: "folder.fill")
+                    Image(systemName: Symbol.folderTile)
                         .resizable()
                         .scaledToFit()
                         .foregroundStyle(.tint.opacity(0.85))
-                        .padding(geometry.size.width * 0.2)
+                        .padding(geometry.size.width * 0.2) // rule-ok: a share of the tile, part of the folder tile's own drawing
                         .frame(width: geometry.size.width, height: geometry.size.height)
                 }
             }
@@ -612,36 +738,20 @@ struct FolderTile: View {
 
 struct LibraryRow: View {
     let item: LibraryItem
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// Grows with the text, up to a point, so the picture still reads beside big type.
-    @ScaledMetric(relativeTo: .headline) private var thumbnailSize: CGFloat = 52
+    /// Search results say which folder each is in.
+    var folder: String?
 
     var body: some View {
-        HStack(spacing: 12) {
-            Group {
-                if item.isFolder {
-                    FolderTile(showsBackdrop: false)
-                } else {
-                    ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 10, showsBackdrop: false, isDownloaded: item.isDownloaded)
-                }
+        ThumbnailRow(title: item.displayName, location: folder) {
+            if item.isFolder {
+                FolderTile(showsBackdrop: false)
+            } else {
+                // The row rounds the corners.
+                ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0, showsBackdrop: false, isDownloaded: item.isDownloaded)
             }
-            .frame(width: min(thumbnailSize, 88), height: min(thumbnailSize, 88))
-            .clipShape(.rect(cornerRadius: 10))
-
-            // At accessibility sizes names wrap rather than truncate; that's the point
-            // of showing rows there.
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.displayName)
-                    .font(.headline)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-                Text(Self.subtitle(for: item))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-            }
+        } caption: {
+            Text(Self.subtitle(for: item))
         }
-        .accessibilityElement(children: .combine)
     }
 
     static func subtitle(for item: LibraryItem) -> String {
@@ -677,7 +787,7 @@ struct MoveSheet: View {
                     onMove(folder)
                     dismiss()
                 } label: {
-                    Label(name(of: folder), systemImage: folder == library.root ? "tray.full" : "folder")
+                    Label(name(of: folder), systemImage: folder == library.root ? Symbol.library : Symbol.folder)
                 }
                 .disabled(isCurrent || isSelf)
             }
@@ -685,12 +795,12 @@ struct MoveSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", systemImage: "xmark") { dismiss() }
+                    Button("Cancel", systemImage: Symbol.close) { dismiss() }
                 }
             }
         }
         .presentationDetents([.medium, .large])
-        .overlay { if folders == nil { ProgressView() } }
+        .overlay { if folders == nil { ProgressView().accessibilityLabel("Loading folder") } }
         .task {
             let root = library.root
             folders = await Task.detached(priority: .userInitiated) { FileLibrary.allFolders(in: root) }.value
@@ -698,7 +808,7 @@ struct MoveSheet: View {
     }
 
     private func name(of folder: URL) -> String {
-        if folder == library.root { return "Library" }
+        if folder == library.root { return String(localized: "Library") }
         return library.relativeFolder(of: folder.appending(path: "x")) ?? folder.lastPathComponent
     }
 }
@@ -712,10 +822,10 @@ extension FolderView {
     /// A grid card: click to select, double-click to open, drag out to the Finder or
     /// a slicer.
     fileprivate func macCard(_ item: LibraryItem) -> some View {
-        LibraryCard(item: item, isSelected: selection.contains(item.url))
+        takesDrops(item, LibraryCard(item: item, isSelected: selection.contains(item.url), isDropTarget: dropFolder == item.url))
             .gesture(TapGesture(count: 2).onEnded { activate([item]) })
             .simultaneousGesture(TapGesture().onEnded { click(item) })
-            .draggable(item.url)
+            .libraryDraggable(item.url)
             .contextMenu { selectionMenu(for: selection.contains(item.url) ? selectedItems : [item]) }
             // No longer a Button on the Mac, so say it can be opened.
             .accessibilityAddTraits(.isButton)
@@ -729,11 +839,13 @@ extension FolderView {
                 LibrarySectionPicker().sectionPickerRow()
             }
             ForEach(items) { item in
-                LibraryRow(item: item)
+                takesDrops(item, LibraryRow(item: item)
+                    .dropHighlight(dropFolder == item.url, cornerRadius: Radius.rowThumb, inset: 0))
                     .tag(item.url)
-                    .draggable(item.url)
+                    .libraryDraggable(item.url)
             }
         }
+        .libraryDragContainer(selection: selection)
         .contextMenu(forSelectionType: URL.self) { urls in
             selectionMenu(for: items.filter { urls.contains($0.url) })
         } primaryAction: { urls in
@@ -754,7 +866,7 @@ extension FolderView {
             }
             if !isBrowsing {
                 Divider()
-                Button("Delete \(chosen.count) Items", systemImage: "trash", role: .destructive) { requestDelete(chosen) }
+                RowAction.delete("Delete \(chosen.count) Items") { requestDelete(chosen) }
             }
         }
     }

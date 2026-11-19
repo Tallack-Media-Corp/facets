@@ -17,25 +17,18 @@ struct SearchView: View {
     }
 
     var body: some View {
+        // Filtered and sorted once per update; the list and its overlay both use it.
+        let results = results
         NavigationStack {
             List(results) { item in
                 OpenModelButton(file: ModelFileRef(url: item.url, isExternal: false)) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        LibraryRow(item: item)
-                        if let folder = library.relativeFolder(of: item.url) {
-                            Label(folder, systemImage: "folder")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .padding(.leading, 64)
-                                .lineLimit(2)
-                        }
-                    }
+                    LibraryRow(item: item, folder: library.relativeFolder(of: item.url))
                 }
                 .zoomSource(id: item.url, in: zoom)
             }
             .overlay {
                 if query.isEmpty {
-                    ContentUnavailableView("Search Your Library", systemImage: "magnifyingglass", description: Text("Find STL, 3MF and OBJ files by name, in every folder."))
+                    ContentUnavailableView("Search Your Library", systemImage: Symbol.search, description: Text("Find STL, 3MF and OBJ files by name, in every folder."))
                 } else if results.isEmpty {
                     ContentUnavailableView.search(text: query)
                 }

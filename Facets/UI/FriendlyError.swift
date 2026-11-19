@@ -38,7 +38,7 @@ struct FriendlyError: Equatable {
         let ns = error as NSError
         switch (ns.domain, ns.code) {
         case (NSCocoaErrorDomain, NSFileNoSuchFileError), (NSCocoaErrorDomain, NSFileReadNoSuchFileError), (NSPOSIXErrorDomain, Int(ENOENT)):
-            self.init(.missing, "File Not Found", "It was moved, renamed or deleted since Facets last saw it.")
+            self.init(.missing, "File Not Found", "It was moved, renamed or deleted, or Facets no longer has access to it.")
         case (NSCocoaErrorDomain, NSFileReadNoPermissionError), (NSCocoaErrorDomain, NSFileWriteNoPermissionError), (NSPOSIXErrorDomain, Int(EPERM)), (NSPOSIXErrorDomain, Int(EACCES)):
             self.init(.noAccess, "No Access to This File", "Facets can only open files you choose. Open it again from Files, or add its folder under Library › Browse.")
         case (NSCocoaErrorDomain, NSFileWriteOutOfSpaceError), (NSPOSIXErrorDomain, Int(ENOSPC)):

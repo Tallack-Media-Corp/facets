@@ -16,7 +16,7 @@ struct PrinterBedPicker: View {
         @Bindable var settings = settings
         Form {
             Section {
-                row(title: "None", id: nil)
+                row(title: String(localized: "None"), id: nil)
             } footer: {
                 Text(verdict == nil
                      ? "Pick your printer to see its bed under every model, and whether the model fits."
@@ -60,17 +60,17 @@ struct PrinterBedPicker: View {
     }
 
     private func row(title: String, detail: String? = nil, id: String?, verdict: BedFit.Verdict? = nil) -> some View {
-        let note = verdict.map(Self.note(for:))
+        let note = verdict.map { (text: Self.note(for: $0), symbol: $0.symbol) }
         return Button {
             settings.bedID = id
             if id != PrinterBed.customID { onPick?() }
         } label: {
             HStack {
                 // Colour, not hierarchical styles: inside a button those resolve to the tint.
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Spacing.hair) {
                     Text(title).foregroundStyle(Color.primary)
                     if let note {
-                        HStack(spacing: 4) {
+                        HStack(spacing: Spacing.xs) {
                             Image(systemName: note.symbol)
                             Text(note.text)
                         }
@@ -80,7 +80,7 @@ struct PrinterBedPicker: View {
                 }
                 Spacer()
                 if let detail { Text(detail).foregroundStyle(Color.secondary).monospacedDigit() }
-                Image(systemName: "checkmark")
+                Image(systemName: Symbol.chosen)
                     .fontWeight(.semibold)
                     .foregroundStyle(.tint)
                     .opacity(settings.bedID == id ? 1 : 0)
@@ -93,18 +93,18 @@ struct PrinterBedPicker: View {
     }
 
     /// The short form of a fit verdict, for a row in the list.
-    private static func note(for verdict: BedFit.Verdict) -> (text: String, symbol: String) {
+    private static func note(for verdict: BedFit.Verdict) -> String {
         switch verdict {
-        case .fits: (String(localized: "Fits", comment: "The model fits this printer"), "checkmark.circle")
-        case .fitsTurned: (String(localized: "Fits turned 90°"), "checkmark.circle")
-        case .tooBig: (String(localized: "Too small", comment: "This printer is too small for the model"), "exclamationmark.triangle.fill")
-        case .offPlate: (String(localized: "Fits, but runs off the plate as arranged"), "exclamationmark.triangle.fill")
+        case .fits: String(localized: "Fits", comment: "The model fits this printer")
+        case .fitsTurned: String(localized: "Fits turned 90°")
+        case .tooBig: String(localized: "Too small", comment: "This printer is too small for the model")
+        case .offPlate: String(localized: "Fits, but runs off the plate as arranged")
         }
     }
 
     /// "256 × 256 × 250 mm": whole millimetres, since beds are specified that way.
     private func size(_ width: Float, _ depth: Float, _ height: Float) -> String {
-        let factor: Float = settings.units == .inches ? 25.4 : 1
+        let factor = Float(settings.units.mmPerUnit)
         let digits = settings.units == .inches ? 1 : 0
         let parts = [width, depth, height].map { ($0 / factor).formatted(.number.precision(.fractionLength(digits))) }
         return parts.joined(separator: " × ") + " " + settings.units.symbol
@@ -112,7 +112,7 @@ struct PrinterBedPicker: View {
 
     /// Shows and edits millimetres in the user's units.
     private func lengthBinding(_ mm: Binding<Float>) -> Binding<Double> {
-        let factor: Double = settings.units == .inches ? 25.4 : 1
+        let factor = settings.units.mmPerUnit
         return Binding(
             get: { Double(mm.wrappedValue) / factor },
             set: { mm.wrappedValue = Float(max($0, 1) * factor) }

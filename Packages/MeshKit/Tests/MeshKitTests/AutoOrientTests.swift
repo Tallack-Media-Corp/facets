@@ -84,7 +84,9 @@ struct AutoOrientTiming {
         t = Date()
         _ = AutoOrient.score(up: SIMD3(0, 0, 1), faces: faces, hull: hull)
         say("ORIENT one score in", Date().timeIntervalSince(t), "for", faces.count, "triangles")
+        t = Date()
         let down = AutoOrient.downDirection(for: model, plateID: model.plates.first?.id, hidden: [])
+        say("ORIENT whole run in", Date().timeIntervalSince(t))
         if let down {
             let turned = model.reoriented(by: layFlatRotation(for: down), plateID: model.plates.first?.id, hidden: [])
             say("ORIENT again", AutoOrient.downDirection(for: turned, plateID: turned.plates.first?.id, hidden: []).map { "\($0)" } ?? "nil (already best)")

@@ -36,25 +36,25 @@ struct UnitSuggestionCard: View {
     private var largest: Float { max(size.x, size.y, size.z) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Label("Saved in another unit?", systemImage: "ruler")
+        VStack(alignment: .leading, spacing: Spacing.roomy) {
+            VStack(alignment: .leading, spacing: Spacing.hair) {
+                Label("Saved in another unit?", systemImage: Symbol.units)
                     .font(.subheadline.weight(.semibold))
                 Text("It's only \(Format.dimension(largest, units: units)) across, smaller than anything a printer makes. Files in metres or inches open this way. You can change this later in Info.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.sm) {
                 ForEach(suggestions) { unit in
                     Button { choose(unit) } label: {
-                        VStack(spacing: 1) {
+                        VStack(spacing: Spacing.stacked) {
                             Text(unit.localizedTitle).font(.footnote.weight(.semibold))
                             Text(Format.dimension(largest * unit.factor, units: units))
                                 .font(.caption2.monospacedDigit())
                                 .opacity(0.8)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .frame(maxWidth: .infinity, minHeight: Size.minTapTarget)
                     }
                     // Equal weight: size alone can't tell metres from inches.
                     .buttonStyle(.glass)
@@ -63,17 +63,15 @@ struct UnitSuggestionCard: View {
                 Button(action: keep) {
                     Text("Keep")
                         .font(.footnote.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .frame(minHeight: 44)
+                        .padding(.horizontal, Spacing.snug)
+                        .frame(minHeight: Size.minTapTarget)
                 }
                 .buttonStyle(.glass)
                     .accessibilityHint("Shows the model at the size the file says")
             }
         }
-        .padding(14)
-        .frame(maxWidth: 420)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
-        .padding(.horizontal, 12)
+        // The same card as a tool panel, in the same place.
+        .glassCard(padding: CardPadding.unitCard, margin: Spacing.md)
     }
 }
 

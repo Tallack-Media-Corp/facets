@@ -12,4 +12,4 @@ APP=.build/DerivedData/Build/Products/Debug-iphonesimulator/Facets.app
 BUNDLE=$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP/Info.plist")
 xcrun simctl install "$SIM" "$APP"
 xcrun simctl terminate "$SIM" "$BUNDLE" 2>/dev/null || true
-SIMCTL_CHILD_FACET_OPEN="${2:-}" xcrun simctl launch "$SIM" "$BUNDLE"
+SIMCTL_CHILD_FACETS_OPEN="${2:-}" SIMCTL_CHILD_FACETS_INFO="${FACETS_INFO:-}" xcrun simctl launch "$SIM" "$BUNDLE"

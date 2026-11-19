@@ -5,7 +5,7 @@ struct ModelThumbnail: View {
     let url: URL
     var size: Int64?
     var modified: Date?
-    var cornerRadius: CGFloat = 14
+    var cornerRadius = Radius.tile
     /// The studio backdrop behind the model: on for cards, off in list rows, where
     /// the row's own background is enough.
     var showsBackdrop = true
@@ -33,13 +33,13 @@ struct ModelThumbnail: View {
                     Image(platformImage: image)
                         .resizable()
                         .scaledToFit()
-                        .padding(geometry.size.width * (showsBackdrop ? 0.08 : 0.02))
+                        .padding(geometry.size.width * (showsBackdrop ? 0.08 : 0.02)) // rule-ok: a share of the tile, part of the thumbnail's own drawing
                 } else if !isDownloaded {
-                    Image(systemName: "icloud.and.arrow.down")
+                    Image(systemName: Symbol.notDownloaded)
                         .font(.system(size: max(14, geometry.size.width * (showsBackdrop ? 0.18 : 0.4)), weight: .light))
                         .foregroundStyle(.secondary)
                 } else {
-                    Image(systemName: failed ? "exclamationmark.triangle" : "cube.transparent")
+                    Image(systemName: failed ? Symbol.failed : Symbol.thumbnailPlaceholder)
                         .font(.system(size: max(14, geometry.size.width * (showsBackdrop ? 0.28 : 0.45)), weight: .light))
                         .foregroundStyle(.tertiary)
                         .symbolEffect(.pulse, isActive: !failed)
@@ -50,19 +50,20 @@ struct ModelThumbnail: View {
             .overlay(alignment: .bottomTrailing) {
                 // Pictured, but not on this device: it downloads when opened.
                 if !isDownloaded, image != nil {
-                    Image(systemName: "icloud")
+                    Image(systemName: Symbol.inCloud)
                         .font(.system(size: max(9, geometry.size.width * (showsBackdrop ? 0.09 : 0.22)), weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .padding(geometry.size.width * 0.05)
+                        .padding(geometry.size.width * 0.05) // rule-ok: a share of the tile, part of the thumbnail's own drawing
                 }
             }
             .task(id: "\(key)|\(isDownloaded)") {
                 image = nil
                 failed = false
-                var result: PlatformImage?
-                if isDownloaded {
+                // A picture already drawn here comes first, never queued behind a render.
+                var result = await ThumbnailStore.shared.local(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
+                if result == nil, isDownloaded {
                     result = await ThumbnailStore.shared.thumbnail(for: url, size: size, modified: modified, pixelSize: pixels, look: look)
-                } else {
+                } else if result == nil {
                     result = await ThumbnailStore.shared.sharedThumbnail(for: url, modified: modified, pixelSize: pixels, look: look)
                     // No device has drawn it yet: fetch a reasonably small file once and
                     // draw it, which shares the picture with the others too. A folder
@@ -91,7 +92,7 @@ struct ModelThumbnail: View {
     static let browseFetchLimit: Int64 = 5_000_000
 
     private var fetchLimit: Int64 {
-        if url.standardizedFileURL.path.hasPrefix(LibraryLocation.current.standardizedFileURL.path + "/") { return Self.fetchLimit }
+        if LibraryLocation.contains(url, includingDeleted: true) { return Self.fetchLimit }
         return settings?.fetchesBrowsePreviews == true ? Self.browseFetchLimit : 0
     }
 

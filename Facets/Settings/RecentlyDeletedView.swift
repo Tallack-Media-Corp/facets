@@ -5,6 +5,8 @@ struct RecentlyDeletedView: View {
     @Environment(FileLibrary.self) private var library
     @Environment(ToastCenter.self) private var toasts
     @State private var items: [FileLibrary.DeletedItem] = []
+    /// Not "Nothing Deleted" before the first read is in.
+    @State private var loaded = false
     @State private var confirmingEmpty = false
     /// Deleting for good can't be undone, so even one item asks first.
     @State private var purging: FileLibrary.DeletedItem?
@@ -12,51 +14,46 @@ struct RecentlyDeletedView: View {
     var body: some View {
         List {
             ForEach(items) { item in
-                HStack(spacing: 12) {
-                    Image(systemName: item.isFolder ? "folder" : "cube")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(item.displayName)
-                            .font(.headline)
-                            .lineLimit(3)
-                        Text(detail(for: item))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                ThumbnailRow(title: item.displayName) {
+                    if item.isFolder {
+                        FolderTile(showsBackdrop: false)
+                    } else {
+                        // Drawn from the file where it waits; a cube while it renders.
+                        // The row rounds the corners.
+                        ModelThumbnail(url: item.stored, cornerRadius: 0, showsBackdrop: false, isDownloaded: item.isDownloaded)
                     }
+                } caption: {
+                    Text(detail(for: item))
+                } accessory: {
+                    // In sight on every row, not only behind a swipe or a right-click.
+                    Button("Restore") { restore([item]) }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel(String(localized: "Restore \(item.displayName)"))
                 }
-                .accessibilityElement(children: .combine)
                 .swipeActions(edge: .leading) {
-                    Button("Restore", systemImage: "arrow.uturn.backward") { restore([item]) }
+                    RowAction.restore { restore([item]) }
                         .tint(.accentColor)
                 }
                 .swipeActions(edge: .trailing) {
-                    Button("Delete Now", systemImage: "trash", role: .destructive) { purging = item }
+                    RowAction.delete("Delete Now") { purging = item }
                 }
                 .contextMenu {
-                    Button("Restore", systemImage: "arrow.uturn.backward") { restore([item]) }
-                    Button("Delete Now", systemImage: "trash", role: .destructive) { purging = item }
+                    RowAction.restore { restore([item]) }
+                    RowAction.delete("Delete Now") { purging = item }
                 }
             }
         }
         .overlay {
-            if items.isEmpty {
-                ContentUnavailableView("Nothing Deleted", systemImage: "trash", description: Text("Models and folders you delete stay here for 30 days, so you can put them back."))
+            if loaded, items.isEmpty {
+                ContentUnavailableView("Nothing Deleted", systemImage: Symbol.nothingDeleted, description: Text("Models and folders you delete stay here for 30 days, so you can put them back."))
             }
         }
         .navigationTitle("Recently Deleted")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if !items.isEmpty {
-                ToolbarItem(placement: .bottomControls) {
-                    Button("Restore All") { restore(items) }
-                }
-                ToolbarSpacer(.flexible, placement: .bottomControls)
-                ToolbarItem(placement: .bottomControls) {
-                    Button("Delete All", role: .destructive) { confirmingEmpty = true }
-                }
-            }
+        .listActions(shown: !items.isEmpty) {
+            Button("Restore All") { restore(items) }
+        } trailing: {
+            Button("Delete All", role: .destructive) { confirmingEmpty = true }
         }
         .hidesTabBar()
         .confirmationDialog(items.count == 1 ? String(localized: "Delete this item for good?") : String(localized: "Delete all \(items.count) items for good?"), isPresented: $confirmingEmpty, titleVisibility: .visible) {
@@ -64,15 +61,20 @@ struct RecentlyDeletedView: View {
         } message: {
             Text("They can't be restored after this.")
         }
-        .confirmationDialog(String(localized: "Delete \"\(purging?.displayName ?? "")\" for good?"), isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }), titleVisibility: .visible) {
+        .confirmationDialog(String(localized: "Delete \"\(purging?.displayName ?? "")\" for good?"), isPresented: $purging.isPresent, titleVisibility: .visible) {
             Button("Delete Now", role: .destructive) {
                 if let purging { purge([purging]) }
             }
         } message: {
             Text("It can't be restored after this.")
         }
-        .onAppear(perform: reload)
-        .onChange(of: library.revision) { reload() }
+        // On appear and each change; a newer change cancels the older read's result.
+        .task(id: library.revision) {
+            let found = await library.recentlyDeleted()
+            guard !Task.isCancelled else { return }
+            items = found
+            loaded = true
+        }
     }
 
     private func detail(for item: FileLibrary.DeletedItem) -> String {
@@ -84,20 +86,16 @@ struct RecentlyDeletedView: View {
         return "\(when) · \(left)"
     }
 
-    private func reload() {
-        items = library.recentlyDeleted()
-    }
-
     private func restore(_ chosen: [FileLibrary.DeletedItem]) {
         do {
             let restored = try library.restore(chosen)
             if restored.count == 1, let first = restored.first {
-                toasts.show(String(localized: "Restored \(Format.title(fromFileName: first.deletingPathExtension().lastPathComponent))"))
+                toasts.show(String(localized: "Restored \(Format.title(of: first))"))
             } else {
                 toasts.show(String(localized: "Restored \(restored.count) items"))
             }
         } catch {
-            toasts.show(String(localized: "Couldn't restore. There may not be enough space."), symbol: "exclamationmark.triangle.fill")
+            toasts.warn(String(localized: "Couldn't restore. There may not be enough space."))
         }
     }
 

@@ -109,7 +109,8 @@ extension String {
         var rest = self[...]
         while let amp = rest.firstIndex(of: "&") {
             out += rest[..<amp]
-            guard let semi = rest[amp...].firstIndex(of: ";"), rest.distance(from: amp, to: semi) <= 10 else {
+            // Only near the "&": searching the whole rest for every "&" is quadratic.
+            guard let semi = rest[amp...].prefix(11).firstIndex(of: ";") else {
                 out += "&"
                 rest = rest[rest.index(after: amp)...]
                 continue

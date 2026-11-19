@@ -43,6 +43,22 @@ enum LibraryLocation {
         }.value
     }
 
+    /// The path below the library folder, for a URL inside it; nil outside it, and in
+    /// its Recently Deleted unless `includingDeleted` (thumbnails draw those rows too).
+    /// Symlinks resolved, so "/var/…" and "/private/var/…" agree.
+    static func relativePath(of url: URL, in root: URL = current, includingDeleted: Bool = false) -> String? {
+        let base = root.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        guard path.hasPrefix(base) else { return nil }
+        let relative = String(path.dropFirst(base.count))
+        return !includingDeleted && relative.hasPrefix(".recently-deleted/") ? nil : relative
+    }
+
+    /// In the library (and, unless `includingDeleted`, not in its Recently Deleted).
+    static func contains(_ url: URL, in root: URL = current, includingDeleted: Bool = false) -> Bool {
+        relativePath(of: url, in: root, includingDeleted: includingDeleted) != nil
+    }
+
     static func use(_ root: URL, kind: Kind) {
         state.withLock { $0 = (root, kind) }
         if kind == .iCloud {
@@ -61,16 +77,14 @@ enum LibraryLocation {
             guard let items = try? fileManager.contentsOfDirectory(at: deviceRoot, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { return 0 }
             var moved = 0
             for item in items where item.lastPathComponent != "Inbox" {
-                var destination = cloud.appending(path: item.lastPathComponent)
-                var n = 2
-                let ext = item.pathExtension
-                let base = item.deletingPathExtension().lastPathComponent
-                while fileManager.fileExists(atPath: destination.path) {
-                    destination = cloud.appending(path: ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)")
-                    n += 1
-                }
-                if (try? fileManager.setUbiquitous(true, itemAt: item, destinationURL: destination)) != nil {
+                // Counts iCloud placeholders as taken too, so a clash with a file not
+                // downloaded here doesn't fail the move.
+                let destination = FileLibrary.uniqueURL(for: item.lastPathComponent, in: cloud)
+                do {
+                    try fileManager.setUbiquitous(true, itemAt: item, destinationURL: destination)
                     moved += 1
+                } catch {
+                    Logger(subsystem: "Facets", category: "library").error("Couldn't move \(item.lastPathComponent, privacy: .public) to iCloud Drive: \(error as NSError, privacy: .public)")
                 }
             }
             return moved

@@ -35,6 +35,10 @@ public struct ZipArchive: Sendable {
 
     public func contains(_ path: String) -> Bool { entry(for: path) != nil }
 
+    /// What an entry inflates to, from the directory alone, so a reader can size up a
+    /// package before inflating anything.
+    public func uncompressedSize(of path: String) -> Int? { entry(for: path)?.uncompressedSize }
+
     private func entry(for path: String) -> Entry? {
         let key = Self.normalize(path)
         if let entry = entries[key] { return entry }
@@ -49,7 +53,8 @@ public struct ZipArchive: Sendable {
         return p.removingPercentEncoding ?? p
     }
 
-    public func data(for path: String) throws -> Data {
+    /// `limit` lowers the cap for one entry below `maximumEntrySize`.
+    public func data(for path: String, limit: Int = .max) throws -> Data {
         guard let entry = entry(for: path) else {
             throw ModelError.corrupt("\(path) is missing from the package")
         }
@@ -67,9 +72,10 @@ public struct ZipArchive: Sendable {
             let source = UnsafeRawBufferPointer(rebasing: raw[start..<(start + entry.compressedSize)])
             switch entry.method {
             case 0:
+                guard source.count <= min(limit, Self.maximumEntrySize) else { throw ModelError.tooLarge }
                 return Data(source)
             case 8:
-                return try Self.inflate(source, size: entry.uncompressedSize)
+                return try Self.inflate(source, size: entry.uncompressedSize, limit: min(limit, Self.maximumEntrySize))
             default:
                 throw ModelError.corrupt("the package uses an unsupported compression method (\(entry.method))")
             }
@@ -81,22 +87,26 @@ public struct ZipArchive: Sendable {
     /// anything is allocated (a ZIP bomb, or simply too big to show).
     nonisolated(unsafe) public static var maximumEntrySize = 1_500_000_000
 
-    private static func inflate(_ source: UnsafeRawBufferPointer, size: Int) throws -> Data {
+    private static func inflate(_ source: UnsafeRawBufferPointer, size: Int, limit: Int) throws -> Data {
         if size == 0 { return Data() }
-        guard size <= maximumEntrySize else {
+        guard size <= limit else {
             throw ModelError.tooLarge
         }
         // Deflate can't shrink data by more than about 1032:1.
         guard size / 1032 <= max(source.count, 1) else {
             throw ModelError.corrupt("a package entry is damaged")
         }
-        var output = Data(count: size)
-        let written = output.withUnsafeMutableBytes { out -> Int in
-            guard let dst = out.bindMemory(to: UInt8.self).baseAddress,
-                  let src = source.bindMemory(to: UInt8.self).baseAddress else { return 0 }
-            // COMPRESSION_ZLIB is raw DEFLATE (RFC 1951), which is what ZIP stores.
-            return compression_decode_buffer(dst, size, src, source.count, nil, COMPRESSION_ZLIB)
-        }
+        // Pages of its own, handed back to the system when the Data goes: malloc keeps
+        // freed blocks this large in the footprint, so each model entry would add to the peak.
+        var address: vm_address_t = 0
+        guard vm_allocate(mach_task_self_, &address, vm_size_t(size), VM_FLAGS_ANYWHERE) == KERN_SUCCESS,
+              let dst = UnsafeMutablePointer<UInt8>(bitPattern: UInt(address)) else { throw ModelError.tooLarge }
+        // COMPRESSION_ZLIB is raw DEFLATE (RFC 1951), which is what ZIP stores.
+        let written = source.bindMemory(to: UInt8.self).baseAddress.map {
+            compression_decode_buffer(dst, size, $0, source.count, nil, COMPRESSION_ZLIB)
+        } ?? 0
+        // Wrapped only once filled: Data copies a small buffer and frees it straight away.
+        let output = Data(bytesNoCopy: dst, count: size, deallocator: .virtualMemory)
         guard written == size else {
             throw ModelError.corrupt("a package entry didn't decompress")
         }
@@ -127,7 +137,7 @@ public struct ZipArchive: Sendable {
             let locator = eocd - 20
             guard locator >= 0, u32(locator) == 0x0706_4B50 else { throw ModelError.corrupt("the ZIP64 directory is missing") }
             let record = u64(locator + 8)
-            guard record >= 0, record + 56 <= raw.count, u32(record) == 0x0606_4B50 else { throw ModelError.corrupt("the ZIP64 directory is damaged") }
+            guard record >= 0, record <= raw.count - 56, u32(record) == 0x0606_4B50 else { throw ModelError.corrupt("the ZIP64 directory is damaged") }
             count = u64(record + 32)
             directoryOffset = u64(record + 48)
         }
@@ -170,7 +180,8 @@ public struct ZipArchive: Sendable {
                 e += 4 + size
             }
 
-            guard compressed >= 0, uncompressed >= 0, localOffset >= 0 else {
+            // Bounded by the file here, so the sums made when reading an entry can't overflow.
+            guard compressed >= 0, uncompressed >= 0, localOffset >= 0, compressed <= raw.count, localOffset <= raw.count else {
                 throw ModelError.corrupt("the package directory is damaged")
             }
             if !name.hasSuffix("/") {

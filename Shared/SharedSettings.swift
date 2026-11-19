@@ -16,4 +16,10 @@ enum SharedSettings {
         get { defaults?.bool(forKey: pureBlackKey) ?? false }
         set { defaults?.set(newValue, forKey: pureBlackKey) }
     }
+
+    #if DEBUG
+    /// Shows the preview's too-large fallback whatever the file, for the Simulator, which
+    /// sets no memory limit. Set from the shell (`defaults write` in the group container).
+    static var forceTooLarge: Bool { defaults?.bool(forKey: "debug.forceTooLarge") ?? false }
+    #endif
 }
