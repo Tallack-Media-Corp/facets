@@ -28,6 +28,20 @@ extension View {
         }
     }
 
+    /// Asks before deleting or clearing, while `item` is set: a centred alert with Cancel
+    /// and the destructive action. Never a confirmation dialog: on iPhone and iPad that's
+    /// a popover pointing at whatever it's attached to, often blank space, and from a
+    /// context menu there's nothing left to point at. The action gets the item the alert
+    /// showed, not whatever `item` holds by the time it's tapped.
+    func confirmAlert<Item>(_ item: Binding<Item?>, title: (Item) -> String, message: (Item) -> String, action: LocalizedStringResource, perform: @escaping (Item) -> Void) -> some View {
+        alert(Text(verbatim: item.wrappedValue.map(title) ?? ""), isPresented: item.isPresent, presenting: item.wrappedValue) { shown in
+            Button("Cancel", role: .cancel) {}
+            Button(action, role: .destructive) { perform(shown) }
+        } message: { shown in
+            Text(verbatim: message(shown))
+        }
+    }
+
     /// Asks for a new name while `item` is set; `text` starts as the current name.
     func renameAlert<Item>(_ title: LocalizedStringResource, item: Binding<Item?>, text: Binding<String>, rename: @escaping (Item) -> Void) -> some View {
         alert(Text(title), isPresented: item.isPresent) {

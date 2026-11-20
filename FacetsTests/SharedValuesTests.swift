@@ -36,6 +36,14 @@ import Testing
         #expect(estimate <= measured * 3 / 2)
     }
 
+    /// A Bambu 3MF of 37 MB whose model inflates to 120 MB showed a blank file card on
+    /// iOS (cap 80 MB): the entry was skipped and nothing was left to draw.
+    @Test func quickLookRefusesAnEntryPastTheInflateCap() {
+        let iOSPreview = QuickLookLimits.Limits(stl: 40_000_000, obj: 15_000_000, threeMF: 40_000_000, inflate: 80_000_000)
+        #expect(QuickLookLimits.inflates([2_148, 79_000_000], within: iOSPreview))
+        #expect(!QuickLookLimits.inflates([2_148, 113_811_635, 120_285_357], within: iOSPreview))
+    }
+
     @Test func quickLookKeepsAMargin() {
         #expect(QuickLookLimits.fits(estimate: 100_000_000, available: 0))
         #expect(QuickLookLimits.fits(estimate: 100_000_000, available: 116_000_000))

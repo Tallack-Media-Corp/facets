@@ -44,7 +44,7 @@ struct FolderView: View {
     @State private var renaming: LibraryItem?
     @State private var renameText = ""
     /// Waiting on "Delete … and everything in it?": only asked when there's a folder.
-    @State private var deleting: [LibraryItem] = []
+    @State private var deleting: [LibraryItem]?
     @State private var moving: LibraryItem?
     #if DEBUG
     @State private var debugMoveShown = false
@@ -143,17 +143,9 @@ struct FolderView: View {
             .renameAlert("Rename", item: $renaming, text: $renameText) { item in
                 perform(String(localized: "Couldn't Rename")) { try library.rename(item, to: renameText) }
             }
-            .confirmationDialog(
-                deleteTitle,
-                isPresented: Binding(get: { !deleting.isEmpty }, set: { if !$0 { deleting = [] } }),
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    delete(deleting)
-                }
-            } message: {
-                Text("You can undo this, or restore it from Settings › Recently Deleted for 30 days.")
-            }
+            .confirmAlert($deleting, title: Self.deleteTitle, message: { _ in
+                String(localized: "You can undo this, or restore it from Settings › Recently Deleted for 30 days.")
+            }, action: "Delete") { delete($0) }
             .sheet(item: $moving) { item in
                 MoveSheet(item: item) { destination in
                     moveItems([item], to: destination)
@@ -224,14 +216,7 @@ struct FolderView: View {
                         .buttonStyle(.plain)
                         .zoomSource(id: item.url, in: zoom)
                         .libraryDraggable(item.url)
-                        .contextMenu { actions(for: item) } preview: {
-                            if !item.isFolder {
-                                ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0, isDownloaded: item.isDownloaded)
-                                    .frame(width: Size.contextPreview, height: Size.contextPreview)
-                                    // Previews render outside this view's environment.
-                                    .environment(settings)
-                            }
-                        }
+                        .modifier(CardMenu(item: item, actions: actions(for: item)))
                         #endif
                     }
                 }
@@ -368,7 +353,7 @@ struct FolderView: View {
         RowAction.delete { requestDelete(item) }
     }
 
-    private var deleteTitle: String {
+    private static func deleteTitle(_ deleting: [LibraryItem]) -> String {
         guard let first = deleting.first else { return "" }
         if deleting.count > 1 {
             return String(localized: "Delete \(deleting.count) items and everything in them?")
@@ -993,3 +978,26 @@ private extension View {
         onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(PageDropOutline.page)).maxY } action: { edge.bottom = $0 }
     }
 }
+
+#if os(iOS)
+/// A grid card's long-press menu. A model shows its picture above the menu; a folder
+/// keeps the system's lifted card, since an empty custom preview is a large blank one.
+private struct CardMenu<Actions: View>: ViewModifier {
+    let item: LibraryItem
+    let actions: Actions
+    @Environment(ViewerSettings.self) private var settings
+
+    func body(content: Content) -> some View {
+        if item.isFolder {
+            content.contextMenu { actions }
+        } else {
+            content.contextMenu { actions } preview: {
+                ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0, isDownloaded: item.isDownloaded)
+                    .frame(width: Size.contextPreview, height: Size.contextPreview)
+                    // Previews render outside this view's environment.
+                    .environment(settings)
+            }
+        }
+    }
+}
+#endif

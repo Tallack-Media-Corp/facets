@@ -74,6 +74,11 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
 
     /// How much of the view's height a sheet covers from the bottom (0 to 1). The
     /// model glides up to stay centred in what's left.
+    /// How much of the view a framed model spans. The viewer leaves room round it for
+    /// its controls; Quick Look uses the thumbnail's (`ModelSnapshotter.fill`), so the
+    /// model takes over from the picture the system zooms up at the same size.
+    public var fill: Float = 0.72
+
     public var bottomObscured: CGFloat = 0 {
         didSet { if bottomObscured != oldValue { obscuredChanged() } }
     }
@@ -181,7 +186,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
     public func frameModel(animated: Bool) -> Bool {
         guard let renderer, bounds.width > 0, bounds.height > 0 else { needsFit = true; return true }
         var next = camera
-        next.fitTightly(renderer.visibleParts, aspect: aspect, fill: 0.72, recenter: false, including: bedCorners)
+        next.fitTightly(renderer.visibleParts, aspect: aspect, fill: fill, recenter: false, including: bedCorners)
         needsFit = false
         framedSize = bounds.size
         let settled = animation == nil && pulse == nil
@@ -202,7 +207,7 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         guard let renderer else { return }
         var next = camera
         next.apply(preset)
-        next.fitTightly(renderer.visibleParts, aspect: aspect, fill: 0.72, recenter: false, including: bedCorners)
+        next.fitTightly(renderer.visibleParts, aspect: aspect, fill: fill, recenter: false, including: bedCorners)
         move(to: next, animated: animated)
     }
 
@@ -365,8 +370,8 @@ public final class ModelCanvasView: MTKView, MTKViewDelegate {
         let base = pulse?.base ?? animation?.to ?? camera
         var before = base, after = base
         let parts = renderer.visibleParts, corners = bedCorners
-        before.fitTightly(parts, aspect: Float(old.width / old.height), fill: 0.72, recenter: false, including: corners)
-        after.fitTightly(parts, aspect: aspect, fill: 0.72, recenter: false, including: corners)
+        before.fitTightly(parts, aspect: Float(old.width / old.height), fill: fill, recenter: false, including: corners)
+        after.fitTightly(parts, aspect: aspect, fill: fill, recenter: false, including: corners)
         guard before.distance > 0, after.distance > 0 else { return }
         var next = base
         next.distance = base.distance * after.distance / before.distance

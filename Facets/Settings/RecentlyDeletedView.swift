@@ -58,20 +58,13 @@ struct RecentlyDeletedView: View {
             Button("Delete All", role: .destructive) { emptying = items }
         }
         .hidesTabBar()
-        .confirmationDialog(emptying?.count == 1 ? String(localized: "Delete this item for good?") : String(localized: "Delete all \(emptying?.count ?? 0) items for good?"), isPresented: $emptying.isPresent, titleVisibility: .visible) {
-            Button("Delete All", role: .destructive) {
-                if let emptying { purge(emptying) }
-            }
-        } message: {
-            Text("They can't be restored after this.")
-        }
-        .confirmationDialog(String(localized: "Delete \"\(purging?.displayName ?? "")\" for good?"), isPresented: $purging.isPresent, titleVisibility: .visible) {
-            Button("Delete Now", role: .destructive) {
-                if let purging { purge([purging]) }
-            }
-        } message: {
-            Text("It can't be restored after this.")
-        }
+        .confirmAlert($emptying, title: { chosen in
+            chosen.count == 1 ? String(localized: "Delete this item for good?") : String(localized: "Delete all \(chosen.count) items for good?")
+        }, message: { chosen in
+            chosen.count == 1 ? String(localized: "It can't be restored after this.") : String(localized: "They can't be restored after this.")
+        }, action: "Delete All") { purge($0) }
+        .confirmAlert($purging, title: { String(localized: "Delete \"\($0.displayName)\" for good?") },
+                      message: { _ in String(localized: "It can't be restored after this.") }, action: "Delete Now") { purge([$0]) }
         // On appear and each change; a newer change cancels the older read's result.
         .task(id: library.revision) {
             let found = await library.recentlyDeleted()

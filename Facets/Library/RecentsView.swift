@@ -4,7 +4,8 @@ struct RecentsView: View {
     @Environment(RecentsStore.self) private var recents
     @Environment(Router.self) private var router
     @Environment(FileLibrary.self) private var library
-    @State private var confirmingClear = false
+    /// Set while Clear asks first.
+    @State private var clearing: Bool?
     @State private var missing: RecentsStore.Entry?
 
     var body: some View {
@@ -37,15 +38,12 @@ struct RecentsView: View {
                 if !recents.entries.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
                         // Words, not a bin: clearing the list doesn't delete any files.
-                        Button("Clear") { confirmingClear = true }
+                        Button("Clear") { clearing = true }
                     }
                 }
             }
-            .confirmationDialog("Clear the list of recent models?", isPresented: $confirmingClear, titleVisibility: .visible) {
-                Button("Clear Recents", role: .destructive) { recents.clear() }
-            } message: {
-                Text("The files themselves aren't touched.")
-            }
+            .confirmAlert($clearing, title: { _ in String(localized: "Clear the list of recent models?") },
+                          message: { _ in String(localized: "The files themselves aren't touched.") }, action: "Clear Recents") { _ in recents.clear() }
             .alert("File Not Found", isPresented: $missing.isPresent) {
                 Button("Remove from Recents", role: .destructive) {
                     if let missing { recents.remove(missing) }
