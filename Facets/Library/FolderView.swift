@@ -965,7 +965,7 @@ extension FolderView {
 /// The page's drop outline: round the files and folders, below the My Models / Browse
 /// switch while it's on screen, so the switch doesn't look like a place to drop.
 private struct PageDropOutline: View {
-    static let page = "folderPage"
+    nonisolated static let page = "folderPage"
 
     /// A reference, so the switch's position changing as the page scrolls redraws only
     /// the outline, not the whole page.
