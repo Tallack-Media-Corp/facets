@@ -44,7 +44,7 @@ struct FolderView: View {
     @State private var renaming: LibraryItem?
     @State private var renameText = ""
     /// Waiting on "Delete … and everything in it?": only asked when there's a folder.
-    @State private var deleting: [LibraryItem] = []
+    @State private var deleting: [LibraryItem]?
     @State private var moving: LibraryItem?
     #if DEBUG
     @State private var debugMoveShown = false
@@ -54,6 +54,10 @@ struct FolderView: View {
     /// Bumped per reload, so a slow read finishing late can't replace a newer one.
     @State private var loadGeneration = 0
     @State private var dropTargeted = false
+    /// The drag over the page began in Facets (iOS 27 and later can tell).
+    @State private var localDrag = false
+    /// The My Models / Browse switch's bottom edge: the page's drop outline starts below it.
+    @State private var pickerEdge = PageDropOutline.Edge()
     /// The folder card or row a drag is over; the page's outline stays off meanwhile.
     @State private var dropFolder: URL?
     /// A drag is over the "Move to …" chip that leads up a level.
@@ -105,7 +109,11 @@ struct FolderView: View {
             .onDrop(of: isBrowsing ? [] : Self.dropTypes, isTargeted: $dropTargeted) { providers in
                 !isBrowsing && acceptDrop(providers, into: folder)
             }
-            .dropHighlight(dropTargeted && dropFolder == nil && !parentTargeted)
+            .tracksLocalDrag($localDrag)
+            // A card dragged from this page can't drop on it: outline the page only for
+            // files from elsewhere.
+            .overlay { PageDropOutline(isTargeted: dropTargeted && dropFolder == nil && !parentTargeted && !localDrag, edge: pickerEdge) }
+            .coordinateSpace(.named(PageDropOutline.page))
             .overlay(alignment: .top) { parentDropTarget }
             .animation(Motion.animation(Motion.standard, reduceMotion: reduceMotion), value: dropTargeted || dropFolder != nil || parentTargeted)
             // The new-user tour, a card at a time above the tab bar.
@@ -135,17 +143,9 @@ struct FolderView: View {
             .renameAlert("Rename", item: $renaming, text: $renameText) { item in
                 perform(String(localized: "Couldn't Rename")) { try library.rename(item, to: renameText) }
             }
-            .confirmationDialog(
-                deleteTitle,
-                isPresented: Binding(get: { !deleting.isEmpty }, set: { if !$0 { deleting = [] } }),
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    delete(deleting)
-                }
-            } message: {
-                Text("You can undo this, or restore it from Settings › Recently Deleted for 30 days.")
-            }
+            .confirmAlert($deleting, title: Self.deleteTitle, message: { _ in
+                String(localized: "You can undo this, or restore it from Settings › Recently Deleted for 30 days.")
+            }, action: "Delete") { delete($0) }
             .sheet(item: $moving) { item in
                 MoveSheet(item: item) { destination in
                     moveItems([item], to: destination)
@@ -165,14 +165,17 @@ struct FolderView: View {
 
     @ViewBuilder
     private var content: some View {
-        if items.isEmpty, loaded, isBrowsing {
+        if !loaded {
+            Color.clear
+        } else if items.isEmpty, isBrowsing {
             ContentUnavailableView("No Models Here", systemImage: Symbol.noModels, description: Text("This folder has no STL, 3MF or OBJ files. Subfolders show up here too."))
-        } else if items.isEmpty, loaded {
+        } else if items.isEmpty {
             ScrollView {
                 if showsSectionPicker {
                     LibrarySectionPicker()
                         .padding(.horizontal)
                         .padding(.top, LibrarySectionPicker.listTopMargin)
+                        .marksDropOutlineTop(pickerEdge)
                 }
                 ContentUnavailableView {
                     Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: Symbol.noModels)
@@ -199,6 +202,7 @@ struct FolderView: View {
                     LibrarySectionPicker()
                         .padding(.horizontal)
                         .padding(.top, LibrarySectionPicker.listTopMargin)
+                        .marksDropOutlineTop(pickerEdge)
                         .padding(.bottom, Spacing.sm)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: Size.gridCardMin, maximum: Size.gridCardMax), spacing: Spacing.lg, alignment: .top)], spacing: Spacing.xl) {
@@ -212,14 +216,7 @@ struct FolderView: View {
                         .buttonStyle(.plain)
                         .zoomSource(id: item.url, in: zoom)
                         .libraryDraggable(item.url)
-                        .contextMenu { actions(for: item) } preview: {
-                            if !item.isFolder {
-                                ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0, isDownloaded: item.isDownloaded)
-                                    .frame(width: Size.contextPreview, height: Size.contextPreview)
-                                    // Previews render outside this view's environment.
-                                    .environment(settings)
-                            }
-                        }
+                        .modifier(CardMenu(item: item, actions: actions(for: item)))
                         #endif
                     }
                 }
@@ -258,7 +255,7 @@ struct FolderView: View {
             #else
             List {
                 if showsSectionPicker {
-                    LibrarySectionPicker().sectionPickerRow()
+                    LibrarySectionPicker().marksDropOutlineTop(pickerEdge).sectionPickerRow()
                 }
                 ForEach(items) { item in
                     takesDrops(item, open(item) {
@@ -356,7 +353,7 @@ struct FolderView: View {
         RowAction.delete { requestDelete(item) }
     }
 
-    private var deleteTitle: String {
+    private static func deleteTitle(_ deleting: [LibraryItem]) -> String {
         guard let first = deleting.first else { return "" }
         if deleting.count > 1 {
             return String(localized: "Delete \(deleting.count) items and everything in them?")
@@ -703,16 +700,10 @@ struct LibraryCard: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    /// Room a grid leaves above its first row for a selected card's outline, which
-    /// sits 3 pt outside the picture: flush, it ran under the Mac toolbar's edge.
-    /// Only the Mac selects cards.
-    static var outlineRoom: CGFloat {
-        #if os(macOS)
-        Spacing.md
-        #else
-        0
-        #endif
-    }
+    /// Room a grid leaves above its first row for an outline: a selected card's on
+    /// the Mac (flush, it ran under the toolbar's edge), and the page's drop outline,
+    /// which crossed the first row's tops on the iPad.
+    static let outlineRoom = Spacing.md
 }
 
 struct FolderTile: View {
@@ -836,7 +827,7 @@ extension FolderView {
     fileprivate var macList: some View {
         List(selection: $selection) {
             if showsSectionPicker {
-                LibrarySectionPicker().sectionPickerRow()
+                LibrarySectionPicker().marksDropOutlineTop(pickerEdge).sectionPickerRow()
             }
             ForEach(items) { item in
                 takesDrops(item, LibraryRow(item: item)
@@ -952,6 +943,61 @@ extension FolderView {
             .quickLookPreview($quickLook, in: selectedItems.filter { !$0.isFolder }.map(\.url))
             // A selection doesn't outlive its folder's contents.
             .onChange(of: items) { selection.formIntersection(items.map(\.url)) }
+    }
+}
+#endif
+
+/// The page's drop outline: round the files and folders, below the My Models / Browse
+/// switch while it's on screen, so the switch doesn't look like a place to drop.
+private struct PageDropOutline: View {
+    nonisolated static let page = "folderPage"
+
+    /// A reference, so the switch's position changing as the page scrolls redraws only
+    /// the outline, not the whole page.
+    @Observable final class Edge {
+        var bottom: CGFloat = 0
+    }
+
+    let isTargeted: Bool
+    let edge: Edge
+
+    var body: some View {
+        // Midway between the switch and the first row (Spacing.sm apart), net of the
+        // outline's own inset.
+        let below = edge.bottom + (Spacing.sm - Stroke.outline) / 2 - Spacing.xs
+        Color.clear
+            .dropHighlight(isTargeted)
+            .padding(.top, max(0, below))
+            .allowsHitTesting(false)
+    }
+}
+
+private extension View {
+    /// Reports this view's bottom edge on the folder page to the page's drop outline.
+    func marksDropOutlineTop(_ edge: PageDropOutline.Edge) -> some View {
+        onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(PageDropOutline.page)).maxY } action: { edge.bottom = $0 }
+    }
+}
+
+#if os(iOS)
+/// A grid card's long-press menu. A model shows its picture above the menu; a folder
+/// keeps the system's lifted card, since an empty custom preview is a large blank one.
+private struct CardMenu<Actions: View>: ViewModifier {
+    let item: LibraryItem
+    let actions: Actions
+    @Environment(ViewerSettings.self) private var settings
+
+    func body(content: Content) -> some View {
+        if item.isFolder {
+            content.contextMenu { actions }
+        } else {
+            content.contextMenu { actions } preview: {
+                ModelThumbnail(url: item.url, size: item.size, modified: item.modified, cornerRadius: 0, isDownloaded: item.isDownloaded)
+                    .frame(width: Size.contextPreview, height: Size.contextPreview)
+                    // Previews render outside this view's environment.
+                    .environment(settings)
+            }
+        }
     }
 }
 #endif

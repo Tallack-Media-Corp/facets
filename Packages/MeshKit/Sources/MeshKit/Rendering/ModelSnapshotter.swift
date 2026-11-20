@@ -6,6 +6,9 @@ import Metal
 public final class ModelSnapshotter {
     private let renderer: SceneRenderer
 
+    /// How much of the square a thumbnail's model spans.
+    public static let fill: Float = 0.9
+
     public init?() {
         guard let context = RenderContext.shared else { return nil }
         renderer = SceneRenderer(context: context)
@@ -15,7 +18,7 @@ public final class ModelSnapshotter {
     /// appearance names one.
     /// `yaw` and `pitch` (radians) override the isometric angle; `fill` is how much of
     /// the square the model spans.
-    public func image(of model: Model3D, pixelSize: Int, appearance: RenderAppearance = RenderAppearance(), yaw: Float? = nil, pitch: Float? = nil, fill: Float = 0.9) -> CGImage? {
+    public func image(of model: Model3D, pixelSize: Int, appearance: RenderAppearance = RenderAppearance(), yaw: Float? = nil, pitch: Float? = nil, fill: Float = ModelSnapshotter.fill) -> CGImage? {
         let size = max(16, min(pixelSize, 2048))
         let context = renderer.context
         var appearance = appearance

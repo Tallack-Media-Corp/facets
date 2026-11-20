@@ -276,6 +276,7 @@ Two tests keep this honest (see [docs/consistency.md](docs/consistency.md)): `So
 | A confirmation | `ToastCenter.show` / `warn` with `.toastHost()` (`aboveBottomToolbar:` in the iOS viewer) (`Toasts.swift`) | A clearance worked out in a screen |
 | A failed action | `.errorAlert(...)` with a title naming the action (`Alerts.swift`) | The system's error sentence; `Button("OK")` by hand |
 | A rename | `.renameAlert(...)` | An alert with a text field by hand |
+| Asking before a delete or clear | `.confirmAlert(...)`, a centred alert (`Alerts.swift`) | `.confirmationDialog`, which on iPhone and iPad points at whatever it's attached to |
 | An alert or dialog shown while an optional is set | `.isPresent` | `Binding(get: { x != nil } …)` by hand |
 | A row or card action (Delete, Rename, Remove, Restore) | `RowAction` (`RowActions.swift`) | A button with its own title, symbol or role |
 | Whole-list actions (Restore All, Delete All) | `.listActions(shown:leading:trailing:)` (`Platform.swift`) | A toolbar on iOS and a bar on the Mac, each by hand |

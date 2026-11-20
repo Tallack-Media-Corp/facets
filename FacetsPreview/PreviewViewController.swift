@@ -13,14 +13,20 @@ final class PreviewViewController: UIViewController, QLPreviewingController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // The size the system's zoom from the Files thumbnail ends at.
+        canvas.fill = ModelSnapshotter.fill
         view.layer.insertSublayer(backdrop, at: 0)
         canvas.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(canvas)
+        // Quick Look first shows the preview full screen under its bars, then, once it's
+        // ready, shrinks the window to the space between them. Drawn in the safe area
+        // from the start, the model is already where that leaves it, and doesn't jump.
+        let safe = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
             canvas.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             canvas.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            canvas.topAnchor.constraint(equalTo: view.topAnchor),
-            canvas.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            canvas.topAnchor.constraint(equalTo: safe.topAnchor),
+            canvas.bottomAnchor.constraint(equalTo: safe.bottomAnchor),
         ])
         plateBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(plateBar)
@@ -171,6 +177,7 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
 
     override func loadView() {
         let stage = StageView()
+        canvas.fill = ModelSnapshotter.fill
         stage.onAppearanceChange = { [weak self] dark in
             self?.canvas.renderAppearance.gridColor = RenderAppearance.gridColor(dark: dark)
         }

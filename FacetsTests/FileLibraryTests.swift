@@ -58,6 +58,16 @@ import Testing
         #expect(listed() == ["a.stl"])
     }
 
+    @Test func moveThatFailsPartWayStillRefreshesTheList() throws {
+        let parts = try library.createFolder(in: root, named: "Parts")
+        let folder = LibraryItem(url: parts, isFolder: true, size: nil, modified: nil, childCount: nil)
+        let before = library.revision
+        // The model moves; the folder can't go inside itself, so the move throws.
+        #expect(throws: (any Error).self) { try library.move([try file("a.stl"), folder], to: parts) }
+        #expect(FileManager.default.fileExists(atPath: parts.appending(path: "a.stl").path))
+        #expect(library.revision > before)
+    }
+
     @Test func restoreSkipsWhatFailsAndKeepsGoing() async throws {
         let deleted = try library.delete([try file("a.stl"), try file("b.stl")])
         // A read-only slot can't give up its file, so "a" fails first.

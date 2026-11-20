@@ -7,7 +7,9 @@ struct RecentlyDeletedView: View {
     @State private var items: [FileLibrary.DeletedItem] = []
     /// Not "Nothing Deleted" before the first read is in.
     @State private var loaded = false
-    @State private var confirmingEmpty = false
+    /// What Delete All will purge, taken when it's tapped: an item deleted in another
+    /// window while the dialog is open isn't purged unseen.
+    @State private var emptying: [FileLibrary.DeletedItem]?
     /// Deleting for good can't be undone, so even one item asks first.
     @State private var purging: FileLibrary.DeletedItem?
 
@@ -53,21 +55,16 @@ struct RecentlyDeletedView: View {
         .listActions(shown: !items.isEmpty) {
             Button("Restore All") { restore(items) }
         } trailing: {
-            Button("Delete All", role: .destructive) { confirmingEmpty = true }
+            Button("Delete All", role: .destructive) { emptying = items }
         }
         .hidesTabBar()
-        .confirmationDialog(items.count == 1 ? String(localized: "Delete this item for good?") : String(localized: "Delete all \(items.count) items for good?"), isPresented: $confirmingEmpty, titleVisibility: .visible) {
-            Button("Delete All", role: .destructive) { purge(items) }
-        } message: {
-            Text("They can't be restored after this.")
-        }
-        .confirmationDialog(String(localized: "Delete \"\(purging?.displayName ?? "")\" for good?"), isPresented: $purging.isPresent, titleVisibility: .visible) {
-            Button("Delete Now", role: .destructive) {
-                if let purging { purge([purging]) }
-            }
-        } message: {
-            Text("It can't be restored after this.")
-        }
+        .confirmAlert($emptying, title: { chosen in
+            chosen.count == 1 ? String(localized: "Delete this item for good?") : String(localized: "Delete all \(chosen.count) items for good?")
+        }, message: { chosen in
+            chosen.count == 1 ? String(localized: "It can't be restored after this.") : String(localized: "They can't be restored after this.")
+        }, action: "Delete All") { purge($0) }
+        .confirmAlert($purging, title: { String(localized: "Delete \"\($0.displayName)\" for good?") },
+                      message: { _ in String(localized: "It can't be restored after this.") }, action: "Delete Now") { purge([$0]) }
         // On appear and each change; a newer change cancels the older read's result.
         .task(id: library.revision) {
             let found = await library.recentlyDeleted()

@@ -56,15 +56,24 @@ enum QuickLookLimits {
         let format = format(of: url)
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         guard size <= limits.fileSize(for: format) else { return (format, false) }
+        let entries = format == .threeMF ? modelEntrySizes(at: url) : []
+        // A model entry past the inflate cap would be skipped as it loads, leaving nothing
+        // to draw: too large, so the 3MF's own picture shows instead of a blank file card.
+        guard inflates(entries, within: limits) else { return (format, false) }
         // shortcut: fitted to the preview only; thumbnails need their own measurements first.
         guard use == .preview else { return (format, true) }
-        let estimate = estimatedPeak(format: format, fileSize: size, modelEntries: format == .threeMF ? modelEntrySizes(at: url) : [])
+        let estimate = estimatedPeak(format: format, fileSize: size, modelEntries: entries)
         let available = availableMemory
         let fits = fits(estimate: estimate, available: available)
         // What only a device can tell: how the estimate compares with the budget there.
         Logger(subsystem: Bundle.main.bundleIdentifier ?? "Facets", category: "QuickLook")
             .notice("preview: estimate \(estimate / 1_000_000, privacy: .public) MB, available \(available / 1_000_000, privacy: .public) MB, fits \(fits, privacy: .public)")
         return (format, fits)
+    }
+
+    /// Whether every model entry inflates within the cap; one past it is skipped as it loads.
+    static func inflates(_ modelEntries: [Int], within limits: Limits) -> Bool {
+        modelEntries.allSatisfy { $0 <= limits.inflate }
     }
 
     // MARK: Memory

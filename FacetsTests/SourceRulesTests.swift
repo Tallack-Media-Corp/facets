@@ -115,6 +115,13 @@ enum RepoSources {
         #expect(found.isEmpty, "use .errorAlert(...) (Alerts.swift): \(found)")
     }
 
+    /// Asking before a delete or clear is one centred alert: a confirmation dialog is a
+    /// popover on iPhone and iPad that pointed at blank space (build 24, Recently Deleted).
+    @Test func deleteQuestionsComeFromConfirmAlert() {
+        let found = Self.violations { $0.text.contains(".confirmationDialog(") }
+        #expect(found.isEmpty, "use .confirmAlert(...) (Alerts.swift): \(found)")
+    }
+
     /// Radii, spacing and padding are tokens (batch 2 replaced dozens of typed-in values).
     @Test func sizesAreTokens() {
         let found = Self.violations(except: ["Tokens.swift"]) { line in
