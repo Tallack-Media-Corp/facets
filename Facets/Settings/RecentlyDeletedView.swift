@@ -7,7 +7,9 @@ struct RecentlyDeletedView: View {
     @State private var items: [FileLibrary.DeletedItem] = []
     /// Not "Nothing Deleted" before the first read is in.
     @State private var loaded = false
-    @State private var confirmingEmpty = false
+    /// What Delete All will purge, taken when it's tapped: an item deleted in another
+    /// window while the dialog is open isn't purged unseen.
+    @State private var emptying: [FileLibrary.DeletedItem]?
     /// Deleting for good can't be undone, so even one item asks first.
     @State private var purging: FileLibrary.DeletedItem?
 
@@ -53,11 +55,13 @@ struct RecentlyDeletedView: View {
         .listActions(shown: !items.isEmpty) {
             Button("Restore All") { restore(items) }
         } trailing: {
-            Button("Delete All", role: .destructive) { confirmingEmpty = true }
+            Button("Delete All", role: .destructive) { emptying = items }
         }
         .hidesTabBar()
-        .confirmationDialog(items.count == 1 ? String(localized: "Delete this item for good?") : String(localized: "Delete all \(items.count) items for good?"), isPresented: $confirmingEmpty, titleVisibility: .visible) {
-            Button("Delete All", role: .destructive) { purge(items) }
+        .confirmationDialog(emptying?.count == 1 ? String(localized: "Delete this item for good?") : String(localized: "Delete all \(emptying?.count ?? 0) items for good?"), isPresented: $emptying.isPresent, titleVisibility: .visible) {
+            Button("Delete All", role: .destructive) {
+                if let emptying { purge(emptying) }
+            }
         } message: {
             Text("They can't be restored after this.")
         }

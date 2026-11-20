@@ -468,6 +468,8 @@ final class FileLibrary {
     }
 
     func move(_ items: [LibraryItem], to folder: URL) throws {
+        // Also when one fails: the ones already moved must leave the old folder's list.
+        defer { revision += 1 }
         for item in items where item.url.deletingLastPathComponent().standardizedFileURL != folder.standardizedFileURL {
             // A folder can't go inside itself.
             let target = folder.standardizedFileURL.path, source = item.url.standardizedFileURL.path
@@ -476,7 +478,6 @@ final class FileLibrary {
             }
             try Self.coordinatedMove(item.url, to: uniqueURL(for: visibleName(item.url.lastPathComponent, in: folder), in: folder))
         }
-        revision += 1
     }
 
     /// Of the files dropped on `folder`, the library's own that move there: not ones

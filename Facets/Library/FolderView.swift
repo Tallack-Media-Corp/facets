@@ -710,16 +710,10 @@ struct LibraryCard: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    /// Room a grid leaves above its first row for a selected card's outline, which
-    /// sits 3 pt outside the picture: flush, it ran under the Mac toolbar's edge.
-    /// Only the Mac selects cards.
-    static var outlineRoom: CGFloat {
-        #if os(macOS)
-        Spacing.md
-        #else
-        0
-        #endif
-    }
+    /// Room a grid leaves above its first row for an outline: a selected card's on
+    /// the Mac (flush, it ran under the toolbar's edge), and the page's drop outline,
+    /// which crossed the first row's tops on the iPad.
+    static let outlineRoom = Spacing.md
 }
 
 struct FolderTile: View {
