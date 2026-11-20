@@ -56,6 +56,8 @@ struct FolderView: View {
     @State private var dropTargeted = false
     /// The drag over the page began in Facets (iOS 27 and later can tell).
     @State private var localDrag = false
+    /// The My Models / Browse switch's bottom edge: the page's drop outline starts below it.
+    @State private var pickerEdge = PageDropOutline.Edge()
     /// The folder card or row a drag is over; the page's outline stays off meanwhile.
     @State private var dropFolder: URL?
     /// A drag is over the "Move to …" chip that leads up a level.
@@ -110,7 +112,8 @@ struct FolderView: View {
             .tracksLocalDrag($localDrag)
             // A card dragged from this page can't drop on it: outline the page only for
             // files from elsewhere.
-            .dropHighlight(dropTargeted && dropFolder == nil && !parentTargeted && !localDrag)
+            .overlay { PageDropOutline(isTargeted: dropTargeted && dropFolder == nil && !parentTargeted && !localDrag, edge: pickerEdge) }
+            .coordinateSpace(.named(PageDropOutline.page))
             .overlay(alignment: .top) { parentDropTarget }
             .animation(Motion.animation(Motion.standard, reduceMotion: reduceMotion), value: dropTargeted || dropFolder != nil || parentTargeted)
             // The new-user tour, a card at a time above the tab bar.
@@ -180,6 +183,7 @@ struct FolderView: View {
                     LibrarySectionPicker()
                         .padding(.horizontal)
                         .padding(.top, LibrarySectionPicker.listTopMargin)
+                        .marksDropOutlineTop(pickerEdge)
                 }
                 ContentUnavailableView {
                     Label(folder == library.root ? "No Models Yet" : "Empty Folder", systemImage: Symbol.noModels)
@@ -206,6 +210,7 @@ struct FolderView: View {
                     LibrarySectionPicker()
                         .padding(.horizontal)
                         .padding(.top, LibrarySectionPicker.listTopMargin)
+                        .marksDropOutlineTop(pickerEdge)
                         .padding(.bottom, Spacing.sm)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: Size.gridCardMin, maximum: Size.gridCardMax), spacing: Spacing.lg, alignment: .top)], spacing: Spacing.xl) {
@@ -265,7 +270,7 @@ struct FolderView: View {
             #else
             List {
                 if showsSectionPicker {
-                    LibrarySectionPicker().sectionPickerRow()
+                    LibrarySectionPicker().marksDropOutlineTop(pickerEdge).sectionPickerRow()
                 }
                 ForEach(items) { item in
                     takesDrops(item, open(item) {
@@ -837,7 +842,7 @@ extension FolderView {
     fileprivate var macList: some View {
         List(selection: $selection) {
             if showsSectionPicker {
-                LibrarySectionPicker().sectionPickerRow()
+                LibrarySectionPicker().marksDropOutlineTop(pickerEdge).sectionPickerRow()
             }
             ForEach(items) { item in
                 takesDrops(item, LibraryRow(item: item)
@@ -956,3 +961,35 @@ extension FolderView {
     }
 }
 #endif
+
+/// The page's drop outline: round the files and folders, below the My Models / Browse
+/// switch while it's on screen, so the switch doesn't look like a place to drop.
+private struct PageDropOutline: View {
+    static let page = "folderPage"
+
+    /// A reference, so the switch's position changing as the page scrolls redraws only
+    /// the outline, not the whole page.
+    @Observable final class Edge {
+        var bottom: CGFloat = 0
+    }
+
+    let isTargeted: Bool
+    let edge: Edge
+
+    var body: some View {
+        // Midway between the switch and the first row (Spacing.sm apart), net of the
+        // outline's own inset.
+        let below = edge.bottom + (Spacing.sm - Stroke.outline) / 2 - Spacing.xs
+        Color.clear
+            .dropHighlight(isTargeted)
+            .padding(.top, max(0, below))
+            .allowsHitTesting(false)
+    }
+}
+
+private extension View {
+    /// Reports this view's bottom edge on the folder page to the page's drop outline.
+    func marksDropOutlineTop(_ edge: PageDropOutline.Edge) -> some View {
+        onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(PageDropOutline.page)).maxY } action: { edge.bottom = $0 }
+    }
+}
