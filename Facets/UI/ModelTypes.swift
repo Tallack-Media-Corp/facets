@@ -58,6 +58,22 @@ extension View {
 }
 
 extension View {
+    /// Whether the drag over this view began inside Facets. On iOS that's a card from
+    /// the folder on screen. Always false before iOS 27, which can't tell.
+    @ViewBuilder
+    func tracksLocalDrag(_ isLocal: Binding<Bool>) -> some View {
+        #if os(iOS)
+        if #available(iOS 27, *) {
+            onDropSessionUpdated { isLocal.wrappedValue = $0.localSession != nil }
+        } else {
+            self
+        }
+        #else
+        // shortcut: on the Mac a local drag may come from another window's folder, so the page keeps its outline.
+        self
+        #endif
+    }
+
     /// A library card or row as a drag source, carrying its file URL: dropped on a folder's
     /// card or row it moves there (`FileLibrary.dropMoves`), out to the Finder, Files or a
     /// slicer it's the file. On the Mac a selected card brings the whole selection, with

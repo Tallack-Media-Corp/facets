@@ -54,6 +54,8 @@ struct FolderView: View {
     /// Bumped per reload, so a slow read finishing late can't replace a newer one.
     @State private var loadGeneration = 0
     @State private var dropTargeted = false
+    /// The drag over the page began in Facets (iOS 27 and later can tell).
+    @State private var localDrag = false
     /// The folder card or row a drag is over; the page's outline stays off meanwhile.
     @State private var dropFolder: URL?
     /// A drag is over the "Move to …" chip that leads up a level.
@@ -105,7 +107,10 @@ struct FolderView: View {
             .onDrop(of: isBrowsing ? [] : Self.dropTypes, isTargeted: $dropTargeted) { providers in
                 !isBrowsing && acceptDrop(providers, into: folder)
             }
-            .dropHighlight(dropTargeted && dropFolder == nil && !parentTargeted)
+            .tracksLocalDrag($localDrag)
+            // A card dragged from this page can't drop on it: outline the page only for
+            // files from elsewhere.
+            .dropHighlight(dropTargeted && dropFolder == nil && !parentTargeted && !localDrag)
             .overlay(alignment: .top) { parentDropTarget }
             .animation(Motion.animation(Motion.standard, reduceMotion: reduceMotion), value: dropTargeted || dropFolder != nil || parentTargeted)
             // The new-user tour, a card at a time above the tab bar.
@@ -165,9 +170,11 @@ struct FolderView: View {
 
     @ViewBuilder
     private var content: some View {
-        if items.isEmpty, loaded, isBrowsing {
+        if !loaded {
+            Color.clear
+        } else if items.isEmpty, isBrowsing {
             ContentUnavailableView("No Models Here", systemImage: Symbol.noModels, description: Text("This folder has no STL, 3MF or OBJ files. Subfolders show up here too."))
-        } else if items.isEmpty, loaded {
+        } else if items.isEmpty {
             ScrollView {
                 if showsSectionPicker {
                     LibrarySectionPicker()
